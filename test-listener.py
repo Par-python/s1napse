@@ -16,6 +16,9 @@ import math
 import time
 import random
 
+import json
+from pathlib import Path
+
 import matplotlib
 matplotlib.use('Qt5Agg')
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -281,6 +284,9 @@ class ACUDPReader(TelemetryReader):
         try:
             offset = 4
             speed_kmh = struct.unpack('<f', data[offset:offset+4])[0]
+            # World position at bytes 8-20 (x, y, z floats per AC UDP spec)
+            world_x = struct.unpack('<f', data[8:12])[0]  if len(data) >= 20 else 0.0
+            world_z = struct.unpack('<f', data[16:20])[0] if len(data) >= 20 else 0.0
             offset += 8
             rpm = struct.unpack('<f', data[offset+16:offset+20])[0]
             gear = struct.unpack('<i', data[offset+20:offset+24])[0]
@@ -323,6 +329,8 @@ class ACUDPReader(TelemetryReader):
                 'track_name': 'Monza (Simulated)',
                 'lap_count': self.sim_lap_count,
                 'current_time': elapsed_ms,
+                'world_x': world_x,
+                'world_z': world_z,
             }
         except Exception:
             return None
@@ -380,6 +388,9 @@ class ACCReader(TelemetryReader):
                 'track_name': sm.Static.track,
                 'lap_count': sm.Graphics.completed_lap,
                 'current_time': sm.Graphics.current_time,
+                'lap_dist_pct': sm.Graphics.normalized_car_position,
+                'world_x': sm.Physics.car_coordinates[0],
+                'world_z': sm.Physics.car_coordinates[2],
             }
         except Exception as e:
             print(f"ACC read error: {e}")
@@ -466,6 +477,18 @@ class IRacingReader(TelemetryReader):
             else:
                 gear = gear_raw + 1
 
+            # World position for track recording
+            world_x = world_z = 0.0
+            try:
+                player_idx = int(self.ir['PlayerCarIdx'] or 0)
+                car_x = self.ir['CarIdxX']
+                car_z = self.ir['CarIdxZ']
+                if car_x and car_z:
+                    world_x = float(car_x[player_idx])
+                    world_z = float(car_z[player_idx])
+            except Exception:
+                pass
+
             return {
                 'speed':        speed_ms * 3.6,
                 'rpm':          rpm,
@@ -484,7 +507,9 @@ class IRacingReader(TelemetryReader):
                 'track_name':   track_name,
                 'lap_count':    lap,
                 'current_time': cur_s * 1000.0,   # → ms
-                'lap_dist_pct': lap_pct,            # 0-1, exact position on track
+                'lap_dist_pct': lap_pct,
+                'world_x':      world_x,
+                'world_z':      world_z,
             }
         except Exception as e:
             print(f"iRacing read error: {e}")
@@ -507,155 +532,130 @@ class IRacingReader(TelemetryReader):
 
 
 # ---------------------------------------------------------------------------
+# TRACK RECORDER  –  drive a lap to capture world coordinates → saved JSON
+# ---------------------------------------------------------------------------
+
+class TrackRecorder:
+    """Samples world position during a lap and saves a normalized track JSON."""
+
+    N_OUT = 250          # waypoints to write to the JSON file
+    MIN_SAMPLES = 50     # minimum samples before a save is accepted
+
+    def __init__(self):
+        self.recording = False
+        self._samples: list[tuple[float, float, float]] = []   # (pct, x, z)
+        self._last_pct = -1.0
+
+    @property
+    def sample_count(self) -> int:
+        return len(self._samples)
+
+    def start(self):
+        self.recording = True
+        self._samples = []
+        self._last_pct = -1.0
+
+    def stop(self):
+        self.recording = False
+
+    def feed(self, lap_dist_pct: float, world_x: float, world_z: float):
+        if not self.recording:
+            return
+        if world_x == 0.0 and world_z == 0.0:
+            return
+        # Skip backward jumps larger than 0.5 (lap boundary crossing)
+        if self._last_pct >= 0 and (lap_dist_pct - self._last_pct) < -0.5:
+            return
+        # Deduplicate: only record if we've moved at least 0.001 along the lap
+        if abs(lap_dist_pct - self._last_pct) < 0.001:
+            return
+        self._samples.append((lap_dist_pct, world_x, world_z))
+        self._last_pct = lap_dist_pct
+
+    def save(self, track_name: str, length_m: int) -> str | None:
+        """Normalize and save to tracks/{key}.json. Returns the path on success."""
+        if len(self._samples) < self.MIN_SAMPLES:
+            return None
+
+        # Sort by lap fraction
+        s = sorted(self._samples, key=lambda t: t[0])
+        xs = [p[1] for p in s]
+        zs = [p[2] for p in s]
+
+        min_x, max_x = min(xs), max(xs)
+        min_z, max_z = min(zs), max(zs)
+        span = max(max_x - min_x, max_z - min_z)
+        if span == 0:
+            return None
+
+        PAD = 0.06
+        scale = (1.0 - 2 * PAD) / span
+        nx = [(x - min_x) * scale + PAD for x in xs]
+        nz = [(z - min_z) * scale + PAD for z in zs]
+
+        # Downsample to N_OUT evenly-spaced points
+        n = len(nx)
+        indices = [int(round(i * (n - 1) / (self.N_OUT - 1))) for i in range(self.N_OUT)]
+        pts = [[round(nx[i], 4), round(nz[i], 4)] for i in indices]
+
+        # Derive a filesystem-safe key from the track name
+        import re
+        track_key = re.sub(r'[^a-z0-9_]', '_', track_name.lower()).strip('_')
+        track_key = re.sub(r'_+', '_', track_key)
+
+        data = {
+            'name': track_name,
+            'track_key': track_key,
+            'length_m': length_m,
+            'pts': pts,
+            'turns': [],
+        }
+
+        out_dir = Path(__file__).parent / 'tracks'
+        out_dir.mkdir(exist_ok=True)
+        path = out_dir / f'{track_key}.json'
+        with open(path, 'w') as f:
+            json.dump(data, f, indent=2)
+        return str(path)
+
+
+def _load_saved_tracks():
+    """Load any JSON files from the tracks/ directory into TRACKS and TRACK_NAME_MAP."""
+    tracks_dir = Path(__file__).parent / 'tracks'
+    if not tracks_dir.exists():
+        return
+    for json_file in sorted(tracks_dir.glob('*.json')):
+        try:
+            with open(json_file) as f:
+                td = json.load(f)
+            key = td['track_key']
+            TRACKS[key] = {
+                'name': td['name'],
+                'pts': [tuple(p) for p in td['pts']],
+                'turns': [tuple(t) for t in td.get('turns', [])],
+                'length_m': td['length_m'],
+            }
+            TRACK_NAME_MAP[key] = key
+        except Exception as e:
+            print(f'Failed to load saved track {json_file.name}: {e}')
+
+
+# ---------------------------------------------------------------------------
 # TRACK DATA  –  normalized waypoints + turn metadata
-# ---------------------------------------------------------------------------
-# Convention: x=right, y=down, 0–1 fitted inside widget with PAD padding.
-# Circuits flow in the direction a driver travels (clockwise on most maps).
-# Each entry in TURNS:  (lap_fraction 0-1,  label,  name,  circle_offset_x, circle_offset_y)
-#   lap_fraction   – where along the lap this turn sits
-#   label          – short text shown inside the turn circle  (e.g. '1', 'T1')
-#   name           – optional name shown as small text next to the circle
-#   circle_offset  – pixel nudge so circles don't overlap the track line
-# ---------------------------------------------------------------------------
+# Track registry: starts empty, populated by _load_saved_tracks() from tracks/*.json
+TRACKS: dict = {}
 
-# ── MONZA GP ─────────────────────────────────────────────────────────────────
-# Clockwise from S/F (bottom-left of canvas).
-# main straight → Rettifilo (T1-T2) → Curva Grande (T3) → Roggia (T4-T5)
-# → Lesmo 1 (T6) → Lesmo 2 (T7) → Serraglio → Ascari (T8-T10) → Parabolica (T11)
-_MONZA_PTS: list[tuple[float, float]] = [
-    (0.20, 0.84), (0.30, 0.84), (0.42, 0.84),
-    (0.54, 0.84), (0.64, 0.84), (0.72, 0.84),
-    (0.77, 0.83), (0.81, 0.81), (0.84, 0.77),
-    (0.83, 0.72), (0.80, 0.69), (0.82, 0.65),
-    (0.86, 0.59), (0.88, 0.51), (0.89, 0.43),
-    (0.88, 0.34), (0.85, 0.24), (0.80, 0.15),
-    (0.74, 0.09), (0.65, 0.07), (0.56, 0.07),
-    (0.51, 0.06), (0.46, 0.08), (0.45, 0.13),
-    (0.47, 0.17), (0.44, 0.20),
-    (0.38, 0.23), (0.31, 0.27), (0.25, 0.32),
-    (0.19, 0.37), (0.15, 0.43), (0.15, 0.49),
-    (0.15, 0.55), (0.16, 0.61), (0.19, 0.66),
-    (0.25, 0.68), (0.33, 0.70), (0.41, 0.71),
-    (0.49, 0.71), (0.56, 0.71),
-    (0.61, 0.70), (0.64, 0.66), (0.63, 0.62),
-    (0.60, 0.58), (0.58, 0.55), (0.60, 0.52),
-    (0.64, 0.51), (0.67, 0.52),
-    (0.71, 0.54), (0.75, 0.57),
-    (0.79, 0.60), (0.82, 0.65), (0.84, 0.70),
-    (0.85, 0.76), (0.83, 0.81), (0.79, 0.85),
-    (0.70, 0.86), (0.57, 0.85), (0.43, 0.85), (0.30, 0.84),
-]
-# (frac, circle_label, hover_name, cx_off, cy_off)
-_MONZA_TURNS = [
-    (0.09, '1',  'Rettifilo',    16, -14),
-    (0.12, '2',  '',            -20,  -8),
-    (0.21, '3',  'Curva Grande', 12, -16),
-    (0.29, '4',  'Roggia',       12, -14),
-    (0.32, '5',  '',            -20,  12),
-    (0.41, '6',  'Lesmo 1',     -52,   4),
-    (0.47, '7',  'Lesmo 2',     -50,   4),
-    (0.57, '8',  'Ascari',       12,  14),
-    (0.64, '10', '',             12, -12),
-    (0.71, '11', 'Parabolica',  -66,  16),
-]
+# Substring → track key map: populated by _load_saved_tracks() alongside TRACKS
+TRACK_NAME_MAP: dict[str, str] = {}
 
-# ── SILVERSTONE GP ────────────────────────────────────────────────────────────
-# S/F at bottom-center, cars exit LEFT (west) toward T1 Abbey.
-# Abbey (T1) → Farm (T2) → Arena complex (T3-T5)
-# → Brooklands (T6) → Luffield (T7) → Woodcote (T8)
-# → Copse (T9) → Maggots (T10-T11) → Becketts (T12-T13) → Chapel (T14)
-# → Hangar Straight → Stowe (T15) → Vale (T16) → Village/Club (T17-T18)
-# → pit straight back to S/F
-_SILVERSTONE_PTS: list[tuple[float, float]] = [
-    # ── S/F, pit straight going LEFT ──────────────────────────────────────
-    (0.49, 0.85),
-    (0.43, 0.85), (0.37, 0.85),
-    # ── T1  Abbey – right-hander (west → north) ───────────────────────────
-    (0.33, 0.83), (0.30, 0.80), (0.29, 0.77), (0.31, 0.74),
-    # ── T2  Farm – right-hander ────────────────────────────────────────────
-    (0.33, 0.71), (0.34, 0.68), (0.35, 0.65), (0.37, 0.63), (0.39, 0.61),
-    # ── Arena T3-T5 (inner complex) ───────────────────────────────────────
-    (0.41, 0.59), (0.43, 0.57), (0.44, 0.55),   # T3 right
-    (0.45, 0.52), (0.44, 0.49), (0.42, 0.48),   # T4 left
-    (0.40, 0.46), (0.41, 0.44), (0.43, 0.44),   # T5 right
-    # ── Exit Arena, heading west-southwest toward Brooklands ──────────────
-    (0.40, 0.43), (0.36, 0.43), (0.30, 0.45), (0.25, 0.49),
-    # ── T6  Brooklands – left then right chicane ──────────────────────────
-    (0.22, 0.52), (0.20, 0.56),                  # T6 left
-    (0.22, 0.59), (0.24, 0.61),                  # T6 right
-    # ── Heading south to T7 Luffield ──────────────────────────────────────
-    (0.23, 0.64),
-    # ── T7  Luffield – right-hander ───────────────────────────────────────
-    (0.21, 0.67), (0.19, 0.66), (0.17, 0.63),
-    # ── Heading north (up left side) through T8 Woodcote ─────────────────
-    (0.16, 0.58), (0.15, 0.52), (0.14, 0.47), (0.14, 0.41), (0.15, 0.36),
-    # ── T9  Copse – fast right-hander (north → east) ─────────────────────
-    (0.16, 0.29), (0.17, 0.24), (0.20, 0.20), (0.24, 0.17),
-    # ── T10-T11  Maggots – left-right ─────────────────────────────────────
-    (0.29, 0.15), (0.34, 0.13), (0.37, 0.12), (0.40, 0.12),
-    (0.42, 0.11), (0.44, 0.11),
-    # ── T12-T13  Becketts ─────────────────────────────────────────────────
-    (0.47, 0.10), (0.49, 0.10), (0.52, 0.11), (0.54, 0.12),
-    # ── T14  Chapel – sweeping right ──────────────────────────────────────
-    (0.57, 0.15), (0.62, 0.18), (0.65, 0.22),
-    # ── Hangar Straight – heading south-east ──────────────────────────────
-    (0.69, 0.27), (0.73, 0.33), (0.77, 0.39),
-    # ── T15  Stowe – right-hander at far right ────────────────────────────
-    (0.83, 0.43), (0.87, 0.47), (0.88, 0.52),
-    (0.87, 0.57), (0.85, 0.61),
-    # ── T16  Vale ─────────────────────────────────────────────────────────
-    (0.83, 0.65), (0.82, 0.68),
-    # ── T17-T18  Village / Club ────────────────────────────────────────────
-    (0.80, 0.71), (0.77, 0.74), (0.74, 0.76), (0.71, 0.77),
-    (0.68, 0.77), (0.64, 0.78),
-    # ── Return along bottom to S/F ────────────────────────────────────────
-    (0.59, 0.81), (0.55, 0.83), (0.52, 0.85),
-    # (closes to 0.49, 0.85)
-]
-_SILVERSTONE_TURNS = [
-    (0.05,  '1',  'Abbey',      -50, -12),
-    (0.10,  '2',  'Farm',       -40, -12),
-    (0.15,  '3',  'Arena',       12,  14),
-    (0.25,  '6',  'Brooklands', -56,  10),
-    (0.30,  '7',  'Luffield',   -52,  12),
-    (0.38,  '9',  'Copse',       12, -14),
-    (0.42,  '10', 'Maggots',      6,  14),
-    (0.47,  '12', 'Becketts',     6,  14),
-    (0.52,  '14', 'Chapel',      12, -14),
-    (0.62,  '15', 'Stowe',       12,   6),
-    (0.69,  '16', 'Vale',        12,  10),
-    (0.74,  '18', 'Club',        12,  10),
-]
+# Load any previously recorded tracks (tracks/*.json)
+_load_saved_tracks()
 
-# ── Track registry ────────────────────────────────────────────────────────────
-TRACKS: dict = {
-    'monza': {
-        'name':     'Monza GP',
-        'pts':      _MONZA_PTS,
-        'turns':    _MONZA_TURNS,
-        'length_m': 5793,
-    },
-    'silverstone': {
-        'name':     'Silverstone GP',
-        'pts':      _SILVERSTONE_PTS,
-        'turns':    _SILVERSTONE_TURNS,
-        'length_m': 5891,
-    },
-}
+# Fallback length used by graph x-axis before a real track length is known
+MONZA_LENGTH_M: int = 5000
 
-# Map substrings of the track name returned by telemetry to a TRACKS key
-TRACK_NAME_MAP: dict[str, str] = {
-    'monza':        'monza',
-    'silverstone':  'silverstone',
-    'ks_monza':     'monza',
-    'ks_silverstone': 'silverstone',
-}
-
-DEFAULT_TRACK = 'monza'
-
-# Compat alias so graph widgets that reference MONZA_LENGTH_M still compile.
-# TelemetryApp updates this at runtime when the active track changes.
-MONZA_LENGTH_M: int = TRACKS['monza']['length_m']
+# No default track – widget starts empty and builds live
+DEFAULT_TRACK: str | None = None
 
 # Number of distance-buckets used to store per-position telemetry
 N_TRACK_SEG = 220
@@ -909,7 +909,10 @@ class TrackMapWidget(QWidget):
     W_OUT = 22   # outer track-surface stroke width  (thicker = bolder look)
     W_IN  =  8   # inner data-colour stroke width
 
-    def __init__(self, track_key: str = DEFAULT_TRACK, parent=None):
+    # Minimum live buckets before drawing anything
+    MIN_DRAW = 20
+
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumSize(440, 370)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -918,26 +921,102 @@ class TrackMapWidget(QWidget):
         self._throttle_map = [0.0] * N_TRACK_SEG
         self._brake_map    = [0.0] * N_TRACK_SEG
 
-        # Cached scaled point list – rebuilt on resize
-        self._pts: list[tuple[float, float]] = []
-        self._last_sz: tuple[int, int] = (0, 0)
+        # Live world-coordinate accumulation (bucket_index → (world_x, world_z))
+        self._world_buckets: dict[int, tuple[float, float]] = {}
+        self._raw_min_x = self._raw_max_x = 0.0
+        self._raw_min_z = self._raw_max_z = 0.0
+        self._bounds_set = False
 
-        # Active track data
-        self._norm:  list[tuple[float, float]] = []
-        self._turns: list                       = []
-        self._track_name: str                   = ''
-        self.set_track(track_key)
+        # Normalized display points (0-1) sorted by lap fraction
+        self._norm:       list[tuple[float, float]] = []
+        self._turns:      list = []
+        self._track_name: str  = ''
+
+        # Pixel-coord cache – rebuilt on resize or norm change
+        self._pts:     list[tuple[float, float]] = []
+        self._last_sz: tuple[int, int]            = (0, 0)
 
     # ------------------------------------------------------------------ API
+
     def set_track(self, key: str):
-        """Switch to a different track layout (resets telemetry map)."""
-        td = TRACKS.get(key) or TRACKS[DEFAULT_TRACK]
-        self._norm       = td['pts']
-        self._turns      = td['turns']
-        self._track_name = td['name']
-        self._pts        = []          # invalidate cache
+        """Load a saved-JSON track if available; otherwise reset to live-build mode."""
+        td  = TRACKS.get(key, {})
+        pts = td.get('pts', [])
+        if pts:
+            self._norm       = [tuple(p) for p in pts]
+            self._turns      = list(td.get('turns', []))
+            self._track_name = td.get('name', key)
+            # Clear live data – we're showing a saved layout
+            self._world_buckets = {}
+            self._bounds_set    = False
+        else:
+            # Unknown / new track – start empty
+            self._norm       = []
+            self._turns      = []
+            self._track_name = td.get('name', key.replace('_', ' ').title()) if td else ''
+        self._pts     = []
+        self._last_sz = (0, 0)
+        self.reset()
+
+    def reset_track(self, display_name: str = ''):
+        """Clear accumulated shape and throttle/brake data (new session / track switch)."""
+        self._world_buckets = {}
+        self._raw_min_x = self._raw_max_x = 0.0
+        self._raw_min_z = self._raw_max_z = 0.0
+        self._bounds_set = False
+        self._norm       = []
+        self._turns      = []
+        self._track_name = display_name
+        self._pts        = []
         self._last_sz    = (0, 0)
         self.reset()
+
+    def feed_world_pos(self, pct: float, world_x: float, world_z: float):
+        """Add a live world-coord sample. Rebuilds the display when new ground is covered."""
+        if world_x == 0.0 and world_z == 0.0:
+            return
+        bucket     = int(pct * N_TRACK_SEG) % N_TRACK_SEG
+        is_new     = bucket not in self._world_buckets
+        self._world_buckets[bucket] = (world_x, world_z)
+
+        # Update bounding box
+        bounds_changed = False
+        if not self._bounds_set:
+            self._raw_min_x = self._raw_max_x = world_x
+            self._raw_min_z = self._raw_max_z = world_z
+            self._bounds_set = True
+            bounds_changed = True
+        else:
+            if world_x < self._raw_min_x: self._raw_min_x = world_x; bounds_changed = True
+            if world_x > self._raw_max_x: self._raw_max_x = world_x; bounds_changed = True
+            if world_z < self._raw_min_z: self._raw_min_z = world_z; bounds_changed = True
+            if world_z > self._raw_max_z: self._raw_max_z = world_z; bounds_changed = True
+
+        if (is_new or bounds_changed) and len(self._world_buckets) >= self.MIN_DRAW:
+            self._recompute_norm()
+
+    def _recompute_norm(self):
+        """Re-normalize all accumulated world coords to centered 0-1 space."""
+        if not self._world_buckets or not self._bounds_set:
+            return
+        span_x = self._raw_max_x - self._raw_min_x
+        span_z = self._raw_max_z - self._raw_min_z
+        span   = max(span_x, span_z)
+        if span < 1.0:        # less than 1 m – skip
+            return
+
+        scale    = 0.90 / span                       # 5 % margin each side
+        offset_x = (1.0 - span_x * scale) / 2.0     # center shorter axis
+        offset_z = (1.0 - span_z * scale) / 2.0
+
+        self._norm = [
+            (round((x - self._raw_min_x) * scale + offset_x, 4),
+             round((z - self._raw_min_z) * scale + offset_z, 4))
+            for _, (x, z) in sorted(self._world_buckets.items())
+        ]
+        self._pts     = []       # invalidate pixel cache
+        self._last_sz = (0, 0)
+        self.update()
 
     def update_telemetry(self, lap_progress: float, throttle: float, brake: float):
         self.car_progress = max(0.0, min(1.0, lap_progress))
@@ -947,7 +1026,7 @@ class TrackMapWidget(QWidget):
         self.update()
 
     def reset(self):
-        self.car_progress = 0.0
+        self.car_progress  = 0.0
         self._throttle_map = [0.0] * N_TRACK_SEG
         self._brake_map    = [0.0] * N_TRACK_SEG
         self.update()
@@ -958,7 +1037,7 @@ class TrackMapWidget(QWidget):
         if sz == self._last_sz and self._pts:
             return self._pts
         w, h = sz
-        pad = self.PAD
+        pad  = self.PAD
         self._pts = [
             (pad + x * (w - 2 * pad),
              pad + y * (h - 2 * pad))
@@ -975,7 +1054,19 @@ class TrackMapWidget(QWidget):
 
         pts = self._get_pts()
         n   = len(pts)
+
+        # ── Empty / building state ─────────────────────────────────────────
         if n < 2:
+            painter.setPen(QColor('#333333'))
+            painter.setFont(sans(9))
+            filled = len(self._world_buckets)
+            if filled > 0:
+                pct_done = int(filled / N_TRACK_SEG * 100)
+                msg = f'Building track map…  {pct_done}%  ({filled} / {N_TRACK_SEG} segments)'
+            else:
+                msg = 'Drive a lap to build the track map'
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, msg)
+            painter.end()
             return
 
         cap  = Qt.PenCapStyle.RoundCap
@@ -1469,6 +1560,9 @@ class TelemetryApp(QMainWindow):
         self._active_track_key: str | None = None
         self._auto_track = True
 
+        # Track recorder
+        self.recorder = TrackRecorder()
+
         self._init_ui()
 
         self.timer = QTimer()
@@ -1566,6 +1660,25 @@ class TelemetryApp(QMainWindow):
         layout.addWidget(self.udp_host)
         layout.addWidget(port_lbl)
         layout.addWidget(self.udp_port)
+
+        layout.addWidget(_vsep())
+
+        # Track recorder
+        self.rec_btn = QPushButton('⏺  REC')
+        self.rec_btn.setFixedSize(72, 22)
+        self.rec_btn.setCheckable(True)
+        self.rec_btn.setStyleSheet(
+            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
+            f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
+            f'QPushButton:checked {{ background: #5a0000; color: {C_BRAKE};'
+            f' border-color: {C_BRAKE}; }}'
+        )
+        self.rec_btn.toggled.connect(self._on_rec_toggled)
+        self.rec_label = QLabel('')
+        self.rec_label.setFont(sans(8))
+        self.rec_label.setStyleSheet(f'color: {TXT2};')
+        layout.addWidget(self.rec_btn)
+        layout.addWidget(self.rec_label)
 
         layout.addStretch()
 
@@ -1961,18 +2074,66 @@ class TelemetryApp(QMainWindow):
     def _apply_track(self, key: str):
         global MONZA_LENGTH_M
         self._active_track_key = key
-        self.track_map.set_track(key)
-        MONZA_LENGTH_M = TRACKS[key]['length_m']
+        if key in TRACKS:
+            self.track_map.set_track(key)
+            MONZA_LENGTH_M = TRACKS[key].get('length_m', MONZA_LENGTH_M)
+        else:
+            # New unknown track – reset to live-build mode
+            display = key.replace('_', ' ').title()
+            self.track_map.reset_track(display_name=display)
 
     def _auto_detect_track(self, track_name: str):
         if not self._auto_track:
             return
+        import re
+        # Derive a stable key from whatever string the game reports
+        key = re.sub(r'[^a-z0-9_]', '_', track_name.lower()).strip('_')
+        key = re.sub(r'_+', '_', key)
+        # Also check TRACK_NAME_MAP for any manual overrides
         name_lc = track_name.lower()
-        for substr, key in TRACK_NAME_MAP.items():
+        for substr, mapped in TRACK_NAME_MAP.items():
             if substr in name_lc:
-                if key != self._active_track_key:
-                    self._apply_track(key)
-                return
+                key = mapped
+                break
+        if key != self._active_track_key:
+            self._apply_track(key)
+
+    # ------------------------------------------------------------------
+    # TRACK RECORDING
+    # ------------------------------------------------------------------
+
+    def _on_rec_toggled(self, checked: bool):
+        if checked:
+            self.recorder.start()
+            self.rec_label.setText('0 pts')
+            self.rec_label.setStyleSheet(f'color: {C_BRAKE};')
+        else:
+            self.recorder.stop()
+            self._finish_recording()
+
+    def _finish_recording(self):
+        data = self.current_reader.read() if self.current_reader else None
+        track_name = data['track_name'] if data else 'Unknown Track'
+        length_m = TRACKS.get(self._active_track_key or '', {}).get('length_m', MONZA_LENGTH_M)
+
+        path = self.recorder.save(track_name, length_m)
+        if path:
+            _load_saved_tracks()
+            self._reload_track_combo()
+            self.rec_label.setText(f'Saved: {Path(path).stem}')
+            self.rec_label.setStyleSheet(f'color: {C_THROTTLE};')
+        else:
+            n = self.recorder.sample_count
+            self.rec_label.setText(f'Too few pts ({n})')
+            self.rec_label.setStyleSheet(f'color: {C_ABS};')
+
+    def _reload_track_combo(self):
+        self.track_combo.blockSignals(True)
+        self.track_combo.clear()
+        self.track_combo.addItem('Auto-Detect', userData=None)
+        for key, td in TRACKS.items():
+            self.track_combo.addItem(td['name'], userData=key)
+        self.track_combo.blockSignals(False)
 
     # ------------------------------------------------------------------
     # TELEMETRY UPDATE LOOP
@@ -2012,6 +2173,9 @@ class TelemetryApp(QMainWindow):
             self._reset_current_lap_data()
             display_lap = current_lap if current_lap > 0 else 1
             self.header_lap_label.setText(f'LAP {display_lap}')
+            # Auto-save recording on lap completion
+            if self.recorder.recording and self.recorder.sample_count >= TrackRecorder.MIN_SAMPLES:
+                self.rec_btn.setChecked(False)  # triggers _on_rec_toggled → _finish_recording
 
         self.current_lap_count = current_lap
         self.last_lap_time = current_time
@@ -2084,10 +2248,23 @@ class TelemetryApp(QMainWindow):
             lap_progress = float(data['lap_dist_pct'])
         else:
             lap_progress = min(1.0, current_time / lap_dur_ms) if lap_dur_ms > 0 else 0
-        _track_length_m = TRACKS.get(self._active_track_key or DEFAULT_TRACK,
-                                     TRACKS[DEFAULT_TRACK])['length_m']
+        _track_length_m = TRACKS.get(self._active_track_key or '', {}).get('length_m', MONZA_LENGTH_M)
         distance_m = lap_progress * _track_length_m
         self.track_map.update_telemetry(lap_progress, data['throttle'], data['brake'])
+        self.track_map.feed_world_pos(
+            lap_progress,
+            data.get('world_x', 0.0),
+            data.get('world_z', 0.0),
+        )
+
+        # Feed recorder
+        if self.recorder.recording:
+            self.recorder.feed(
+                lap_progress,
+                data.get('world_x', 0.0),
+                data.get('world_z', 0.0),
+            )
+            self.rec_label.setText(f'{self.recorder.sample_count} pts')
 
         ref_lap_s = 101.475
         gap_s = 0.035 + 0.02 * math.sin(time.time() * 0.5)
