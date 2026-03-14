@@ -46,6 +46,9 @@ C_STEER    = '#cc77ff'
 C_ABS      = '#ff7f00'
 C_TC       = '#ffe000'
 C_DELTA    = '#4499ff'
+C_PURPLE   = '#a855f7'
+C_PURPLE_BG = '#1e0f35'
+C_GREEN_BG  = '#0a2218'
 C_REF      = '#e74c3c'
 
 # ---------------------------------------------------------------------------
@@ -1654,6 +1657,184 @@ def _channel_header(color: str, name: str, unit: str = '') -> QLabel:
 
 
 # ---------------------------------------------------------------------------
+# LAP HISTORY PANEL
+# ---------------------------------------------------------------------------
+
+class LapHistoryPanel(QWidget):
+    """Session lap list with best-lap (purple) and best-sector (green) highlights."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet(f'background: {BG2}; border-radius: 4px;')
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(10, 10, 10, 6)
+        outer.setSpacing(6)
+
+        # Header row
+        hdr_row = QHBoxLayout()
+        title = QLabel('SESSION LAPS')
+        title.setFont(sans(8))
+        title.setStyleSheet(f'color: {TXT2}; letter-spacing: 1.5px;')
+        hdr_row.addWidget(title)
+        hdr_row.addStretch()
+
+        legend_best = QLabel('■ BEST LAP')
+        legend_best.setFont(sans(7))
+        legend_best.setStyleSheet(f'color: {C_PURPLE};')
+        legend_sec = QLabel('■ BEST SECTOR')
+        legend_sec.setFont(sans(7))
+        legend_sec.setStyleSheet(f'color: {C_THROTTLE};')
+        hdr_row.addWidget(legend_best)
+        hdr_row.addSpacing(10)
+        hdr_row.addWidget(legend_sec)
+        outer.addLayout(hdr_row)
+        outer.addWidget(h_line())
+
+        # Column headers
+        col_hdr = QWidget()
+        col_hdr.setStyleSheet('background: transparent;')
+        col_hdr_layout = QHBoxLayout(col_hdr)
+        col_hdr_layout.setContentsMargins(8, 2, 8, 2)
+        col_hdr_layout.setSpacing(0)
+        for txt, stretch in [('LAP', 0), ('TIME', 2), ('S1', 1), ('S2', 1), ('S3', 1)]:
+            l = QLabel(txt)
+            l.setFont(sans(7))
+            l.setStyleSheet(f'color: {TXT2}; letter-spacing: 0.8px;')
+            l.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            col_hdr_layout.addWidget(l, stretch)
+        outer.addWidget(col_hdr)
+
+        # Scrollable lap rows
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }'
+                             'QScrollBar:vertical { width: 6px; background: transparent; }'
+                             'QScrollBar::handle:vertical { background: #333; border-radius: 3px; }')
+        self._rows_widget = QWidget()
+        self._rows_widget.setStyleSheet('background: transparent;')
+        self._rows_layout = QVBoxLayout(self._rows_widget)
+        self._rows_layout.setContentsMargins(0, 0, 0, 0)
+        self._rows_layout.setSpacing(2)
+        self._rows_layout.addStretch()
+        scroll.setWidget(self._rows_widget)
+        outer.addWidget(scroll, 1)
+
+        self._empty_label = QLabel('No completed laps yet')
+        self._empty_label.setFont(sans(9))
+        self._empty_label.setStyleSheet(f'color: {TXT2};')
+        self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        outer.addWidget(self._empty_label)
+
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _fmt_time(t_s: float) -> str:
+        m = int(t_s // 60)
+        s = t_s % 60
+        return f'{m}:{s:06.3f}'
+
+    def refresh(self, session_laps: list):
+        # Clear existing rows (leave the trailing stretch)
+        while self._rows_layout.count() > 1:
+            item = self._rows_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        if not session_laps:
+            self._empty_label.setVisible(True)
+            return
+        self._empty_label.setVisible(False)
+
+        # Find best lap time
+        valid_times = [lap.get('total_time_s', 0) for lap in session_laps
+                       if lap.get('total_time_s', 0) > 0]
+        best_time = min(valid_times) if valid_times else None
+
+        # Find best time per sector column
+        best_sectors = []
+        for si in range(3):
+            col_times = [lap['sectors'][si] for lap in session_laps
+                         if lap.get('sectors') and lap['sectors'][si] is not None]
+            best_sectors.append(min(col_times) if col_times else None)
+
+        # Insert rows newest-first
+        for lap in reversed(session_laps):
+            row = self._make_row(lap, best_time, best_sectors)
+            self._rows_layout.insertWidget(0, row)
+
+    def _make_row(self, lap: dict, best_time: float | None,
+                  best_sectors: list) -> QWidget:
+        lap_time   = lap.get('total_time_s', 0)
+        is_best    = (best_time is not None and lap_time > 0
+                      and abs(lap_time - best_time) < 0.001)
+        sectors    = lap.get('sectors', [None, None, None]) or [None, None, None]
+
+        row = QFrame()
+        if is_best:
+            row.setStyleSheet(
+                f'background: {C_PURPLE_BG}; border: 1px solid {C_PURPLE};'
+                f' border-radius: 3px;')
+        else:
+            row.setStyleSheet(
+                f'background: {BG3}; border: 1px solid {BORDER};'
+                f' border-radius: 3px;')
+
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(8, 5, 8, 5)
+        layout.setSpacing(0)
+
+        def _cell(text: str, color: str = TXT, bold: bool = False,
+                  bg: str = '', stretch: int = 1) -> QLabel:
+            lbl = QLabel(text)
+            lbl.setFont(mono(9, bold=bold))
+            style = f'color: {color}; background: transparent;'
+            if bg:
+                style = (f'color: {color}; background: {bg};'
+                         f' border-radius: 2px; padding: 1px 4px;')
+            lbl.setStyleSheet(style)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(lbl, stretch)
+            return lbl
+
+        # Lap number
+        lap_num_col = C_PURPLE if is_best else TXT2
+        _cell(str(lap.get('lap_number', '?')), color=lap_num_col, stretch=0)
+        layout.addSpacing(8)
+
+        # Total time
+        if lap_time > 0:
+            time_col  = C_PURPLE if is_best else TXT
+            time_bold = is_best
+            _cell(self._fmt_time(lap_time), color=time_col, bold=time_bold, stretch=2)
+        else:
+            _cell('—', color=TXT2, stretch=2)
+
+        # Sectors S1 S2 S3
+        for si, sec_t in enumerate(sectors):
+            if sec_t is None:
+                _cell('—', color=TXT2, stretch=1)
+                continue
+
+            is_best_sec = (best_sectors[si] is not None
+                           and abs(sec_t - best_sectors[si]) < 0.001)
+
+            if is_best and is_best_sec:
+                # Best lap + best sector — purple with underline emphasis
+                _cell(f'{sec_t:.3f}', color=C_PURPLE, bold=True, stretch=1)
+            elif is_best_sec:
+                # Best sector on a non-best lap — green pill
+                _cell(f'{sec_t:.3f}', color=C_THROTTLE, bold=True,
+                      bg=C_GREEN_BG, stretch=1)
+            elif is_best:
+                _cell(f'{sec_t:.3f}', color=C_PURPLE, stretch=1)
+            else:
+                _cell(f'{sec_t:.3f}', color=TXT, stretch=1)
+
+        return row
+
+
+# ---------------------------------------------------------------------------
 # MAIN APPLICATION
 # ---------------------------------------------------------------------------
 
@@ -1833,154 +2014,208 @@ class TelemetryApp(QMainWindow):
 
     def _build_dashboard_tab(self) -> QWidget:
         tab = QWidget()
-        main = QVBoxLayout(tab)
-        main.setContentsMargins(10, 10, 10, 10)
+        outer = QHBoxLayout(tab)
+        outer.setContentsMargins(10, 10, 10, 10)
+        outer.setSpacing(10)
+
+        # ── LEFT: instruments panel ──────────────────────────────────────
+        instruments = QWidget()
+        main = QVBoxLayout(instruments)
+        main.setContentsMargins(0, 0, 0, 0)
         main.setSpacing(8)
 
-        # ── Row 1: Speed column | Right column ──────────────────────────
-        row1 = QHBoxLayout()
-        row1.setSpacing(10)
+        # ── RIGHT: lap history panel ─────────────────────────────────────
+        self.lap_history = LapHistoryPanel()
+        self.lap_history.setMinimumWidth(340)
+        self.lap_history.setMaximumWidth(420)
 
-        # LEFT: Speed + Gear
-        left_col = QVBoxLayout()
-        left_col.setSpacing(4)
+        def _card(stretch_v=False) -> tuple:
+            f = QFrame()
+            f.setStyleSheet(f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
+            l = QVBoxLayout(f)
+            l.setContentsMargins(12, 10, 12, 10)
+            l.setSpacing(6)
+            return f, l
 
-        speed_card = QFrame()
-        speed_card.setStyleSheet(f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 4px;')
-        speed_card_layout = QVBoxLayout(speed_card)
-        speed_card_layout.setContentsMargins(14, 10, 14, 10)
-        speed_card_layout.setSpacing(2)
+        def _label(text, font, color, align=None, letter_spacing='') -> QLabel:
+            lbl = QLabel(text)
+            lbl.setFont(font)
+            style = f'color: {color};'
+            if letter_spacing:
+                style += f' letter-spacing: {letter_spacing};'
+            lbl.setStyleSheet(style)
+            if align:
+                lbl.setAlignment(align)
+            return lbl
 
-        self.speed_value = ValueDisplay(C_SPEED, 'Speed', value_font_size=48, unit='km/h')
-        speed_card_layout.addWidget(self.speed_value)
+        # ══════════════════════════════════════════════════════════════════
+        # ROW 1 — RPM bar (full width, with ABS/TC inline)
+        # ══════════════════════════════════════════════════════════════════
+        rpm_card, rpm_layout = _card()
+        rpm_layout.setSpacing(4)
 
-        self.gear_value = ValueDisplay(C_GEAR, 'Gear', value_font_size=36)
-        speed_card_layout.addWidget(self.gear_value)
+        rpm_top = QHBoxLayout()
+        rpm_top.setSpacing(8)
+        rpm_lbl = _label('RPM', sans(8), TXT2, letter_spacing='1.5px')
+        self.rpm_numbers = _label('0 / 8000', mono(10), TXT2)
+        rpm_top.addWidget(rpm_lbl)
+        rpm_top.addStretch()
 
-        left_col.addWidget(speed_card)
-        row1.addLayout(left_col, stretch=0)
+        # ABS / TC inline chips
+        self.abs_badge = _AidBadge('ABS')
+        self.tc_badge  = _AidBadge('TC')
+        for badge in (self.abs_badge, self.tc_badge):
+            badge.setFixedHeight(22)
+            rpm_top.addWidget(badge)
 
-        # RIGHT: RPM bar + pedals
-        right_col = QVBoxLayout()
-        right_col.setSpacing(8)
-
-        # RPM section
-        rpm_card = QFrame()
-        rpm_card.setStyleSheet(f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 4px;')
-        rpm_card_layout = QVBoxLayout(rpm_card)
-        rpm_card_layout.setContentsMargins(12, 8, 12, 8)
-        rpm_card_layout.setSpacing(4)
-
-        rpm_header = QHBoxLayout()
-        rpm_name = QLabel('RPM')
-        rpm_name.setFont(sans(8))
-        rpm_name.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        self.rpm_numbers = QLabel('0 / 8000')
-        self.rpm_numbers.setFont(mono(10))
-        self.rpm_numbers.setStyleSheet(f'color: {TXT2};')
-        rpm_header.addWidget(rpm_name)
-        rpm_header.addStretch()
-        rpm_header.addWidget(self.rpm_numbers)
-        rpm_card_layout.addLayout(rpm_header)
+        rpm_top.addSpacing(12)
+        rpm_top.addWidget(self.rpm_numbers)
+        rpm_layout.addLayout(rpm_top)
 
         self.rev_bar = RevBar()
-        rpm_card_layout.addWidget(self.rev_bar)
-        right_col.addWidget(rpm_card)
+        self.rev_bar.setFixedHeight(28)
+        rpm_layout.addWidget(self.rev_bar)
 
-        # Pedals + ABS/TC row
-        pedals_row = QHBoxLayout()
-        pedals_row.setSpacing(10)
+        main.addWidget(rpm_card)
 
-        # Pedal bars
-        pedals_card = QFrame()
-        pedals_card.setStyleSheet(f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 4px;')
-        pedals_card_layout = QHBoxLayout(pedals_card)
-        pedals_card_layout.setContentsMargins(12, 8, 12, 8)
-        pedals_card_layout.setSpacing(14)
-
-        # Throttle
-        thr_col = QVBoxLayout()
-        thr_col.setSpacing(3)
-        thr_name = QLabel('THROTTLE')
-        thr_name.setFont(sans(8))
-        thr_name.setStyleSheet(f'color: {C_THROTTLE}; letter-spacing: 0.5px;')
-        thr_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.throttle_bar = PedalBar(C_THROTTLE, 'THR')
-        thr_col.addWidget(thr_name)
-        thr_col.addWidget(self.throttle_bar)
-        pedals_card_layout.addLayout(thr_col)
-
-        # Brake
-        brk_col = QVBoxLayout()
-        brk_col.setSpacing(3)
-        brk_name = QLabel('BRAKE')
-        brk_name.setFont(sans(8))
-        brk_name.setStyleSheet(f'color: {C_BRAKE}; letter-spacing: 0.5px;')
-        brk_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.brake_bar = PedalBar(C_BRAKE, 'BRK')
-        brk_col.addWidget(brk_name)
-        brk_col.addWidget(self.brake_bar)
-        pedals_card_layout.addLayout(brk_col)
-
-        pedals_row.addWidget(pedals_card)
-
-        # ABS / TC badges
-        aids_card = QFrame()
-        aids_card.setStyleSheet(f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 4px;')
-        aids_layout = QVBoxLayout(aids_card)
-        aids_layout.setContentsMargins(12, 8, 12, 8)
-        aids_layout.setSpacing(8)
-
-        aids_title = QLabel('DRIVER AIDS')
-        aids_title.setFont(sans(8))
-        aids_title.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        aids_layout.addWidget(aids_title)
-
-        self.abs_badge = _AidBadge('ABS')
-        self.tc_badge = _AidBadge('TC')
-        aids_layout.addWidget(self.abs_badge)
-        aids_layout.addWidget(self.tc_badge)
-        aids_layout.addStretch()
-        pedals_row.addWidget(aids_card)
-
-        right_col.addLayout(pedals_row)
-        row1.addLayout(right_col, stretch=1)
-        main.addLayout(row1)
-
-        # ── Row 2: Steering | Fuel | Position | Lap time ────────────────
+        # ══════════════════════════════════════════════════════════════════
+        # ROW 2 — Gear | Speed hero | Pedals
+        # ══════════════════════════════════════════════════════════════════
         row2 = QHBoxLayout()
-        row2.setSpacing(10)
+        row2.setSpacing(8)
 
-        steering_card = QFrame()
-        steering_card.setStyleSheet(f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 4px;')
-        steering_card_layout = QVBoxLayout(steering_card)
-        steering_card_layout.setContentsMargins(8, 8, 8, 8)
-        steer_title = QLabel('STEERING')
-        steer_title.setFont(sans(8))
-        steer_title.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        steering_card_layout.addWidget(steer_title)
+        # ── Gear card (narrow, very large number) ─────────────────────
+        gear_card, gear_layout = _card()
+        gear_card.setFixedWidth(110)
+        gear_layout.setContentsMargins(8, 10, 8, 10)
+        gear_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        gear_lbl_title = _label('GEAR', sans(8), TXT2, Qt.AlignmentFlag.AlignCenter, '1.5px')
+        gear_layout.addWidget(gear_lbl_title)
+        self.gear_value = QLabel('N')
+        self.gear_value.setFont(mono(72, bold=True))
+        self.gear_value.setStyleSheet(f'color: {C_GEAR};')
+        self.gear_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        gear_layout.addWidget(self.gear_value)
+        gear_layout.addStretch()
+        row2.addWidget(gear_card)
+
+        # ── Speed hero card (large number centered) ───────────────────
+        speed_card, speed_layout = _card()
+        speed_layout.setContentsMargins(16, 14, 16, 14)
+        speed_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        spd_val_row = QHBoxLayout()
+        spd_val_row.setSpacing(6)
+        spd_val_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.speed_value = QLabel('0')
+        self.speed_value.setFont(mono(80, bold=True))
+        self.speed_value.setStyleSheet(f'color: {C_SPEED};')
+        spd_unit = _label('km/h', sans(14), TXT2)
+        spd_unit.setAlignment(Qt.AlignmentFlag.AlignBottom)
+        spd_val_row.addStretch()
+        spd_val_row.addWidget(self.speed_value)
+        spd_val_row.addWidget(spd_unit)
+        spd_val_row.addStretch()
+
+        spd_title = _label('SPEED', sans(8), TXT2, Qt.AlignmentFlag.AlignCenter, '1.5px')
+        speed_layout.addWidget(spd_title)
+        speed_layout.addLayout(spd_val_row)
+        speed_layout.addStretch()
+        row2.addWidget(speed_card, stretch=1)
+
+        # ── Pedals card (two tall vertical bars side by side) ─────────
+        pedals_card, pedals_layout = _card()
+        pedals_card.setFixedWidth(120)
+        pedals_layout.setContentsMargins(10, 10, 10, 10)
+
+        pedals_title = _label('INPUTS', sans(8), TXT2, letter_spacing='1.5px')
+        pedals_layout.addWidget(pedals_title)
+
+        bars_row = QHBoxLayout()
+        bars_row.setSpacing(12)
+        bars_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        for color, attr, label_text in [
+            (C_THROTTLE, 'throttle_bar', 'THR'),
+            (C_BRAKE,    'brake_bar',    'BRK'),
+        ]:
+            col = QVBoxLayout()
+            col.setSpacing(4)
+            col.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+            bar = PedalBar(color, label_text)
+            bar.setFixedWidth(36)
+            bar.setMinimumHeight(120)
+            setattr(self, attr, bar)
+            lbl = _label(label_text, sans(7), color, Qt.AlignmentFlag.AlignCenter)
+            col.addWidget(bar)
+            col.addWidget(lbl)
+            bars_row.addLayout(col)
+
+        pedals_layout.addLayout(bars_row, stretch=1)
+        row2.addWidget(pedals_card)
+
+        main.addLayout(row2, stretch=1)
+
+        # ══════════════════════════════════════════════════════════════════
+        # ROW 3 — Steering wheel | Info strip (fuel / position / last lap)
+        # ══════════════════════════════════════════════════════════════════
+        row3 = QHBoxLayout()
+        row3.setSpacing(8)
+
+        # Steering card
+        steer_card, steer_layout = _card()
+        steer_layout.setContentsMargins(10, 8, 10, 8)
+        steer_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        steer_lbl = _label('STEERING', sans(8), TXT2, Qt.AlignmentFlag.AlignCenter, '1.5px')
+        steer_layout.addWidget(steer_lbl)
         self.steering_widget = SteeringWidget()
-        steering_card_layout.addWidget(self.steering_widget)
-        row2.addWidget(steering_card)
+        self.steering_widget.setMinimumSize(130, 130)
+        steer_layout.addWidget(self.steering_widget)
+        row3.addWidget(steer_card)
 
-        # Fuel / Position / Lap time small cards
-        info_row = QVBoxLayout()
-        self.fuel_display = ValueDisplay(C_RPM, 'Fuel', value_font_size=16, unit='L')
-        self.position_display = ValueDisplay(C_GEAR, 'Position', value_font_size=16)
-        self.laptime_display = ValueDisplay(C_REF, 'Last Lap', value_font_size=14)
+        # Info strip — three horizontal mini-cards
+        info_strip = QHBoxLayout()
+        info_strip.setSpacing(8)
 
-        for d in [self.fuel_display, self.position_display, self.laptime_display]:
-            card = QFrame()
-            card.setStyleSheet(f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 4px;')
-            cl = QVBoxLayout(card)
-            cl.setContentsMargins(4, 4, 4, 4)
-            cl.addWidget(d)
-            info_row.addWidget(card)
+        def _info_card(dot_color, title, attr, font_size=20, unit=''):
+            f = QFrame()
+            f.setStyleSheet(f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
+            l = QVBoxLayout(f)
+            l.setContentsMargins(14, 10, 14, 10)
+            l.setSpacing(4)
 
-        row2.addLayout(info_row)
-        row2.addStretch()
-        main.addLayout(row2)
-        main.addStretch()
+            hdr = QHBoxLayout()
+            dot = QLabel('●')
+            dot.setFont(sans(7))
+            dot.setStyleSheet(f'color: {dot_color};')
+            hdr.addWidget(dot)
+            hdr.addSpacing(4)
+            hdr.addWidget(_label(title, sans(8), TXT2, letter_spacing='1px'))
+            hdr.addStretch()
+            l.addLayout(hdr)
+
+            val_row = QHBoxLayout()
+            val_lbl = QLabel('—')
+            val_lbl.setFont(mono(font_size, bold=True))
+            val_lbl.setStyleSheet(f'color: {WHITE};')
+            val_row.addWidget(val_lbl)
+            if unit:
+                val_row.addWidget(_label(unit, sans(9), TXT2))
+            val_row.addStretch()
+            l.addLayout(val_row)
+
+            setattr(self, attr, val_lbl)
+            return f
+
+        info_strip.addWidget(_info_card(C_RPM,  'FUEL',      '_fuel_lbl',     22, 'L'))
+        info_strip.addWidget(_info_card(C_GEAR,  'POSITION',  '_position_lbl', 22))
+        info_strip.addWidget(_info_card(C_REF,   'LAST LAP',  '_laptime_lbl',  18))
+        row3.addLayout(info_strip, stretch=1)
+
+        main.addLayout(row3)
+
+        outer.addWidget(instruments, stretch=1)
+        outer.addWidget(self.lap_history, stretch=0)
 
         return tab
 
@@ -2151,13 +2386,27 @@ class TelemetryApp(QMainWindow):
 
     def _store_completed_lap(self):
         if self.current_lap_data.get('speed'):
-            self.session_laps.append({
-                'lap_number': self.current_lap_count,
-                'data': {k: list(v) for k, v in self.current_lap_data.items()},
-            })
-            # Promote this lap to the reference for delta / sector comparison
             dists = self.current_lap_data.get('dist_m', [])
             times = self.current_lap_data.get('time_ms', [])
+
+            total_time_s = (times[-1] / 1000.0) if times else 0.0
+
+            sectors: list = [None, None, None]
+            if dists and times and len(dists) == len(times):
+                _track_length_m = TRACKS.get(self._active_track_key or '', {}).get(
+                    'length_m', MONZA_LENGTH_M)
+                boundaries = [_track_length_m * f for f in (1/3, 2/3, 1.0)]
+                sectors = _compute_sector_times(dists, times, boundaries)
+
+            self.session_laps.append({
+                'lap_number': self.current_lap_count,
+                'total_time_s': total_time_s,
+                'sectors': sectors,
+                'data': {k: list(v) for k, v in self.current_lap_data.items()},
+            })
+            self.lap_history.refresh(self.session_laps)
+
+            # Promote this lap to the reference for delta / sector comparison
             if dists and times and len(dists) == len(times):
                 self._ref_lap_dists = list(dists)
                 self._ref_lap_times = list(times)
@@ -2338,8 +2587,8 @@ class TelemetryApp(QMainWindow):
             gear_text = str(gear - 1)  # 2→1st, 3→2nd, …
 
         # ── Dashboard updates ────────────────────────────────────────────
-        self.speed_value.set_value(f"{int(data['speed'])}")
-        self.gear_value.set_value(gear_text)
+        self.speed_value.setText(f"{int(data['speed'])}")
+        self.gear_value.setText(gear_text)
 
         rpm = data['rpm']
         max_rpm = data['max_rpm']
@@ -2359,15 +2608,15 @@ class TelemetryApp(QMainWindow):
         self._auto_detect_track(data['track_name'])
 
         fuel = data['fuel']
-        self.fuel_display.set_value(f"{fuel:.1f}")
+        self._fuel_lbl.setText(f"{fuel:.1f}")
 
-        self.position_display.set_value(str(data['position']))
+        self._position_lbl.setText(str(data['position']))
 
         if data['lap_time'] > 0:
             lt = data['lap_time']
             m = int(lt // 60)
             s = lt % 60
-            self.laptime_display.set_value(f'{m}:{s:06.3f}')
+            self._laptime_lbl.setText(f'{m}:{s:06.3f}')
 
         # ── Graph updates ────────────────────────────────────────────────
         steer_deg = math.degrees(data['steer_angle'])
@@ -2572,8 +2821,8 @@ class TelemetryApp(QMainWindow):
     # ------------------------------------------------------------------
 
     def _reset_display(self):
-        self.speed_value.set_value('0')
-        self.gear_value.set_value('N')
+        self.speed_value.setText('0')
+        self.gear_value.setText('N')
         self.rev_bar.set_value(0, 8000)
         self.rpm_numbers.setText('0 / 8000')
         self.throttle_bar.set_value(0)
@@ -2583,9 +2832,9 @@ class TelemetryApp(QMainWindow):
         self.tc_badge.set_active(False)
         self.car_label.setText('—')
         self.track_label.setText('—')
-        self.fuel_display.set_value('—')
-        self.position_display.set_value('—')
-        self.laptime_display.set_value('—')
+        self._fuel_lbl.setText('—')
+        self._position_lbl.setText('—')
+        self._laptime_lbl.setText('—')
         self._reset_analysis_graphs()
         self.track_map.reset()
 
