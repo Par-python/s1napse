@@ -936,6 +936,9 @@ class TrackMapWidget(QWidget):
         self._pts:     list[tuple[float, float]] = []
         self._last_sz: tuple[int, int]            = (0, 0)
 
+        # Smooth car position (lerped toward car_progress each animation tick)
+        self._car_smooth: float = 0.0
+
     # ------------------------------------------------------------------ API
 
     def set_track(self, key: str):
@@ -1023,10 +1026,24 @@ class TrackMapWidget(QWidget):
         bucket = int(lap_progress * N_TRACK_SEG) % N_TRACK_SEG
         self._throttle_map[bucket] = throttle
         self._brake_map[bucket]    = brake
+        # (widget.update() handled by tick_lerp timer)
+
+    def tick_lerp(self):
+        """Called by the 60 fps animation timer to smoothly animate the car dot."""
+        if not self._norm:
+            return
+        diff = self.car_progress - self._car_smooth
+        # Handle 0↔1 wraparound (S/F crossing)
+        if diff > 0.5:
+            diff -= 1.0
+        elif diff < -0.5:
+            diff += 1.0
+        self._car_smooth = (self._car_smooth + diff * 0.20) % 1.0
         self.update()
 
     def reset(self):
         self.car_progress  = 0.0
+        self._car_smooth   = 0.0
         self._throttle_map = [0.0] * N_TRACK_SEG
         self._brake_map    = [0.0] * N_TRACK_SEG
         self.update()
@@ -1094,12 +1111,25 @@ class TrackMapWidget(QWidget):
             p2 = QPointF(*pts[(i + 1) % n])
             painter.drawLine(p1, p2)
 
-        # ── Pass 2: colour-coded channel data ────────────────────────────
+        # ── Pass 2: colour-coded channel data (smoothed gradient) ────────
+        # Pre-smooth throttle/brake maps with a triangular kernel (radius=4)
+        # so colours blend gradually between braking, coasting, and throttle zones.
+        _SMOOTH_R = 4
+        _wsum = sum((_SMOOTH_R + 1 - abs(k)) for k in range(-_SMOOTH_R, _SMOOTH_R + 1))
+        sthr = [0.0] * N_TRACK_SEG
+        sbrk = [0.0] * N_TRACK_SEG
+        for i in range(N_TRACK_SEG):
+            for k in range(-_SMOOTH_R, _SMOOTH_R + 1):
+                w = (_SMOOTH_R + 1 - abs(k)) / _wsum
+                j = (i + k) % N_TRACK_SEG
+                sthr[i] += w * self._throttle_map[j]
+                sbrk[i] += w * self._brake_map[j]
+
         for i in range(n):
             frac   = i / n
             bucket = int(frac * N_TRACK_SEG) % N_TRACK_SEG
-            thr    = self._throttle_map[bucket]
-            brk    = self._brake_map[bucket]
+            thr    = sthr[bucket]
+            brk    = sbrk[bucket]
 
             if brk > 15:
                 t   = min(1.0, brk / 100.0)
@@ -1169,22 +1199,34 @@ class TrackMapWidget(QWidget):
                 ny = int(cp2.y() + (CR + 9 if oy >= 0 else -CR - 3))
                 painter.drawText(int(cp2.x() - 20), ny, tname)
 
-        # ── Car position dot (glowing red) ───────────────────────────────
-        car_idx = int(self.car_progress * n) % n
-        cx, cy  = pts[car_idx]
-        cp      = QPointF(cx, cy)
+        # ── Car position dot ──────────────────────────────────────────────
+        # Only show after a full lap of data has been collected.
+        # If loaded from saved JSON (_world_buckets is empty) always show.
+        _full_lap = (not self._world_buckets
+                     or len(self._world_buckets) >= int(N_TRACK_SEG * 0.85))
+        if _full_lap:
+            # Interpolate pixel position for the smoothed progress value
+            smooth = self._car_smooth
+            lo_idx = int(smooth * n) % n
+            hi_idx = (lo_idx + 1) % n
+            frac   = (smooth * n) - int(smooth * n)
+            lx, ly = pts[lo_idx]
+            hx, hy = pts[hi_idx]
+            cx = lx + frac * (hx - lx)
+            cy = ly + frac * (hy - ly)
+            cp = QPointF(cx, cy)
 
-        grad = QRadialGradient(cp, 14)
-        grad.setColorAt(0.0, QColor(255, 60,  60, 210))
-        grad.setColorAt(0.5, QColor(255, 60,  60,  80))
-        grad.setColorAt(1.0, QColor(255, 60,  60,   0))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(grad))
-        painter.drawEllipse(cp, 14, 14)
+            grad = QRadialGradient(cp, 14)
+            grad.setColorAt(0.0, QColor(255, 60, 60, 210))
+            grad.setColorAt(0.5, QColor(255, 60, 60,  80))
+            grad.setColorAt(1.0, QColor(255, 60, 60,   0))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(grad))
+            painter.drawEllipse(cp, 14, 14)
 
-        painter.setBrush(QBrush(QColor('#ff3c3c')))
-        painter.setPen(QPen(QColor('#ffffff'), 1.5))
-        painter.drawEllipse(cp, 5, 5)
+            painter.setBrush(QBrush(QColor('#ff3c3c')))
+            painter.setPen(QPen(QColor('#ffffff'), 1.5))
+            painter.drawEllipse(cp, 5, 5)
 
         painter.end()
 
@@ -1651,6 +1693,11 @@ class TelemetryApp(QMainWindow):
         self.timer.timeout.connect(self._update_telemetry)
         self.timer.start(50)
 
+        # 60 fps animation timer — smooth car dot lerp (does NOT read telemetry)
+        self._anim_timer = QTimer()
+        self._anim_timer.timeout.connect(self.track_map.tick_lerp)
+        self._anim_timer.start(16)
+
     # ------------------------------------------------------------------
     # UI CONSTRUCTION
     # ------------------------------------------------------------------
@@ -2018,7 +2065,7 @@ class TelemetryApp(QMainWindow):
 
         # Center: track map
         self.track_map = TrackMapWidget()
-        self.track_map.setMinimumWidth(420)
+        self.track_map.setMinimumWidth(300)
         splitter.addWidget(self.track_map)
 
         # Right: analysis telemetry graphs in a scroll area
@@ -2049,10 +2096,9 @@ class TelemetryApp(QMainWindow):
         right_scroll = QScrollArea()
         right_scroll.setWidgetResizable(True)
         right_scroll.setWidget(right_container)
-        right_scroll.setMinimumWidth(280)
-        right_scroll.setMaximumWidth(340)
+        right_scroll.setMinimumWidth(300)
         splitter.addWidget(right_scroll)
-        splitter.setSizes([230, 500, 310])
+        splitter.setSizes([220, 400, 420])
         main_layout.addWidget(splitter, stretch=3)
 
         # Bottom: time delta graph
@@ -2342,11 +2388,15 @@ class TelemetryApp(QMainWindow):
         _track_length_m = TRACKS.get(self._active_track_key or '', {}).get('length_m', MONZA_LENGTH_M)
         distance_m = lap_progress * _track_length_m
         self.track_map.update_telemetry(lap_progress, data['throttle'], data['brake'])
-        self.track_map.feed_world_pos(
-            lap_progress,
-            data.get('world_x', 0.0),
-            data.get('world_z', 0.0),
-        )
+        # Only accumulate track shape after the outlap — avoids pit-exit artifacts.
+        # current_lap_count is the number of *completed* laps, so >= 1 means the
+        # outlap is done and the player is now on a proper flying lap.
+        if self.current_lap_count >= 1:
+            self.track_map.feed_world_pos(
+                lap_progress,
+                data.get('world_x', 0.0),
+                data.get('world_z', 0.0),
+            )
 
         # Feed recorder
         if self.recorder.recording:
