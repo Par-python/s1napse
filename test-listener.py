@@ -391,6 +391,7 @@ class ACCReader(TelemetryReader):
                 'lap_dist_pct': sm.Graphics.normalized_car_position,
                 'world_x': sm.Graphics.car_coordinates[0].x,
                 'world_z': sm.Graphics.car_coordinates[0].z,
+                'lap_valid': sm.Graphics.is_valid_lap,
             }
         except Exception as e:
             print(f"ACC read error: {e}")
@@ -2388,10 +2389,11 @@ class TelemetryApp(QMainWindow):
         _track_length_m = TRACKS.get(self._active_track_key or '', {}).get('length_m', MONZA_LENGTH_M)
         distance_m = lap_progress * _track_length_m
         self.track_map.update_telemetry(lap_progress, data['throttle'], data['brake'])
-        # Only accumulate track shape after the outlap — avoids pit-exit artifacts.
-        # current_lap_count is the number of *completed* laps, so >= 1 means the
-        # outlap is done and the player is now on a proper flying lap.
-        if self.current_lap_count >= 1:
+        # Only accumulate track shape after the outlap and during valid laps.
+        # current_lap_count >= 1 skips the outlap from pits.
+        # lap_valid (ACC-native flag, defaults True for other sims) prevents
+        # off-track excursions from corrupting the recorded shape.
+        if self.current_lap_count >= 1 and data.get('lap_valid', True):
             self.track_map.feed_world_pos(
                 lap_progress,
                 data.get('world_x', 0.0),
