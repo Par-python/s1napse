@@ -1,150 +1,162 @@
-# ACC Telemetry
+# Synapse
 
-A MoTeC-inspired real-time telemetry dashboard for racing simulators. Connects directly to your sim and displays live car data, lap analysis, and a self-building track map — no external tools required.
+A real-time telemetry dashboard for racing simulators. Connects directly to your sim and displays live car data, lap analysis, race strategy, and a self-building track map.
 
-![Dashboard](https://placeholder)
+---
+
+## Download & Install
+
+### Step 1 — Download Synapse
+
+1. Go to the [**Releases**](../../releases) page (top right of this GitHub page, or click the "Releases" link on the right sidebar)
+2. Click the latest release (e.g. `v1.0.0`)
+3. Under **Assets**, click **`Synapse.exe`** to download it
+
+> The file is about 150–200 MB. This is normal — it includes everything the app needs to run.
+
+---
+
+### Step 2 — Run it
+
+1. Move `Synapse.exe` to a folder of your choice (e.g. `Documents\Synapse\`)
+2. Double-click `Synapse.exe`
+
+> **Windows SmartScreen warning?** This is normal for unsigned apps.
+> Click **"More info"** → **"Run anyway"** to proceed.
+
+> **Antivirus warning?** Some antivirus tools flag PyInstaller executables as suspicious. The app is safe — you can add it as an exception or check the source code in this repo.
+
+That's it. No Python, no installation, no setup.
+
+---
+
+### Step 3 — Connect to your sim
+
+1. Launch your sim first, then open Synapse
+2. Synapse will **auto-detect** whichever sim is running
+3. The status bar at the top will show **● CONNECTED** when it picks up data
+
+| Sim               | What to do                                                                                                                                                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **ACC**           | Just launch the game — Synapse connects automatically                                                                                                                                 |
+| **Assetto Corsa** | Enable UDP telemetry in AC's settings: `Options → General → Enable Custom Shaders Patch` is not required — just go to `Options → General` and enable **UDP telemetry** on port `9996` |
+| **iRacing**       | Launch iRacing, go to the track — Synapse connects automatically                                                                                                                      |
 
 ---
 
 ## Supported Games
 
-| Game                       | Connection Method | Notes         |
-| -------------------------- | ----------------- | ------------- |
-| Assetto Corsa Competizione | Shared Memory     | Windows only  |
-| Assetto Corsa              | UDP (port 9996)   | Windows / Mac |
-| iRacing                    | iRacing SDK       | Windows only  |
-
-The app auto-detects whichever sim is running. You can also manually pin a source from the **SOURCE** dropdown.
+| Game                             | Windows | Mac |
+| -------------------------------- | ------- | --- |
+| Assetto Corsa Competizione (ACC) | ✅      | ❌  |
+| Assetto Corsa (AC)               | ✅      | ✅  |
+| iRacing                          | ✅      | ❌  |
 
 ---
 
-## Installation
+## What's inside
 
-**Requirements:** Python 3.11+
+### Dashboard
+
+Live car data at 20 Hz — speed, gear, RPM, throttle, brake, steering wheel, tyre temps & pressures, fuel remaining, lap time, ABS/TC activity.
+
+### Telemetry Graphs
+
+Rolling graphs for the current lap: speed, throttle/brake, steering, RPM, gear, ABS/TC.
+
+### Lap Analysis
+
+Three-panel view:
+
+- **Sectors** — running lap timer + S1/S2/S3 splits vs your reference lap (green = faster, red = slower)
+- **Track Map** — builds itself from real car coordinates as you drive. Color-coded by throttle (green) and braking (red). Saved automatically after each lap so it loads instantly next session.
+- **Telemetry graphs** — distance-based speed, throttle, gear, RPM, steering for the current lap
+- **Delta graph** — time gained/lost vs your reference lap at every point on track
+
+### Race Tab
+
+Race-specific data: position, gap to car ahead/behind, tyre compound & stint age, pit window recommendation, lap time trend, undercut/overcut calculator, fuel save calculator.
+
+### Tyres Tab
+
+Per-corner tyre temperatures, pressures, and brake temperatures.
+
+### Lap Comparison
+
+Pick any two laps from your session and overlay them on the same graphs. See exactly where you gained or lost time.
+
+### Session Tab
+
+Full lap table with times, sector splits, and validity flags. Export everything to CSV with one click.
+
+---
+
+## Track Map
+
+Synapse builds the track map automatically — no pre-loaded layouts needed.
+
+1. Load into any session on a new track
+2. Complete the outlap (Synapse skips it to avoid pit-exit noise)
+3. Drive — the map builds in real time
+4. Cross the finish line — the map saves automatically
+
+On your next session at the same track it loads instantly. Track files are saved in a `tracks\` folder next to `Synapse.exe`.
+
+You can also press **⏺ REC** in the top bar to start/stop a recording manually.
+
+---
+
+## For Developers
+
+Clone the repo and run from source:
 
 ```bash
 pip install PyQt6 matplotlib pyaccsharedmemory irsdk
-```
-
-Run the app:
-
-```bash
 python test-listener.py
 ```
 
----
+Build the EXE yourself:
 
-## Features
+```bash
+pip install pyinstaller
+pyinstaller Synapse.spec
+# Output: dist/Synapse.exe
+```
 
-### Dashboard Tab
-
-Live car data updated at 20 Hz:
-
-- **Speed** — large numeric readout in km/h
-- **Gear** — R / N / 1–8
-- **RPM** — rev bar with numeric display
-- **Throttle & Brake** — vertical input bars
-- **Steering** — visual wheel widget with angle readout
-- **ABS / TC** — activity badges that light up when active
-- **Fuel** — remaining fuel in litres
-- **Position** — race position
-- **Last Lap Time** — updated on every lap crossing
-
-### Telemetry Graphs Tab
-
-Rolling time-series graphs for the current lap:
-
-- Speed, Throttle/Brake, Steering, RPM, Gear, ABS/TC
-
-### Lap Analysis Tab
-
-The main analytical view, split into three panels:
-
-**Left — Sector Panel**
-
-- Running current lap timer starting from `0:00.000` on every lap, valid or not
-- Reference lap time (last completed lap)
-- S1 / S2 / S3 sector times with delta vs reference (green = faster, red = slower)
-
-**Center — Live Track Map**
-
-- Builds automatically from real world coordinates as you drive — no preset layouts
-- Recording starts after the outlap is complete (skips pit-exit artifacts)
-- Pauses recording during invalid laps (track cuts, penalties) to keep the shape clean
-- Color-coded track surface: green = full throttle, yellow-green = partial throttle, red = braking, gray = coasting
-- Colors are smoothed with a gradient kernel so zones blend naturally
-- Car position dot appears after the first full lap of data, animated at 60 fps
-- Saved to `tracks/<track_name>.json` after a complete lap — loads instantly on next launch
-
-**Right — Lap Analysis Graphs**
-Distance-based (not time-based) graphs for the current lap:
-
-- Speed, Throttle/Brake, Gear, RPM, Steering
-
-**Bottom — Time Delta**
-
-- Delta vs last completed lap, plotted against track distance
-- Fill above zero = slower (red), below zero = faster (blue)
-- Empty until a reference lap exists
-
----
-
-## Track Map Recording
-
-The track map is generated from real car coordinates — no hand-drawn layouts. Here is how it works:
-
-1. **Load into any session** on a track you want to map
-2. **Complete the outlap** — the app skips this lap to avoid pit-exit noise
-3. **Drive a flying lap** — the map builds in real time, showing progress as a percentage
-4. **Cross the finish line** — the map is saved automatically to `tracks/<track_name>.json`
-5. **Next session** — the saved map loads instantly at startup
-
-You can also hit **⏺ REC** in the top bar to manually start and stop a recording at any point.
-
-Saved JSON files live in `tracks/` next to the script. Each file contains the normalized waypoints and an empty `turns` array you can populate manually with corner names if you want labels on the map.
-
----
-
-## Connection Strip
-
-The bar at the top of the window gives you control over everything:
-
-| Control                        | Description                                   |
-| ------------------------------ | --------------------------------------------- |
-| **● CONNECTED / DISCONNECTED** | Live connection status and active sim         |
-| **SOURCE**                     | Auto-Detect, ACC, AC (UDP), or iRacing        |
-| **TRACK**                      | Auto-Detect or any saved track JSON           |
-| **HOST / PORT**                | UDP address for AC (default 127.0.0.1 : 9996) |
-| **⏺ REC**                      | Manually record a track lap                   |
-| **Car / Track / Lap**          | Live session info                             |
-
----
-
-## Planned Features
-
-- [x] **Lap comparison overlay** — plot any two saved laps on the same graphs
-- [x] **Tyre temperatures & wear** — core temp, pressure, brake temp per corner (ACC); tyre temp on iRacing
-- [x] **Fuel strategy calculator** — target laps remaining based on current consumption
-- [x] **Export to CSV** — dump full lap data for external analysis
-- [x] **Session summary screen** — lap table with times, sectors, and validity flags
-- [ ] **Multi-class support for iRacing** — filter by car class in race sessions
-- [ ] **Standalone executable** — PyInstaller build so Python is not required
-
----
-
-## Project Structure
+**Project structure:**
 
 ```
-acc-telemetry/
-├── test-listener.py      # Main application
-├── tracks/               # Auto-generated track JSON files (created on first use)
+synapse/
+├── test-listener.py   # Main application
+├── Synapse.spec       # PyInstaller build config
+├── requirements.txt   # Python dependencies
+├── tracks/            # Auto-generated track JSON files
 └── README.md
 ```
 
 ---
 
+## Troubleshooting
+
+**Synapse shows DISCONNECTED**
+
+- Make sure the sim is running and you are in a session (not the main menu)
+- For AC, confirm UDP telemetry is enabled in game settings
+- Try selecting the source manually from the **SOURCE** dropdown instead of Auto-Detect
+
+**Track map is not building**
+
+- The outlap is always skipped — drive one full lap first
+- If the lap is invalid (track cut, penalty) the map pauses recording to stay clean
+
+**The exe is being blocked by antivirus**
+
+- This is a known false positive with PyInstaller-built apps
+- Add `Synapse.exe` as an exception in your antivirus, or build from source
+
+---
+
 ## Notes
 
-- ACC and iRacing shared memory only works on **Windows** while the sim is running
-- AC UDP works on any OS as long as the game is broadcasting on the configured port
-- The app gracefully degrades if a sim library is not installed — the source just stays disconnected
+- ACC and iRacing use shared memory — Synapse must be running on the **same Windows PC** as the sim
+- AC UDP works over a local network too (change the HOST field in the top bar)

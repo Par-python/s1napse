@@ -4,9 +4,9 @@
 #
 # Build command (run on Windows):
 #   pip install pyinstaller
-#   pyinstaller ACC-Telemetry.spec
+#   pyinstaller Synapse.spec
 #
-# Output: dist/ACC-Telemetry.exe  (single file, no console window)
+# Output: dist/Synapse.exe  (single file, no console window)
 #
 # Recorded track maps (tracks/*.json) are written NEXT TO the .exe at runtime,
 # not bundled inside it, so they persist between sessions.
@@ -60,7 +60,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='ACC-Telemetry',
+    name='Synapse',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

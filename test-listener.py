@@ -2408,7 +2408,7 @@ class LapHistoryPanel(QWidget):
 class TelemetryApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('AC / ACC Telemetry')
+        self.setWindowTitle('Synapse')
         _screen = QApplication.primaryScreen().availableGeometry()
         _w = min(1640, _screen.width() - 40)
         _h = min(980, _screen.height() - 60)
