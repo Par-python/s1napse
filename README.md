@@ -125,7 +125,6 @@ The bar at the top of the window gives you control over everything:
 - [x] **Lap comparison overlay** — plot any two saved laps on the same graphs
 - [x] **Tyre temperatures & wear** — core temp, pressure, brake temp per corner (ACC); tyre temp on iRacing
 - [x] **Fuel strategy calculator** — target laps remaining based on current consumption
-- [ ] **Corner labels on track map** — auto-detected from curvature, manually editable in JSON
 - [x] **Export to CSV** — dump full lap data for external analysis
 - [x] **Session summary screen** — lap table with times, sectors, and validity flags
 - [ ] **Multi-class support for iRacing** — filter by car class in race sessions
