@@ -1575,6 +1575,8 @@ class ChannelGraph(FigureCanvas):
     def __init__(self, color: str, ylabel: str, ylim=(0, 100), parent=None):
         self.fig = Figure(figsize=(8, 2.2), facecolor=BG)
         super().__init__(self.fig)
+        self.setMinimumWidth(100)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.ax = self.fig.add_subplot(111)
         _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
         self.setMinimumHeight(160)
@@ -1602,6 +1604,8 @@ class MultiChannelGraph(FigureCanvas):
                  label1: str, label2: str, ylim=(0, 100), parent=None):
         self.fig = Figure(figsize=(8, 2.2), facecolor=BG)
         super().__init__(self.fig)
+        self.setMinimumWidth(100)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.ax = self.fig.add_subplot(111)
         _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
         self.setMinimumHeight(160)
@@ -1635,6 +1639,8 @@ class AnalysisTelemetryGraph(FigureCanvas):
     def __init__(self, ylabel: str, color: str = C_SPEED, ylim=(0, 100), parent=None):
         self.fig = Figure(figsize=(4, 1.2), facecolor=BG)
         super().__init__(self.fig)
+        self.setMinimumWidth(100)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.ax = self.fig.add_subplot(111)
         _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
         self.distances, self.values = [], []
@@ -1666,6 +1672,8 @@ class AnalysisMultiLineGraph(FigureCanvas):
                  ylim=(0, 100), parent=None):
         self.fig = Figure(figsize=(4, 1.2), facecolor=BG)
         super().__init__(self.fig)
+        self.setMinimumWidth(100)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.ax = self.fig.add_subplot(111)
         _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
         self.distances, self.v1, self.v2 = [], [], []
@@ -1701,6 +1709,8 @@ class TimeDeltaGraph(FigureCanvas):
     def __init__(self, parent=None):
         self.fig = Figure(figsize=(10, 1.8), facecolor=BG)
         super().__init__(self.fig)
+        self.setMinimumWidth(100)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.ax = self.fig.add_subplot(111)
         _style_ax(self.ax, self.fig, ylabel='Delta (s)')
         self.ax.axhline(0, color=C_REF, linewidth=1, alpha=0.8)
@@ -1766,6 +1776,8 @@ class ComparisonGraph(FigureCanvas):
                  ylim=(0, 100), parent=None):
         self.fig = Figure(figsize=(8, 1.8), facecolor=BG)
         super().__init__(self.fig)
+        self.setMinimumWidth(100)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.ax = self.fig.add_subplot(111)
         _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
         self.setMinimumHeight(140)
@@ -1799,6 +1811,8 @@ class ComparisonDeltaGraph(FigureCanvas):
     def __init__(self, parent=None):
         self.fig = Figure(figsize=(8, 1.8), facecolor=BG)
         super().__init__(self.fig)
+        self.setMinimumWidth(100)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.ax = self.fig.add_subplot(111)
         _style_ax(self.ax, self.fig, ylabel='Delta (s)')
         self.ax.axhline(0, color=TXT2, linewidth=0.8, alpha=0.6)
@@ -2141,6 +2155,7 @@ class LapHistoryPanel(QWidget):
         # Scrollable lap rows
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }'
                              'QScrollBar:vertical { width: 6px; background: transparent; }'
                              'QScrollBar::handle:vertical { background: #333; border-radius: 3px; }')
@@ -2275,7 +2290,11 @@ class TelemetryApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('AC / ACC Telemetry')
-        self.setGeometry(100, 100, 1640, 980)
+        _screen = QApplication.primaryScreen().availableGeometry()
+        _w = min(1640, _screen.width() - 40)
+        _h = min(980, _screen.height() - 60)
+        self.setGeometry(_screen.left() + 20, _screen.top() + 30, _w, _h)
+        self.setMinimumSize(900, 600)
 
         self.ac_reader  = None
         self.acc_reader = ACCReader()
@@ -2489,6 +2508,8 @@ class TelemetryApp(QMainWindow):
         self.rpm_numbers = QLabel('0 / 8000')
         self.rpm_numbers.setFont(mono(8))
         self.rpm_numbers.setStyleSheet(f'color: {TXT2};')
+        self.rpm_numbers.setMaximumWidth(130)
+        self.rpm_numbers.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
 
         self.abs_badge = _AidBadge('ABS')
         self.tc_badge  = _AidBadge('TC')
@@ -2745,6 +2766,7 @@ class TelemetryApp(QMainWindow):
         # Scroll area for graphs
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }')
         container = QWidget()
         container.setStyleSheet(f'background: {BG};')
@@ -2837,6 +2859,7 @@ class TelemetryApp(QMainWindow):
 
         right_scroll = QScrollArea()
         right_scroll.setWidgetResizable(True)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         right_scroll.setWidget(right_container)
         right_scroll.setMinimumWidth(300)
         splitter.addWidget(right_scroll)
@@ -3208,6 +3231,7 @@ class TelemetryApp(QMainWindow):
 
         graphs_scroll = QScrollArea()
         graphs_scroll.setWidgetResizable(True)
+        graphs_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         graphs_scroll.setWidget(graphs_container)
         graphs_scroll.setStyleSheet(f'background: {BG}; border: none;')
         outer.addWidget(graphs_scroll, stretch=1)
@@ -3397,6 +3421,7 @@ class TelemetryApp(QMainWindow):
 
         sess_scroll = QScrollArea()
         sess_scroll.setWidgetResizable(True)
+        sess_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         sess_scroll.setWidget(self._sess_rows_widget)
         sess_scroll.setStyleSheet(
             f'QScrollArea {{ border: none; background: transparent; }}'
