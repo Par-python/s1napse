@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QComboBox, QPushButton, QLineEdit,
     QTabWidget, QFileDialog, QMessageBox, QSplitter, QScrollArea,
-    QFrame, QGridLayout, QSizePolicy,
+    QFrame, QGridLayout, QSizePolicy, QSpinBox, QDoubleSpinBox,
 )
 from PyQt6.QtCore import QTimer, Qt, QRectF, QPointF
 from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QRadialGradient, QFontMetrics
@@ -1888,6 +1888,47 @@ class ComparisonDeltaGraph(FigureCanvas):
 
 
 # ---------------------------------------------------------------------------
+# RACE PACE CHART
+# ---------------------------------------------------------------------------
+
+class RacePaceChart(FigureCanvas):
+    """Session lap times scatter/line chart for race pace trend."""
+
+    def __init__(self, parent=None):
+        self.fig = Figure(figsize=(8, 2.0), facecolor=BG)
+        super().__init__(self.fig)
+        self.setMinimumWidth(100)
+        self.setMinimumHeight(130)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.ax = self.fig.add_subplot(111)
+        _style_ax(self.ax, self.fig, ylabel='Lap (s)')
+        self.ax.set_xlabel('Lap', color=TXT2, fontsize=7)
+
+    def refresh(self, session_laps: list):
+        self.ax.cla()
+        _style_ax(self.ax, self.fig, ylabel='Lap (s)')
+        if not session_laps:
+            self.draw_idle()
+            return
+
+        times = [l['total_time_s'] for l in session_laps if l.get('total_time_s', 0) > 20]
+        laps  = [l['lap_number'] for l in session_laps if l.get('total_time_s', 0) > 20]
+        if not times:
+            self.draw_idle()
+            return
+
+        best_t = min(times)
+        colors = [C_PURPLE if abs(t - best_t) < 0.001 else C_SPEED for t in times]
+
+        self.ax.plot(laps, times, color=BORDER2, linewidth=1.0, zorder=1)
+        self.ax.scatter(laps, times, c=colors, s=20, zorder=2)
+        self.ax.set_xlim(min(laps) - 0.5, max(laps) + 0.5)
+        padding = max(1.0, (max(times) - min(times)) * 0.2)
+        self.ax.set_ylim(min(times) - padding, max(times) + padding)
+        self.draw_idle()
+
+
+# ---------------------------------------------------------------------------
 # LAP DELTA HELPERS
 # ---------------------------------------------------------------------------
 
@@ -2325,6 +2366,11 @@ class TelemetryApp(QMainWindow):
 
         # Tyre stint age (laps on current set, reset at each pit exit)
         self._tyre_stint_laps: int = 0
+
+        # Race strategy state
+        self._last_known_fuel: float = 0.0
+        self._last_gap_ahead: int = 0   # ms
+        self._last_gap_behind: int = 0  # ms
 
         # Track selection (None = auto-detect from telemetry data)
         self._active_track_key: str | None = None
@@ -2953,6 +2999,7 @@ class TelemetryApp(QMainWindow):
             self.lap_history.refresh(self.session_laps)
             self._populate_comparison_combos()
             self._refresh_session_tab()
+            self._race_pace_chart.refresh(self.session_laps)
 
             # Promote this lap to the reference for delta / sector comparison
             if dists and times and len(dists) == len(times):
@@ -3590,7 +3637,17 @@ class TelemetryApp(QMainWindow):
 
     def _build_race_tab(self) -> QWidget:
         tab = QWidget()
-        outer = QVBoxLayout(tab)
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }')
+
+        inner = QWidget()
+        inner.setStyleSheet(f'background: {BG};')
+        outer = QVBoxLayout(inner)
         outer.setContentsMargins(14, 14, 14, 14)
         outer.setSpacing(10)
 
@@ -3778,9 +3835,160 @@ class TelemetryApp(QMainWindow):
         pit_vbox.addWidget(self._pit_rec_lbl)
 
         outer.addWidget(pit_card)
+
+        # ── Lap trend card ────────────────────────────────────────────────
+        trend_card = _card()
+        trend_vbox = QVBoxLayout(trend_card)
+        trend_vbox.setContentsMargins(14, 10, 14, 10)
+        trend_vbox.setSpacing(6)
+
+        trend_hdr = QHBoxLayout()
+        trend_hdr.addWidget(_chip_lbl('LAP TIME TREND'))
+        trend_hdr.addStretch()
+        self._race_consistency_lbl = _chip_lbl('—', color=TXT2, bold=False)
+        trend_hdr.addWidget(self._race_consistency_lbl)
+        trend_vbox.addLayout(trend_hdr)
+
+        self._race_pace_chart = RacePaceChart()
+        trend_vbox.addWidget(self._race_pace_chart)
+        outer.addWidget(trend_card)
+
+        # ── Fuel save card ────────────────────────────────────────────────
+        fuel_save_card = _card()
+        fs_vbox = QVBoxLayout(fuel_save_card)
+        fs_vbox.setContentsMargins(18, 12, 18, 12)
+        fs_vbox.setSpacing(8)
+        fs_vbox.addWidget(_chip_lbl('FUEL SAVE CALCULATOR'))
+
+        fs_row = QHBoxLayout()
+        fs_row.addWidget(_chip_lbl('LAPS TO GO', font_size=8, bold=False, color=TXT))
+        self._fs_laps_spin = QSpinBox()
+        self._fs_laps_spin.setRange(1, 99)
+        self._fs_laps_spin.setValue(10)
+        self._fs_laps_spin.setStyleSheet(
+            f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
+            f' border-radius: 4px; padding: 4px 8px;')
+        fs_row.addWidget(self._fs_laps_spin)
+        fs_row.addStretch()
+        fs_vbox.addLayout(fs_row)
+
+        self._fs_result_lbl = QLabel('—')
+        self._fs_result_lbl.setFont(mono(10, bold=True))
+        self._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
+        self._fs_result_lbl.setWordWrap(True)
+        fs_vbox.addWidget(self._fs_result_lbl)
+
+        self._fs_laps_spin.valueChanged.connect(self._update_fuel_save)
+        outer.addWidget(fuel_save_card)
+
+        # ── Undercut / overcut card ───────────────────────────────────────
+        uco_card = _card()
+        uco_vbox = QVBoxLayout(uco_card)
+        uco_vbox.setContentsMargins(18, 12, 18, 12)
+        uco_vbox.setSpacing(8)
+        uco_vbox.addWidget(_chip_lbl('UNDERCUT / OVERCUT'))
+
+        inputs_row = QHBoxLayout()
+        inputs_row.setSpacing(20)
+
+        def _spin_col(label, attr, default, min_val, max_val, step, decimals):
+            col = QVBoxLayout()
+            col.addWidget(_chip_lbl(label, font_size=7))
+            spin = QDoubleSpinBox()
+            spin.setRange(min_val, max_val)
+            spin.setValue(default)
+            spin.setSingleStep(step)
+            spin.setDecimals(decimals)
+            spin.setStyleSheet(
+                f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
+                f' border-radius: 4px; padding: 4px 8px;')
+            spin.setFixedWidth(90)
+            col.addWidget(spin)
+            setattr(self, attr, spin)
+            spin.valueChanged.connect(self._update_undercut)
+            return col
+
+        inputs_row.addLayout(
+            _spin_col('PIT LOSS (s)', '_uco_pit_loss_spin', 22.0, 10.0, 60.0, 0.5, 1))
+        inputs_row.addLayout(
+            _spin_col('PACE DELTA (s/lap)', '_uco_pace_delta_spin', 0.8, 0.0, 5.0, 0.1, 1))
+        inputs_row.addStretch()
+        uco_vbox.addLayout(inputs_row)
+        uco_vbox.addWidget(h_line())
+
+        self._uco_undercut_lbl = QLabel('UNDERCUT: —')
+        self._uco_undercut_lbl.setFont(mono(9, bold=True))
+        self._uco_undercut_lbl.setStyleSheet(f'color: {TXT2};')
+        self._uco_overcut_lbl = QLabel('OVERCUT: —')
+        self._uco_overcut_lbl.setFont(mono(9, bold=True))
+        self._uco_overcut_lbl.setStyleSheet(f'color: {TXT2};')
+        uco_vbox.addWidget(self._uco_undercut_lbl)
+        uco_vbox.addWidget(self._uco_overcut_lbl)
+        outer.addWidget(uco_card)
+
         outer.addStretch()
 
+        scroll.setWidget(inner)
+        tab_layout.addWidget(scroll)
         return tab
+
+    def _update_fuel_save(self):
+        history = self._fuel_per_lap_history
+        if not history:
+            self._fs_result_lbl.setText('Complete a lap first.')
+            self._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
+            return
+        avg = sum(history[-5:]) / len(history[-5:])
+        fuel = self._last_known_fuel
+        laps_to_go = self._fs_laps_spin.value()
+        needed = avg * laps_to_go
+        delta = fuel - needed
+        if delta >= 0:
+            save_per_lap = delta / laps_to_go
+            self._fs_result_lbl.setText(
+                f'Buffer  +{delta:.1f} L   ({save_per_lap:.2f} L/lap spare)')
+            self._fs_result_lbl.setStyleSheet(f'color: {C_THROTTLE};')
+        else:
+            save_per_lap = abs(delta) / laps_to_go
+            self._fs_result_lbl.setText(
+                f'SAVE  {save_per_lap:.2f} L/lap   (need {needed:.1f} L, have {fuel:.1f} L)')
+            col = C_RPM if save_per_lap < 0.5 else C_BRAKE
+            self._fs_result_lbl.setStyleSheet(f'color: {col};')
+
+    def _update_undercut(self):
+        gap_a = self._last_gap_ahead / 1000.0
+        gap_b = self._last_gap_behind / 1000.0
+        pit_loss = self._uco_pit_loss_spin.value()
+        pace_delta = self._uco_pace_delta_spin.value()
+
+        if pace_delta > 0 and gap_a > 0:
+            laps_to_catch = (gap_a + pit_loss) / pace_delta
+            if laps_to_catch <= 3:
+                uc_text = f'UNDERCUT: viable in ~{laps_to_catch:.1f} laps on fresh tyres'
+                uc_col = C_THROTTLE
+            else:
+                uc_text = f'UNDERCUT: needs ~{laps_to_catch:.1f} laps — gap too large'
+                uc_col = C_BRAKE
+        else:
+            uc_text = 'UNDERCUT: no car ahead data'
+            uc_col = TXT2
+        self._uco_undercut_lbl.setText(uc_text)
+        self._uco_undercut_lbl.setStyleSheet(f'color: {uc_col};')
+
+        if gap_b > 0:
+            margin = pit_loss - gap_b
+            if margin > 0:
+                oc_text = f'OVERCUT: risky — gap only {gap_b:.1f}s, need >{pit_loss:.0f}s'
+                oc_col = C_BRAKE
+            else:
+                laps_buffer = gap_b / pace_delta if pace_delta > 0 else 99
+                oc_text = f'OVERCUT: safe ~{laps_buffer:.1f} laps buffer after their stop'
+                oc_col = C_THROTTLE
+        else:
+            oc_text = 'OVERCUT: no car behind data'
+            oc_col = TXT2
+        self._uco_overcut_lbl.setText(oc_text)
+        self._uco_overcut_lbl.setStyleSheet(f'color: {oc_col};')
 
     def _update_race_tab(self, data: dict):
         session = data.get('session_type', '')
@@ -3909,6 +4117,18 @@ class TelemetryApp(QMainWindow):
             self._pit_rec_lbl.setText(rec)
             self._pit_rec_lbl.setStyleSheet(
                 f'color: {rec_color}; letter-spacing: 1px;')
+
+        # ── Consistency label ─────────────────────────────────────────
+        times = [l['total_time_s'] for l in self.session_laps if l.get('total_time_s', 0) > 20]
+        if len(times) >= 2:
+            import statistics
+            sd = statistics.stdev(times[-8:])
+            self._race_consistency_lbl.setText(f'σ {sd:.3f}s')
+            col = C_THROTTLE if sd < 0.5 else (C_RPM if sd < 1.5 else C_BRAKE)
+            self._race_consistency_lbl.setStyleSheet(f'color: {col};')
+
+        self._update_fuel_save()
+        self._update_undercut()
 
     # ------------------------------------------------------------------
     # GAME SELECTION / AUTO-DETECT
@@ -4161,6 +4381,9 @@ class TelemetryApp(QMainWindow):
             s = lt % 60
             self._laptime_lbl.setText(f'{m}:{s:06.3f}')
 
+        self._last_known_fuel = data.get('fuel', 0.0)
+        self._last_gap_ahead  = data.get('gap_ahead', 0)
+        self._last_gap_behind = data.get('gap_behind', 0)
         self._update_race_tab(data)
 
         # ── Graph updates ────────────────────────────────────────────────
@@ -4408,6 +4631,15 @@ class TelemetryApp(QMainWindow):
         self._pit_tyre_stint_lbl.setText('—')
         self._pit_tyre_cond_lbl.setText('—')
         self._pit_no_data_lbl.setVisible(True)
+        self._race_consistency_lbl.setText('—')
+        self._race_consistency_lbl.setStyleSheet(f'color: {TXT2};')
+        self._fs_result_lbl.setText('—')
+        self._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
+        self._uco_undercut_lbl.setText('UNDERCUT: —')
+        self._uco_undercut_lbl.setStyleSheet(f'color: {TXT2};')
+        self._uco_overcut_lbl.setText('OVERCUT: —')
+        self._uco_overcut_lbl.setStyleSheet(f'color: {TXT2};')
+        self._race_pace_chart.refresh([])
         self._reset_analysis_graphs()
         self.track_map.reset()
 
