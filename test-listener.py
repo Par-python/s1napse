@@ -2289,6 +2289,10 @@ class TelemetryApp(QMainWindow):
         self.session_laps = []
         self._reset_current_lap_data()
 
+        # Fuel strategy tracking
+        self._fuel_at_lap_start: float | None = None
+        self._fuel_per_lap_history: list[float] = []
+
         # Track selection (None = auto-detect from telemetry data)
         self._active_track_key: str | None = None
         self._auto_track = True
@@ -2666,7 +2670,45 @@ class TelemetryApp(QMainWindow):
             setattr(self, attr, val)
             return row
 
-        info_vbox.addLayout(_stat(C_RPM,  'FUEL',      '_fuel_lbl',     24, 'L'))
+        # Fuel block — value + strategy sub-labels
+        fuel_block = QVBoxLayout()
+        fuel_block.setSpacing(2)
+        fuel_hdr = QHBoxLayout()
+        fuel_hdr.setSpacing(5)
+        _fd = QLabel('●')
+        _fd.setFont(sans(6))
+        _fd.setStyleSheet(f'color: {C_RPM};')
+        _fl = QLabel('FUEL')
+        _fl.setFont(sans(7))
+        _fl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        fuel_hdr.addWidget(_fd)
+        fuel_hdr.addWidget(_fl)
+        fuel_hdr.addStretch()
+        fuel_val_row = QHBoxLayout()
+        fuel_val_row.setSpacing(5)
+        self._fuel_lbl = QLabel('—')
+        self._fuel_lbl.setFont(mono(24, bold=True))
+        self._fuel_lbl.setStyleSheet(f'color: {WHITE};')
+        self._fuel_lbl.setMaximumWidth(164)
+        self._fuel_lbl.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        fuel_val_row.addWidget(self._fuel_lbl)
+        _fu = QLabel('L')
+        _fu.setFont(sans(9))
+        _fu.setStyleSheet(f'color: {TXT2};')
+        fuel_val_row.addWidget(_fu)
+        fuel_val_row.addStretch()
+        self._fuel_avg_lbl = QLabel('')
+        self._fuel_avg_lbl.setFont(mono(8))
+        self._fuel_avg_lbl.setStyleSheet(f'color: {TXT2};')
+        self._fuel_laps_lbl = QLabel('')
+        self._fuel_laps_lbl.setFont(mono(9, bold=True))
+        self._fuel_laps_lbl.setStyleSheet(f'color: {C_RPM};')
+        fuel_block.addLayout(fuel_hdr)
+        fuel_block.addLayout(fuel_val_row)
+        fuel_block.addWidget(self._fuel_avg_lbl)
+        fuel_block.addWidget(self._fuel_laps_lbl)
+        info_vbox.addLayout(fuel_block)
+
         info_vbox.addLayout(_stat(C_GEAR, 'POSITION',  '_position_lbl', 24))
         info_vbox.addLayout(_stat(C_REF,  'LAST LAP',  '_laptime_lbl',  16))
         info_vbox.addStretch()
@@ -3636,6 +3678,10 @@ class TelemetryApp(QMainWindow):
         )
 
         if lap_changed:
+            _fuel_now = data.get('fuel', 0.0)
+            if self._fuel_at_lap_start is not None and 0 < _fuel_now < self._fuel_at_lap_start:
+                self._fuel_per_lap_history.append(self._fuel_at_lap_start - _fuel_now)
+            self._fuel_at_lap_start = _fuel_now
             self._store_completed_lap()
             self._reset_graphs()
             self._reset_analysis_graphs()
@@ -3711,6 +3757,23 @@ class TelemetryApp(QMainWindow):
 
         fuel = data['fuel']
         self._fuel_lbl.setText(f"{fuel:.1f}")
+
+        # Seed fuel-at-lap-start on first telemetry tick
+        if self._fuel_at_lap_start is None and fuel > 0:
+            self._fuel_at_lap_start = fuel
+
+        # Fuel strategy sub-labels
+        if self._fuel_per_lap_history:
+            recent = self._fuel_per_lap_history[-5:]  # last 5 laps
+            avg_use = sum(recent) / len(recent)
+            laps_left = (fuel / avg_use) if avg_use > 0 else 0
+            self._fuel_avg_lbl.setText(f'{avg_use:.2f} L/lap')
+            color = C_THROTTLE if laps_left >= 3 else (C_RPM if laps_left >= 1 else C_BRAKE)
+            self._fuel_laps_lbl.setText(f'~{laps_left:.1f} laps')
+            self._fuel_laps_lbl.setStyleSheet(f'color: {color};')
+        elif fuel > 0:
+            self._fuel_avg_lbl.setText('avg after lap 1')
+            self._fuel_laps_lbl.setText('')
 
         self._position_lbl.setText(str(data['position']))
 
@@ -3935,6 +3998,8 @@ class TelemetryApp(QMainWindow):
         self.car_label.setText('—')
         self.track_label.setText('—')
         self._fuel_lbl.setText('—')
+        self._fuel_avg_lbl.setText('')
+        self._fuel_laps_lbl.setText('')
         self._position_lbl.setText('—')
         self._laptime_lbl.setText('—')
         for card in self._tyre_cards:
