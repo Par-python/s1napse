@@ -4039,8 +4039,8 @@ class TelemetryApp(QMainWindow):
             self._fs_result_lbl.setStyleSheet(f'color: {col};')
 
     def _update_undercut(self):
-        gap_a = self._last_gap_ahead / 1000.0
-        gap_b = self._last_gap_behind / 1000.0
+        gap_a = abs(self._last_gap_ahead) / 1000.0
+        gap_b = abs(self._last_gap_behind) / 1000.0
         pit_loss = self._uco_pit_loss_spin.value()
         pace_delta = self._uco_pace_delta_spin.value()
 
@@ -4097,9 +4097,9 @@ class TelemetryApp(QMainWindow):
         gap_a = data.get('gap_ahead', 0)
         gap_b = data.get('gap_behind', 0)
         self._race_gap_ahead_lbl.setText(
-            f'-{gap_a / 1000:.3f}s' if gap_a > 0 else '—')
+            f'-{abs(gap_a) / 1000:.3f}s' if gap_a != 0 else '—')
         self._race_gap_behind_lbl.setText(
-            f'+{gap_b / 1000:.3f}s' if gap_b > 0 else '—')
+            f'+{abs(gap_b) / 1000:.3f}s' if gap_b != 0 else '—')
 
         # Tyre compound + stint dots
         compound = data.get('tyre_compound', '') or '—'
