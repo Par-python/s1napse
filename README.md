@@ -122,7 +122,7 @@ The bar at the top of the window gives you control over everything:
 
 ## Planned Features
 
-- [ ] **Lap comparison overlay** — plot any two saved laps on the same graphs
+- [x] **Lap comparison overlay** — plot any two saved laps on the same graphs
 - [x] **Tyre temperatures & wear** — core temp, pressure, brake temp per corner (ACC); tyre temp on iRacing
 - [x] **Fuel strategy calculator** — target laps remaining based on current consumption
 - [ ] **Corner labels on track map** — auto-detected from curvature, manually editable in JSON
