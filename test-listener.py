@@ -4,11 +4,11 @@ import struct
 from collections import deque
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QComboBox, QPushButton, QLineEdit,
+    QLabel, QComboBox, QPushButton, QLineEdit, QSlider,
     QTabWidget, QFileDialog, QMessageBox, QSplitter, QScrollArea,
     QFrame, QGridLayout, QSizePolicy, QSpinBox, QDoubleSpinBox,
 )
-from PyQt6.QtCore import QTimer, Qt, QRectF, QPointF
+from PyQt6.QtCore import QTimer, Qt, QRectF, QPointF, pyqtSignal
 from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QRadialGradient, QFontMetrics
 from abc import ABC, abstractmethod
 import threading
@@ -155,16 +155,24 @@ QPushButton:pressed {{
 }}
 
 QScrollBar:vertical {{
-    background: {BG1};
-    width: 8px;
+    background: transparent;
+    width: 6px;
     border: none;
-    border-radius: 4px;
+    margin: 3px 1px;
 }}
 
 QScrollBar::handle:vertical {{
-    background: {BG3};
-    border-radius: 4px;
-    min-height: 20px;
+    background: #2e2e2e;
+    border-radius: 3px;
+    min-height: 28px;
+}}
+
+QScrollBar::handle:vertical:hover {{
+    background: #4a4a4a;
+}}
+
+QScrollBar::handle:vertical:pressed {{
+    background: {C_SPEED};
 }}
 
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
@@ -172,21 +180,37 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
     background: none;
 }}
 
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+    background: none;
+}}
+
 QScrollBar:horizontal {{
-    background: {BG1};
-    height: 8px;
+    background: transparent;
+    height: 6px;
     border: none;
-    border-radius: 4px;
+    margin: 1px 3px;
 }}
 
 QScrollBar::handle:horizontal {{
-    background: {BG3};
-    border-radius: 4px;
-    min-width: 20px;
+    background: #2e2e2e;
+    border-radius: 3px;
+    min-width: 28px;
+}}
+
+QScrollBar::handle:horizontal:hover {{
+    background: #4a4a4a;
+}}
+
+QScrollBar::handle:horizontal:pressed {{
+    background: {C_SPEED};
 }}
 
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
     width: 0;
+    background: none;
+}}
+
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
     background: none;
 }}
 
@@ -293,63 +317,112 @@ class ACUDPReader(TelemetryReader):
 
     def _parse_car_info(self, data):
         try:
-            offset = 4
-            speed_kmh = struct.unpack('<f', data[offset:offset+4])[0]
-            # World position at bytes 8-20 (x, y, z floats per AC UDP spec)
-            world_x = struct.unpack('<f', data[8:12])[0]  if len(data) >= 20 else 0.0
-            world_z = struct.unpack('<f', data[16:20])[0] if len(data) >= 20 else 0.0
-            offset += 8
-            rpm = struct.unpack('<f', data[offset+16:offset+20])[0]
-            gear = struct.unpack('<i', data[offset+20:offset+24])[0]
+            # ── Core fields (original offsets, always present) ──────────────
+            speed_kmh   = struct.unpack('<f', data[4:8])[0]
+            world_x     = struct.unpack('<f', data[8:12])[0]  if len(data) >= 20 else 0.0
+            world_z     = struct.unpack('<f', data[16:20])[0] if len(data) >= 20 else 0.0
+            rpm         = struct.unpack('<f', data[28:32])[0]
+            gear        = struct.unpack('<i', data[32:36])[0]
             throttle = brake = steer_angle = abs_val = tc_val = 0.0
             if len(data) >= 56:
-                throttle = struct.unpack('<f', data[36:40])[0]
-                brake = struct.unpack('<f', data[40:44])[0]
+                throttle    = struct.unpack('<f', data[36:40])[0]
+                brake       = struct.unpack('<f', data[40:44])[0]
                 steer_angle = struct.unpack('<f', data[44:48])[0]
-                abs_val = struct.unpack('<f', data[48:52])[0]
-                tc_val = struct.unpack('<f', data[52:56])[0]
+                abs_val     = struct.unpack('<f', data[48:52])[0]
+                tc_val      = struct.unpack('<f', data[52:56])[0]
 
-            now_ms = int(time.time() * 1000)
-            if self.sim_lap_start_ms is None:
-                self.sim_lap_start_ms = now_ms
-                self.sim_target_lap_ms = random.randint(81000, 99000)
+            # ── Extended fields (simulator v2, 188-byte packet) ─────────────
+            _COMPOUNDS = {0: 'DHF', 1: 'DM', 2: 'DS', 3: 'WET'}
+            _SESSIONS  = {0: 'PRACTICE', 2: 'RACE', 3: 'QUALIFY'}
 
-            elapsed_ms = now_ms - self.sim_lap_start_ms
-            if elapsed_ms >= self.sim_target_lap_ms:
-                self.sim_last_lap_ms = elapsed_ms
-                self.sim_lap_count += 1
-                self.sim_lap_start_ms = now_ms
-                self.sim_target_lap_ms = random.randint(81000, 99000)
-                elapsed_ms = 0
+            if len(data) >= 188:
+                fuel          = struct.unpack('<f', data[56:60])[0]
+                lap_dist_pct  = struct.unpack('<f', data[60:64])[0]
+                lap_count     = struct.unpack('<i', data[64:68])[0]
+                current_time  = struct.unpack('<i', data[68:72])[0]
+                last_lap_ms   = struct.unpack('<i', data[72:76])[0]
+                position      = struct.unpack('<i', data[76:80])[0]
+                flags         = struct.unpack('<i', data[80:84])[0]
+                lap_valid     = bool(flags & 0x1)
+                is_in_pit     = bool(flags & 0x2)
+
+                tyre_temp     = list(struct.unpack('<4f', data[84:100]))
+                tyre_pressure = list(struct.unpack('<4f', data[100:116]))
+                brake_temp    = list(struct.unpack('<4f', data[116:132]))
+                tyre_wear     = list(struct.unpack('<4f', data[132:148]))
+
+                gap_ahead     = struct.unpack('<i', data[148:152])[0]
+                gap_behind    = struct.unpack('<i', data[152:156])[0]
+                air_temp      = struct.unpack('<f', data[156:160])[0]
+                road_temp     = struct.unpack('<f', data[160:164])[0]
+                brake_bias    = struct.unpack('<f', data[164:168])[0]
+                delta_lap     = struct.unpack('<i', data[168:172])[0]
+                est_lap       = struct.unpack('<i', data[172:176])[0]
+                stint_left    = struct.unpack('<i', data[176:180])[0]
+                session_id    = struct.unpack('<i', data[180:184])[0]
+                compound_id   = struct.unpack('<i', data[184:188])[0]
+
+                lap_time      = last_lap_ms / 1000.0 if last_lap_ms > 0 else 0.0
+                session_type  = _SESSIONS.get(session_id, 'PRACTICE')
+                tyre_compound = _COMPOUNDS.get(compound_id, 'DHF')
+            else:
+                # Fallback: old short packet — synthesise basic session state
+                now_ms = int(time.time() * 1000)
+                if self.sim_lap_start_ms is None:
+                    self.sim_lap_start_ms = now_ms
+                    self.sim_target_lap_ms = random.randint(81000, 99000)
+                elapsed_ms = now_ms - self.sim_lap_start_ms
+                if elapsed_ms >= self.sim_target_lap_ms:
+                    self.sim_last_lap_ms = elapsed_ms
+                    self.sim_lap_count += 1
+                    self.sim_lap_start_ms = now_ms
+                    self.sim_target_lap_ms = random.randint(81000, 99000)
+                    elapsed_ms = 0
+                fuel = 0.0; lap_dist_pct = 0.0; lap_count = self.sim_lap_count
+                current_time = elapsed_ms; lap_time = self.sim_last_lap_ms / 1000.0
+                position = 0; lap_valid = True; is_in_pit = False
+                tyre_temp = tyre_pressure = brake_temp = tyre_wear = [0.0, 0.0, 0.0, 0.0]
+                gap_ahead = gap_behind = 0; air_temp = road_temp = 0.0
+                brake_bias = 0.0; delta_lap = est_lap = stint_left = 0
+                session_type = 'PRACTICE'; tyre_compound = ''
 
             return {
-                'speed': speed_kmh,
-                'rpm': rpm,
-                'max_rpm': 8000,
-                'gear': gear,
-                'throttle': throttle,
-                'brake': brake,
-                'steer_angle': steer_angle,
-                'abs': abs_val,
-                'tc': tc_val,
-                'fuel': 0,
-                'max_fuel': 100,
-                'lap_time': self.sim_last_lap_ms / 1000.0 if self.sim_lap_count > 0 else 0,
-                'position': 0,
-                'car_name': 'Simulated Car',
-                'track_name': 'Monza (Simulated)',
-                'lap_count': self.sim_lap_count,
-                'current_time': elapsed_ms,
-                'world_x': world_x,
-                'world_z': world_z,
-                'tyre_temp':     [0.0, 0.0, 0.0, 0.0],
-                'tyre_pressure': [0.0, 0.0, 0.0, 0.0],
-                'brake_temp':    [0.0, 0.0, 0.0, 0.0],
-                'tyre_compound': '',
-                'air_temp':  0.0,
-                'road_temp': 0.0,
-                'tyre_wear': [0.0, 0.0, 0.0, 0.0],
-                'brake_bias': 0.0,
+                'speed':          speed_kmh,
+                'rpm':            rpm,
+                'max_rpm':        8000,
+                'gear':           gear,
+                'throttle':       throttle,
+                'brake':          brake,
+                'steer_angle':    steer_angle,
+                'abs':            abs_val,
+                'tc':             tc_val,
+                'fuel':           fuel,
+                'max_fuel':       80,
+                'lap_time':       lap_time,
+                'position':       position,
+                'car_name':       'Simulated Car',
+                'track_name':     'Monza (Simulated)',
+                'lap_count':      lap_count,
+                'current_time':   current_time,
+                'lap_dist_pct':   lap_dist_pct,
+                'world_x':        world_x,
+                'world_z':        world_z,
+                'lap_valid':      lap_valid,
+                'is_in_pit_lane': is_in_pit,
+                'tyre_temp':      tyre_temp,
+                'tyre_pressure':  tyre_pressure,
+                'brake_temp':     brake_temp,
+                'tyre_wear':      tyre_wear,
+                'tyre_compound':  tyre_compound,
+                'air_temp':       air_temp,
+                'road_temp':      road_temp,
+                'brake_bias':     brake_bias,
+                'gap_ahead':      gap_ahead,
+                'gap_behind':     gap_behind,
+                'delta_lap_time': delta_lap,
+                'estimated_lap':  est_lap,
+                'stint_time_left': stint_left,
+                'session_type':   session_type,
             }
         except Exception:
             return None
@@ -2000,6 +2073,168 @@ class RacePaceChart(FigureCanvas):
 
 
 # ---------------------------------------------------------------------------
+# REPLAY WIDGETS
+# ---------------------------------------------------------------------------
+
+class SectorScrubWidget(QWidget):
+    """Timeline scrubber with sector boundary markers painted above the slider."""
+
+    valueChanged = pyqtSignal(int)  # emits position in ms
+
+    _SECTOR_COLORS = [C_DELTA, C_STEER, C_RPM]
+    _MARK_H = 22  # height of the sector label / marker area
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._total_ms: int = 1
+        self._sectors: list = []  # list of (label, time_ms)
+        self.setFixedHeight(self._MARK_H + 30)
+        self.setStyleSheet(f'background: {BG1}; border-radius: 4px;')
+
+        self.slider = QSlider(Qt.Orientation.Horizontal, self)
+        self.slider.setRange(0, 1000)
+        self.slider.setSingleStep(100)
+        self.slider.setPageStep(1000)
+        self.slider.setStyleSheet(
+            f'QSlider::groove:horizontal {{'
+            f'  height: 6px; background: {BG3}; border-radius: 3px; margin: 0 7px; }}'
+            f'QSlider::handle:horizontal {{'
+            f'  width: 14px; height: 14px; background: {WHITE}; border-radius: 7px;'
+            f'  margin: -4px 0; }}'
+            f'QSlider::sub-page:horizontal {{'
+            f'  background: {C_SPEED}; border-radius: 3px; margin: 0 7px; }}'
+        )
+        self.slider.valueChanged.connect(self.valueChanged)
+        self._reposition_slider()
+
+    def resizeEvent(self, event):
+        self._reposition_slider()
+        self.update()
+
+    def _reposition_slider(self):
+        self.slider.setGeometry(0, self._MARK_H, self.width(), self.height() - self._MARK_H)
+
+    def set_duration(self, total_ms: int, sectors: list):
+        """
+        Args:
+            total_ms: total lap duration in ms
+            sectors:  list of (label_str, time_ms) for each sector boundary
+        """
+        self._total_ms = max(1, total_ms)
+        self._sectors = sectors
+        self.slider.blockSignals(True)
+        self.slider.setRange(0, self._total_ms)
+        self.slider.blockSignals(False)
+        self.update()
+
+    def set_value(self, ms: int):
+        self.slider.blockSignals(True)
+        self.slider.setValue(ms)
+        self.slider.blockSignals(False)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self._sectors or not self._total_ms:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w = self.width()
+        font = QFont('Consolas', 7)
+        font.setBold(True)
+        painter.setFont(font)
+        for i, (label, ms) in enumerate(self._sectors):
+            if not ms:
+                continue
+            x = int(ms / self._total_ms * w)
+            color = self._SECTOR_COLORS[i % len(self._SECTOR_COLORS)]
+            qc = QColor(color)
+            painter.setPen(QPen(qc, 1))
+            painter.drawLine(x, self._MARK_H - 5, x, self._MARK_H + 3)
+            painter.setPen(qc)
+            text_rect = QRectF(x - 16, 2, 32, self._MARK_H - 7)
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, label)
+        painter.end()
+
+
+class ReplayGraph(FigureCanvas):
+    """Full-lap single-channel graph with a movable playhead line."""
+
+    def __init__(self, ylabel: str, color: str, ylim=(0, 100), parent=None):
+        self.fig = Figure(figsize=(8, 1.5), facecolor=BG)
+        super().__init__(self.fig)
+        self.setMinimumWidth(100)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.ax = self.fig.add_subplot(111)
+        _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
+        self.setMinimumHeight(110)
+        self.line, = self.ax.plot([], [], color=color, linewidth=1.2)
+        self.vline = self.ax.axvline(0, color=WHITE, linewidth=1.0, alpha=0.7)
+
+    def set_lap_data(self, times_ms: list, values: list):
+        if not times_ms:
+            self.line.set_data([], [])
+            self.ax.set_xlim(0, 1)
+            self.draw_idle()
+            return
+        times_s = [t / 1000.0 for t in times_ms]
+        self.line.set_data(times_s, values)
+        self.ax.set_xlim(0, max(times_s[-1], 0.001))
+        self.draw_idle()
+
+    def set_playhead(self, time_ms: float):
+        self.vline.set_xdata([time_ms / 1000.0])
+        self.draw_idle()
+
+    def clear(self):
+        self.line.set_data([], [])
+        self.vline.set_xdata([0])
+        self.ax.set_xlim(0, 1)
+        self.draw_idle()
+
+
+class ReplayMultiGraph(FigureCanvas):
+    """Full-lap dual-channel graph with a movable playhead line."""
+
+    def __init__(self, ylabel: str, color1: str, color2: str,
+                 label1: str, label2: str, ylim=(0, 100), parent=None):
+        self.fig = Figure(figsize=(8, 1.5), facecolor=BG)
+        super().__init__(self.fig)
+        self.setMinimumWidth(100)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.ax = self.fig.add_subplot(111)
+        _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
+        self.setMinimumHeight(110)
+        self.line1, = self.ax.plot([], [], color=color1, linewidth=1.2, label=label1)
+        self.line2, = self.ax.plot([], [], color=color2, linewidth=1.2, label=label2)
+        self.ax.legend(fontsize=7, framealpha=0, loc='upper right', labelcolor=TXT2)
+        self.vline = self.ax.axvline(0, color=WHITE, linewidth=1.0, alpha=0.7)
+
+    def set_lap_data(self, times_ms: list, vals1: list, vals2: list):
+        if not times_ms:
+            self.line1.set_data([], [])
+            self.line2.set_data([], [])
+            self.ax.set_xlim(0, 1)
+            self.draw_idle()
+            return
+        times_s = [t / 1000.0 for t in times_ms]
+        self.line1.set_data(times_s, vals1)
+        self.line2.set_data(times_s, vals2)
+        self.ax.set_xlim(0, max(times_s[-1], 0.001))
+        self.draw_idle()
+
+    def set_playhead(self, time_ms: float):
+        self.vline.set_xdata([time_ms / 1000.0])
+        self.draw_idle()
+
+    def clear(self):
+        self.line1.set_data([], [])
+        self.line2.set_data([], [])
+        self.vline.set_xdata([0])
+        self.ax.set_xlim(0, 1)
+        self.draw_idle()
+
+
+# ---------------------------------------------------------------------------
 # LAP DELTA HELPERS
 # ---------------------------------------------------------------------------
 
@@ -2275,9 +2510,7 @@ class LapHistoryPanel(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }'
-                             'QScrollBar:vertical { width: 6px; background: transparent; }'
-                             'QScrollBar::handle:vertical { background: #333; border-radius: 3px; }')
+        scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }')
         self._rows_widget = QWidget()
         self._rows_widget.setStyleSheet('background: transparent;')
         self._rows_layout = QVBoxLayout(self._rows_widget)
@@ -2459,6 +2692,14 @@ class TelemetryApp(QMainWindow):
         self._ref_lap_time_s: float = 0.0
         self._current_deltas: list[float] = []
 
+        # Replay tab state
+        self._replay_data: dict | None = None
+        self._replay_pos_ms: int = 0
+        self._replay_playing: bool = False
+        self._replay_speed: float = 1.0
+        self._replay_total_ms: int = 0
+        self._replay_sector_ms: list = []  # [(label, time_ms), ...]
+
         self._init_ui()
 
         self.timer = QTimer()
@@ -2469,6 +2710,10 @@ class TelemetryApp(QMainWindow):
         self._anim_timer = QTimer()
         self._anim_timer.timeout.connect(self.track_map.tick_lerp)
         self._anim_timer.start(16)
+
+        # Replay playback timer (100 ms ticks, scaled by replay speed)
+        self._replay_timer = QTimer()
+        self._replay_timer.timeout.connect(self._replay_tick)
 
     # ------------------------------------------------------------------
     # UI CONSTRUCTION
@@ -2496,6 +2741,7 @@ class TelemetryApp(QMainWindow):
         self.tabs.addTab(self._build_tyres_tab(), 'TYRES')
         self.tabs.addTab(self._build_comparison_tab(), 'LAP COMPARISON')
         self.tabs.addTab(self._build_session_tab(), 'SESSION')
+        self.tabs.addTab(self._build_replay_tab(), 'REPLAY')
 
         self._set_graph_title_suffix('Lap 1')
 
@@ -2584,6 +2830,19 @@ class TelemetryApp(QMainWindow):
         self.rec_label.setStyleSheet(f'color: {TXT2};')
         layout.addWidget(self.rec_btn)
         layout.addWidget(self.rec_label)
+
+        layout.addWidget(_vsep())
+
+        # Import track map from JSON
+        self.import_track_btn = QPushButton('⬆  IMPORT MAP')
+        self.import_track_btn.setFixedSize(100, 22)
+        self.import_track_btn.setStyleSheet(
+            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
+            f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
+            f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
+        )
+        self.import_track_btn.clicked.connect(self._import_trackmap)
+        layout.addWidget(self.import_track_btn)
 
         layout.addStretch()
 
@@ -2925,8 +3184,20 @@ class TelemetryApp(QMainWindow):
         self.export_last_lap_button.clicked.connect(self.export_last_lap_graphs)
         self.export_session_button = QPushButton('EXPORT SESSION')
         self.export_session_button.clicked.connect(self.export_session_graphs)
+        _json_btn_style = (
+            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
+            f' border-radius: 4px; padding: 5px 12px; font-size: 10px; letter-spacing: 1px; }}'
+            f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
+        )
+        export_json_btn = QPushButton('⬇  EXPORT JSON')
+        export_json_btn.setFont(sans(8, bold=True))
+        export_json_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        export_json_btn.setStyleSheet(_json_btn_style)
+        export_json_btn.setToolTip('Export last completed lap as JSON (importable in Replay tab)')
+        export_json_btn.clicked.connect(self._export_graphs_lap_json)
         btn_row.addWidget(self.export_last_lap_button)
         btn_row.addWidget(self.export_session_button)
+        btn_row.addWidget(export_json_btn)
         outer.addLayout(btn_row)
 
         # Scroll area for graphs
@@ -3119,6 +3390,7 @@ class TelemetryApp(QMainWindow):
             })
             self.lap_history.refresh(self.session_laps)
             self._populate_comparison_combos()
+            self._populate_replay_combo()
             self._refresh_session_tab()
             self._race_pace_chart.refresh(self.session_laps)
 
@@ -3361,6 +3633,31 @@ class TelemetryApp(QMainWindow):
         cmp_btn.clicked.connect(self._refresh_comparison)
         sel_row.addWidget(cmp_btn)
 
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.Shape.VLine)
+        sep2.setStyleSheet(f'color: {BORDER2};')
+        sel_row.addWidget(sep2)
+
+        _btn_style = (
+            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
+            f' border-radius: 4px; padding: 6px 12px; font-size: 10px; letter-spacing: 1px; }}'
+            f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
+        )
+
+        export_lap_btn = QPushButton('⬇  EXPORT LAP')
+        export_lap_btn.setFont(sans(8, bold=True))
+        export_lap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        export_lap_btn.setStyleSheet(_btn_style)
+        export_lap_btn.clicked.connect(self._export_lap_json)
+        sel_row.addWidget(export_lap_btn)
+
+        import_lap_btn = QPushButton('⬆  IMPORT LAP')
+        import_lap_btn.setFont(sans(8, bold=True))
+        import_lap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        import_lap_btn.setStyleSheet(_btn_style)
+        import_lap_btn.clicked.connect(self._import_lap_json)
+        sel_row.addWidget(import_lap_btn)
+
         outer.addWidget(sel_card)
 
         # ── Legend ────────────────────────────────────────────────────
@@ -3440,8 +3737,11 @@ class TelemetryApp(QMainWindow):
         self._cmp_combo_b.clear()
 
         for lap in self.session_laps:
-            self._cmp_combo_a.addItem(_fmt(lap))
-            self._cmp_combo_b.addItem(_fmt(lap))
+            label = _fmt(lap)
+            if lap.get('imported'):
+                label = '[IMP] ' + label
+            self._cmp_combo_a.addItem(label)
+            self._cmp_combo_b.addItem(label)
 
         # Default: most recent lap vs second most recent
         n = len(self.session_laps)
@@ -3502,6 +3802,706 @@ class TelemetryApp(QMainWindow):
         times_a = da.get('time_ms', [])
         times_b = db.get('time_ms', [])
         self._cmp_delta_graph.set_data(dists_a, times_a, dists_b, times_b)
+
+    def _export_graphs_lap_json(self):
+        """Export the last completed lap from the Telemetry Graphs tab as a replay-compatible JSON."""
+        import os, re as _re, datetime
+
+        if not self.session_laps:
+            QMessageBox.information(self, 'Export JSON',
+                                    'No completed laps to export yet.')
+            return
+
+        lap = self.session_laps[-1]
+        t = lap.get('total_time_s', 0)
+        m, s = int(t // 60), t % 60
+
+        def _slug(text: str) -> str:
+            return _re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')
+
+        date_str  = datetime.date.today().strftime('%Y-%m-%d')
+        try:
+            user_str = _slug(os.getlogin())
+        except Exception:
+            user_str = 'user'
+        track_str = _slug(
+            TRACKS.get(self._active_track_key or '', {}).get('name', '')
+            or self.track_label.text()
+            or 'unknown-track'
+        )
+        lap_str  = f'lap{lap["lap_number"]}'
+        time_str = f'{m}m{s:06.3f}s'
+
+        default_name = f'{date_str}-{user_str}-{track_str}-{lap_str}-{time_str}.json'
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, 'Export Lap JSON', default_name, 'Lap JSON (*.json);;All files (*)')
+        if not path:
+            return
+
+        payload = {
+            'lap_number':   lap['lap_number'],
+            'total_time_s': lap.get('total_time_s', 0),
+            'sectors':      lap.get('sectors', [None, None, None]),
+            'track_name':   TRACKS.get(self._active_track_key or '', {}).get('name', ''),
+            'data':         {k: list(v) for k, v in lap['data'].items()},
+        }
+        with open(path, 'w') as f:
+            json.dump(payload, f)
+        QMessageBox.information(self, 'Export JSON', f'Lap saved to:\n{path}')
+
+    def _export_lap_json(self):
+        """Export the lap currently selected in Combo A as a shareable JSON file."""
+        import os, re as _re, datetime
+
+        idx = self._cmp_combo_a.currentIndex()
+        if idx < 0 or idx >= len(self.session_laps):
+            QMessageBox.information(self, 'Export Lap', 'No lap selected in Lap A.')
+            return
+
+        lap = self.session_laps[idx]
+        t = lap.get('total_time_s', 0)
+        m, s = int(t // 60), t % 60
+
+        def _slug(text: str) -> str:
+            return _re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')
+
+        date_str  = datetime.date.today().strftime('%Y-%m-%d')
+        try:
+            user_str = _slug(os.getlogin())
+        except Exception:
+            user_str = 'user'
+        track_str = _slug(
+            TRACKS.get(self._active_track_key or '', {}).get('name', '')
+            or self.track_label.text()
+            or 'unknown-track'
+        )
+        lap_str   = f'lap{lap["lap_number"]}'
+        time_str  = f'{m}m{s:06.3f}s'
+
+        default_name = f'{date_str}-{user_str}-{track_str}-{lap_str}-{time_str}.json'
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, 'Export Lap', default_name, 'Lap JSON (*.json);;All files (*)')
+        if not path:
+            return
+
+        payload = {
+            'lap_number':   lap['lap_number'],
+            'total_time_s': lap.get('total_time_s', 0),
+            'sectors':      lap.get('sectors', [None, None, None]),
+            'track_name':   TRACKS.get(self._active_track_key or '', {}).get('name', ''),
+            'data':         {k: list(v) for k, v in lap['data'].items()},
+        }
+        with open(path, 'w') as f:
+            json.dump(payload, f)
+        QMessageBox.information(self, 'Export Lap', f'Lap saved to:\n{path}')
+
+    def _import_lap_json(self):
+        """Import a shared lap JSON file and add it to the comparison dropdowns."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, 'Import Lap', '', 'Lap JSON (*.json);;All files (*)')
+        if not path:
+            return
+
+        try:
+            with open(path) as f:
+                payload = json.load(f)
+        except Exception as e:
+            QMessageBox.warning(self, 'Import Failed', f'Could not read file:\n{e}')
+            return
+
+        if 'data' not in payload or 'dist_m' not in payload.get('data', {}):
+            QMessageBox.warning(self, 'Import Failed',
+                                'Invalid lap JSON: missing "data.dist_m".')
+            return
+
+        # Give the lap a unique number so it doesn't clash with live laps
+        existing_nums = {l['lap_number'] for l in self.session_laps}
+        lap_num = payload.get('lap_number', 0)
+        if lap_num in existing_nums:
+            lap_num = max(existing_nums) + 1
+
+        lap = {
+            'lap_number':   lap_num,
+            'total_time_s': float(payload.get('total_time_s', 0)),
+            'sectors':      payload.get('sectors', [None, None, None]),
+            'data':         {k: list(v) for k, v in payload['data'].items()},
+            'imported':     True,
+        }
+        self.session_laps.append(lap)
+        self._populate_comparison_combos()
+        self._populate_replay_combo()
+        self._refresh_session_tab()
+        self._race_pace_chart.refresh(self.session_laps)
+
+        # Auto-select the imported lap in combo B
+        self._cmp_combo_b.setCurrentIndex(len(self.session_laps) - 1)
+
+        t = lap['total_time_s']
+        m, s = int(t // 60), t % 60
+        QMessageBox.information(self, 'Import Lap',
+                                f'Imported lap {lap_num}  ({m}:{s:06.3f})')
+
+    # ------------------------------------------------------------------
+    # REPLAY TAB
+    # ------------------------------------------------------------------
+
+    def _build_replay_tab(self) -> QWidget:
+        tab = QWidget()
+        outer = QVBoxLayout(tab)
+        outer.setContentsMargins(10, 10, 10, 10)
+        outer.setSpacing(8)
+
+        _btn_style = (
+            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
+            f' border-radius: 4px; padding: 6px 12px; font-size: 10px; letter-spacing: 1px; }}'
+            f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
+        )
+
+        # ── Top controls bar ──────────────────────────────────────────
+        ctrl_card = QFrame()
+        ctrl_card.setStyleSheet(
+            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
+        ctrl_row = QHBoxLayout(ctrl_card)
+        ctrl_row.setContentsMargins(14, 8, 14, 8)
+        ctrl_row.setSpacing(10)
+
+        def _lbl(text):
+            l = QLabel(text)
+            l.setFont(sans(8, bold=True))
+            l.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+            return l
+
+        ctrl_row.addWidget(_lbl('LAP'))
+        self._replay_combo = QComboBox()
+        self._replay_combo.setStyleSheet(
+            f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
+            f' border-radius: 4px; padding: 4px 8px;')
+        self._replay_combo.setMinimumWidth(200)
+        ctrl_row.addWidget(self._replay_combo)
+
+        import_btn = QPushButton('IMPORT LAP')
+        import_btn.setFont(sans(8, bold=True))
+        import_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        import_btn.setStyleSheet(_btn_style)
+        import_btn.clicked.connect(self._import_replay_lap_json)
+        ctrl_row.addWidget(import_btn)
+
+        load_btn = QPushButton('LOAD')
+        load_btn.setFont(sans(8, bold=True))
+        load_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        load_btn.setStyleSheet(
+            f'QPushButton {{ background: {BG3}; color: {C_SPEED}; border: 1px solid {C_SPEED};'
+            f' border-radius: 4px; padding: 6px 18px; font-size: 10px; letter-spacing: 1px; }}'
+            f'QPushButton:hover {{ background: #0a2030; }}'
+        )
+        load_btn.clicked.connect(
+            lambda: self._load_replay_lap(self._replay_combo.currentIndex()))
+        ctrl_row.addWidget(load_btn)
+
+        sep1 = QFrame()
+        sep1.setFrameShape(QFrame.Shape.VLine)
+        sep1.setStyleSheet(f'color: {BORDER2};')
+        ctrl_row.addWidget(sep1)
+
+        self._replay_play_btn = QPushButton('PLAY')
+        self._replay_play_btn.setFont(sans(9, bold=True))
+        self._replay_play_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._replay_play_btn.setFixedWidth(72)
+        self._replay_play_btn.setStyleSheet(
+            f'QPushButton {{ background: {BG3}; color: {C_THROTTLE}; border: 1px solid {C_THROTTLE};'
+            f' border-radius: 4px; padding: 6px; letter-spacing: 1px; }}'
+            f'QPushButton:hover {{ background: #0a2018; }}'
+        )
+        self._replay_play_btn.clicked.connect(self._toggle_replay_playback)
+        ctrl_row.addWidget(self._replay_play_btn)
+
+        ctrl_row.addWidget(_lbl('SPEED'))
+        self._replay_speed_combo = QComboBox()
+        self._replay_speed_combo.addItems(['0.25x', '0.5x', '1x', '2x', '5x', '10x'])
+        self._replay_speed_combo.setCurrentIndex(2)
+        self._replay_speed_combo.setFixedWidth(70)
+        self._replay_speed_combo.setStyleSheet(
+            f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
+            f' border-radius: 4px; padding: 4px 6px;')
+        self._replay_speed_combo.currentTextChanged.connect(self._on_replay_speed_changed)
+        ctrl_row.addWidget(self._replay_speed_combo)
+
+        ctrl_row.addStretch()
+
+        self._rpl_time_lbl = QLabel('—:——.——— / —:——.———')
+        self._rpl_time_lbl.setFont(mono(10, bold=True))
+        self._rpl_time_lbl.setStyleSheet(f'color: {C_SPEED};')
+        ctrl_row.addWidget(self._rpl_time_lbl)
+
+        outer.addWidget(ctrl_card)
+
+        # ── Sector scrubber ───────────────────────────────────────────
+        self._replay_scrub = SectorScrubWidget()
+        self._replay_scrub.valueChanged.connect(self._replay_scrubber_moved)
+        outer.addWidget(self._replay_scrub)
+
+        # ── Main content (left dashboard + right track map) ───────────
+        content_splitter = QSplitter(Qt.Orientation.Horizontal)
+        content_splitter.setHandleWidth(4)
+        content_splitter.setStyleSheet(f'QSplitter::handle {{ background: {BORDER2}; }}')
+
+        # ── Left: mini dashboard ──────────────────────────────────────
+        left_panel = QFrame()
+        left_panel.setStyleSheet(
+            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
+        left_panel.setMinimumWidth(270)
+        left_panel.setMaximumWidth(370)
+        ll = QVBoxLayout(left_panel)
+        ll.setContentsMargins(12, 10, 12, 10)
+        ll.setSpacing(6)
+
+        # ── Sector badge ──────────────────────────────
+        sec_row = QHBoxLayout()
+        sec_hdr = QLabel('SECTOR')
+        sec_hdr.setFont(sans(7, bold=True))
+        sec_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        sec_row.addWidget(sec_hdr)
+        sec_row.addStretch()
+        self._rpl_sector_lbl = QLabel('—')
+        self._rpl_sector_lbl.setFont(mono(12, bold=True))
+        self._rpl_sector_lbl.setStyleSheet(f'color: {TXT2};')
+        sec_row.addWidget(self._rpl_sector_lbl)
+        ll.addLayout(sec_row)
+        ll.addWidget(h_line())
+
+        # ── Two-column body: info (left) | pedals + aids (right) ──────
+        body_row = QHBoxLayout()
+        body_row.setSpacing(10)
+
+        # Info column
+        info_col = QVBoxLayout()
+        info_col.setSpacing(4)
+
+        # Speed + Gear on same row
+        sg_row = QHBoxLayout()
+        sg_row.setSpacing(14)
+
+        speed_col = QVBoxLayout()
+        speed_col.setSpacing(0)
+        spd_hdr = QLabel('SPEED')
+        spd_hdr.setFont(sans(7, bold=True))
+        spd_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self._rpl_speed_lbl = QLabel('0')
+        self._rpl_speed_lbl.setFont(mono(22, bold=True))
+        self._rpl_speed_lbl.setStyleSheet(f'color: {C_SPEED};')
+        spd_unit = QLabel('km/h')
+        spd_unit.setFont(sans(7))
+        spd_unit.setStyleSheet(f'color: {TXT2};')
+        speed_col.addWidget(spd_hdr)
+        speed_col.addWidget(self._rpl_speed_lbl)
+        speed_col.addWidget(spd_unit)
+        sg_row.addLayout(speed_col)
+
+        gear_col = QVBoxLayout()
+        gear_col.setSpacing(0)
+        gear_hdr = QLabel('GEAR')
+        gear_hdr.setFont(sans(7, bold=True))
+        gear_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self._rpl_gear_lbl = QLabel('—')
+        self._rpl_gear_lbl.setFont(mono(22, bold=True))
+        self._rpl_gear_lbl.setStyleSheet(f'color: {C_GEAR};')
+        gear_col.addWidget(gear_hdr)
+        gear_col.addWidget(self._rpl_gear_lbl)
+        sg_row.addLayout(gear_col)
+        sg_row.addStretch()
+        info_col.addLayout(sg_row)
+
+        # RPM: label + value on one row, then bar
+        rpm_row = QHBoxLayout()
+        rpm_lbl_hdr = QLabel('RPM')
+        rpm_lbl_hdr.setFont(sans(7, bold=True))
+        rpm_lbl_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self._rpl_rpm_lbl = QLabel('0')
+        self._rpl_rpm_lbl.setFont(mono(8))
+        self._rpl_rpm_lbl.setStyleSheet(f'color: {C_RPM};')
+        rpm_row.addWidget(rpm_lbl_hdr)
+        rpm_row.addWidget(self._rpl_rpm_lbl)
+        rpm_row.addStretch()
+        info_col.addLayout(rpm_row)
+        self._rpl_rev_bar = RevBar()
+        info_col.addWidget(self._rpl_rev_bar)
+
+        # Steering
+        steer_hdr = QLabel('STEERING')
+        steer_hdr.setFont(sans(7, bold=True))
+        steer_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        info_col.addWidget(steer_hdr)
+        self._rpl_steer = SteeringWidget()
+        self._rpl_steer.setMinimumHeight(80)
+        self._rpl_steer.setMaximumHeight(120)
+        info_col.addWidget(self._rpl_steer, stretch=1)
+
+        body_row.addLayout(info_col, stretch=1)
+
+        # Pedals + ABS/TC column (right side, fixed width)
+        side_col = QVBoxLayout()
+        side_col.setSpacing(4)
+
+        ped_hdr = QLabel('T / B')
+        ped_hdr.setFont(sans(7, bold=True))
+        ped_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        side_col.addWidget(ped_hdr)
+
+        ped_row = QHBoxLayout()
+        ped_row.setSpacing(4)
+        self._rpl_throttle_bar = PedalBar(C_THROTTLE, 'T')
+        self._rpl_brake_bar = PedalBar(C_BRAKE, 'B')
+        ped_row.addWidget(self._rpl_throttle_bar)
+        ped_row.addWidget(self._rpl_brake_bar)
+        side_col.addLayout(ped_row, stretch=1)
+
+        side_col.addSpacing(6)
+        self._rpl_abs_badge = _AidBadge('ABS')
+        self._rpl_tc_badge = _AidBadge('TC')
+        side_col.addWidget(self._rpl_abs_badge)
+        side_col.addWidget(self._rpl_tc_badge)
+
+        body_row.addLayout(side_col)
+        ll.addLayout(body_row, stretch=1)
+
+        content_splitter.addWidget(left_panel)
+
+        # ── Right: track map ──────────────────────────────────────────
+        right_panel = QFrame()
+        right_panel.setStyleSheet(
+            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
+        rl = QVBoxLayout(right_panel)
+        rl.setContentsMargins(8, 8, 8, 8)
+        rl.setSpacing(4)
+
+        map_hdr_row = QHBoxLayout()
+        map_title = QLabel('TRACK POSITION')
+        map_title.setFont(sans(7, bold=True))
+        map_title.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        map_hdr_row.addWidget(map_title)
+        map_hdr_row.addStretch()
+
+        self._rpl_s1_lbl = QLabel('S1: —')
+        self._rpl_s2_lbl = QLabel('S2: —')
+        self._rpl_s3_lbl = QLabel('S3: —')
+        for i, lbl in enumerate((self._rpl_s1_lbl, self._rpl_s2_lbl, self._rpl_s3_lbl)):
+            colors = [C_DELTA, C_STEER, C_RPM]
+            lbl.setFont(mono(8, bold=True))
+            lbl.setStyleSheet(f'color: {colors[i]};')
+            map_hdr_row.addWidget(lbl)
+            map_hdr_row.addSpacing(8)
+
+        rl.addLayout(map_hdr_row)
+
+        self._rpl_map = TrackMapWidget()
+        self._rpl_map.setMinimumSize(180, 150)   # override widget's own 440x370 minimum
+        rl.addWidget(self._rpl_map, stretch=1)
+
+        content_splitter.addWidget(right_panel)
+        content_splitter.setSizes([310, 500])
+
+        outer.addWidget(content_splitter, stretch=1)
+
+        # ── Bottom: scrollable telemetry graphs ───────────────────────
+        graphs_container = QWidget()
+        graphs_container.setStyleSheet(f'background: {BG};')
+        gv = QVBoxLayout(graphs_container)
+        gv.setContentsMargins(4, 4, 4, 8)
+        gv.setSpacing(4)
+
+        self._rpl_speed_graph   = ReplayGraph('Speed km/h', C_SPEED, ylim=(0, 320))
+        self._rpl_thr_brk_graph = ReplayMultiGraph(
+            'T/B %', C_THROTTLE, C_BRAKE, 'Throttle', 'Brake', ylim=(0, 100))
+        self._rpl_steer_graph   = ReplayGraph('Steer °', C_STEER, ylim=(-540, 540))
+        self._rpl_rpm_graph     = ReplayGraph('RPM', C_RPM, ylim=(0, 10000))
+        self._rpl_gear_graph    = ReplayGraph('Gear', C_GEAR, ylim=(-1, 8))
+
+        self._replay_graphs = [
+            self._rpl_speed_graph, self._rpl_thr_brk_graph,
+            self._rpl_steer_graph, self._rpl_rpm_graph, self._rpl_gear_graph,
+        ]
+
+        for title, color, graph in [
+            ('SPEED',           C_SPEED,    self._rpl_speed_graph),
+            ('THROTTLE / BRAKE', C_THROTTLE, self._rpl_thr_brk_graph),
+            ('STEERING',        C_STEER,    self._rpl_steer_graph),
+            ('RPM',             C_RPM,      self._rpl_rpm_graph),
+            ('GEAR',            C_GEAR,     self._rpl_gear_graph),
+        ]:
+            gv.addWidget(_channel_header(color, title))
+            gv.addWidget(graph)
+
+        graphs_scroll = QScrollArea()
+        graphs_scroll.setWidgetResizable(True)
+        graphs_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        graphs_scroll.setWidget(graphs_container)
+        graphs_scroll.setStyleSheet(
+            f'QScrollArea {{ border: none; background: transparent; }}')
+        graphs_scroll.setFixedHeight(240)
+
+        outer.addWidget(graphs_scroll)
+        return tab
+
+    # ------------------------------------------------------------------
+    # REPLAY HELPERS
+    # ------------------------------------------------------------------
+
+    def _populate_replay_combo(self):
+        """Rebuild the replay lap dropdown from session_laps."""
+        cur = self._replay_combo.currentIndex()
+        self._replay_combo.blockSignals(True)
+        self._replay_combo.clear()
+        for lap in self.session_laps:
+            t = lap.get('total_time_s', 0)
+            m, s = int(t // 60), t % 60
+            label = f"Lap {lap['lap_number']}  {m}:{s:06.3f}"
+            if lap.get('imported'):
+                label = '[IMP] ' + label
+            self._replay_combo.addItem(label)
+        if cur >= 0 and cur < len(self.session_laps):
+            self._replay_combo.setCurrentIndex(cur)
+        elif self.session_laps:
+            self._replay_combo.setCurrentIndex(len(self.session_laps) - 1)
+        self._replay_combo.blockSignals(False)
+
+    def _load_replay_lap(self, idx: int):
+        """Load the selected lap into the replay engine."""
+        if idx < 0 or idx >= len(self.session_laps):
+            return
+        lap = self.session_laps[idx]
+        data = lap.get('data', {})
+        if not data.get('time_ms'):
+            return
+
+        # Stop any running playback
+        self._replay_playing = False
+        self._replay_timer.stop()
+        self._replay_play_btn.setText('PLAY')
+
+        self._replay_data = data
+        times = data['time_ms']
+        self._replay_total_ms = int(times[-1]) if times else 0
+        self._replay_pos_ms = 0
+
+        # Compute sector boundary times from sector durations
+        sectors = lap.get('sectors', [None, None, None])
+        self._replay_sector_ms = []
+        accum_s = 0.0
+        labels = ['S1', 'S2', 'S3']
+        for i, dur in enumerate(sectors or []):
+            if dur is not None:
+                accum_s += dur
+                self._replay_sector_ms.append((labels[i], int(accum_s * 1000)))
+
+        # Update scrubber
+        self._replay_scrub.set_duration(
+            self._replay_total_ms, self._replay_sector_ms)
+        self._replay_scrub.set_value(0)
+
+        # Load sector time labels
+        sec_fmts = []
+        for dur in (sectors or []):
+            if dur is not None:
+                sm, ss = int(dur // 60), dur % 60
+                sec_fmts.append(f'{sm}:{ss:06.3f}')
+            else:
+                sec_fmts.append('—')
+        while len(sec_fmts) < 3:
+            sec_fmts.append('—')
+        self._rpl_s1_lbl.setText(f'S1: {sec_fmts[0]}')
+        self._rpl_s2_lbl.setText(f'S2: {sec_fmts[1]}')
+        self._rpl_s3_lbl.setText(f'S3: {sec_fmts[2]}')
+
+        # Load track map — prefer saved track, fall back to live-built shape
+        track_key = self._active_track_key or ''
+        if track_key and track_key in TRACKS:
+            self._rpl_map.set_track(track_key)
+        else:
+            self._rpl_map.reset_track()
+
+        # If set_track found no saved pts, borrow the shape the live map built this session
+        if not self._rpl_map._norm and self.track_map._norm:
+            self._rpl_map._norm = list(self.track_map._norm)
+            self._rpl_map._pts = []
+            self._rpl_map._last_sz = (0, 0)
+
+        self._rpl_map.reset()
+
+        # Paint throttle/brake heatmap from lap data
+        dists = data.get('dist_m', [])
+        throttles = data.get('throttle', [])
+        brakes = data.get('brake', [])
+        track_len = TRACKS.get(track_key, {}).get('length_m', MONZA_LENGTH_M)
+        for d, th, br in zip(dists, throttles, brakes):
+            prog = d / track_len if track_len > 0 else 0
+            self._rpl_map.update_telemetry(prog, th, br)
+
+        # Load graphs
+        self._rpl_speed_graph.set_lap_data(times, data.get('speed', []))
+        self._rpl_thr_brk_graph.set_lap_data(
+            times, data.get('throttle', []), data.get('brake', []))
+        self._rpl_steer_graph.set_lap_data(times, data.get('steer_deg', []))
+        self._rpl_rpm_graph.set_lap_data(times, data.get('rpm', []))
+        self._rpl_gear_graph.set_lap_data(times, data.get('gear', []))
+
+        # Seek to start
+        self._replay_seek(0)
+
+    def _replay_seek(self, pos_ms: int):
+        """Update all replay displays to the given position in ms."""
+        if not self._replay_data:
+            return
+        self._replay_pos_ms = max(0, min(pos_ms, self._replay_total_ms))
+        times = self._replay_data.get('time_ms', [])
+        if not times:
+            return
+
+        # Binary-search for closest index
+        lo, hi = 0, len(times) - 1
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if times[mid] < self._replay_pos_ms:
+                lo = mid + 1
+            else:
+                hi = mid
+        idx = lo
+
+        speed    = self._replay_data.get('speed',    [0])[idx]
+        rpm      = self._replay_data.get('rpm',      [0])[idx]
+        gear     = self._replay_data.get('gear',     [1])[idx]
+        throttle = self._replay_data.get('throttle', [0])[idx]
+        brake    = self._replay_data.get('brake',    [0])[idx]
+        steer_d  = self._replay_data.get('steer_deg',[0])[idx]
+        abs_v    = self._replay_data.get('abs',      [0])[idx]
+        tc_v     = self._replay_data.get('tc',       [0])[idx]
+        dist_m   = self._replay_data.get('dist_m',   [0])[idx]
+
+        # Dashboard widgets
+        self._rpl_speed_lbl.setText(f'{int(speed)}')
+        self._rpl_rpm_lbl.setText(f'{int(rpm):,}')
+        self._rpl_rev_bar.set_value(rpm, 8000)
+        if gear == 0:
+            gear_text = 'R'
+        elif gear == 1:
+            gear_text = 'N'
+        else:
+            gear_text = str(gear - 1)
+        self._rpl_gear_lbl.setText(gear_text)
+        self._rpl_throttle_bar.set_value(throttle)
+        self._rpl_brake_bar.set_value(brake)
+        self._rpl_steer.set_angle(math.radians(steer_d))
+        self._rpl_abs_badge.set_active(abs_v > 0, f'{abs_v:.1f}')
+        self._rpl_tc_badge.set_active(tc_v > 0, f'{tc_v:.1f}')
+
+        # Sector label
+        track_key = self._active_track_key or ''
+        track_len = TRACKS.get(track_key, {}).get('length_m', MONZA_LENGTH_M)
+        frac = (dist_m / track_len) if track_len > 0 else 0
+        if frac < 1 / 3:
+            sec_txt, sec_col = 'S1', C_DELTA
+        elif frac < 2 / 3:
+            sec_txt, sec_col = 'S2', C_STEER
+        else:
+            sec_txt, sec_col = 'S3', C_RPM
+        self._rpl_sector_lbl.setText(sec_txt)
+        self._rpl_sector_lbl.setStyleSheet(
+            f'color: {sec_col}; font-family: Consolas; font-size: 14px; font-weight: bold;')
+
+        # Track map car position
+        lap_prog = (dist_m / track_len) if track_len > 0 else 0
+        self._rpl_map.car_progress = max(0.0, min(1.0, lap_prog))
+        self._rpl_map._car_smooth = self._rpl_map.car_progress
+        self._rpl_map.update()
+
+        # Time display
+        cur_m  = int(self._replay_pos_ms // 60000)
+        cur_s  = (self._replay_pos_ms % 60000) / 1000.0
+        tot_m  = int(self._replay_total_ms // 60000)
+        tot_s  = (self._replay_total_ms % 60000) / 1000.0
+        self._rpl_time_lbl.setText(f'{cur_m}:{cur_s:06.3f} / {tot_m}:{tot_s:06.3f}')
+
+        # Scrubber (block signals to avoid feedback loop)
+        self._replay_scrub.set_value(self._replay_pos_ms)
+
+        # Graph playheads
+        for g in self._replay_graphs:
+            g.set_playhead(self._replay_pos_ms)
+
+    def _replay_scrubber_moved(self, value: int):
+        """Called when the user drags the scrubber slider."""
+        self._replay_seek(value)
+
+    def _toggle_replay_playback(self):
+        if not self._replay_data:
+            return
+        self._replay_playing = not self._replay_playing
+        if self._replay_playing:
+            if self._replay_pos_ms >= self._replay_total_ms:
+                self._replay_seek(0)
+            self._replay_play_btn.setText('PAUSE')
+            self._replay_timer.start(100)
+        else:
+            self._replay_play_btn.setText('PLAY')
+            self._replay_timer.stop()
+
+    def _replay_tick(self):
+        """Advance playback by speed * 100 ms."""
+        if not self._replay_playing or not self._replay_data:
+            return
+        advance_ms = int(self._replay_speed * 100)
+        new_pos = self._replay_pos_ms + advance_ms
+        if new_pos >= self._replay_total_ms:
+            new_pos = self._replay_total_ms
+            self._replay_playing = False
+            self._replay_play_btn.setText('PLAY')
+            self._replay_timer.stop()
+        self._replay_seek(new_pos)
+
+    def _on_replay_speed_changed(self, text: str):
+        try:
+            self._replay_speed = float(text.replace('x', ''))
+        except ValueError:
+            self._replay_speed = 1.0
+
+    def _import_replay_lap_json(self):
+        """Import a lap JSON directly into the replay tab."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, 'Import Lap for Replay', '', 'Lap JSON (*.json);;All files (*)')
+        if not path:
+            return
+        try:
+            with open(path) as f:
+                payload = json.load(f)
+        except Exception as e:
+            QMessageBox.warning(self, 'Import Failed', f'Could not read file:\n{e}')
+            return
+        if 'data' not in payload or 'time_ms' not in payload.get('data', {}):
+            QMessageBox.warning(self, 'Import Failed',
+                                'Invalid lap JSON: missing "data.time_ms".')
+            return
+
+        existing_nums = {l['lap_number'] for l in self.session_laps}
+        lap_num = payload.get('lap_number', 0)
+        if lap_num in existing_nums:
+            lap_num = (max(existing_nums) + 1) if existing_nums else 1
+
+        lap = {
+            'lap_number':   lap_num,
+            'total_time_s': float(payload.get('total_time_s', 0)),
+            'sectors':      payload.get('sectors', [None, None, None]),
+            'data':         {k: list(v) for k, v in payload['data'].items()},
+            'imported':     True,
+        }
+        self.session_laps.append(lap)
+        self._populate_replay_combo()
+        self._populate_comparison_combos()
+        self._refresh_session_tab()
+        self._race_pace_chart.refresh(self.session_laps)
+
+        self._replay_combo.setCurrentIndex(len(self.session_laps) - 1)
+        self._load_replay_lap(len(self.session_laps) - 1)
 
     # ------------------------------------------------------------------
     # SESSION TAB
@@ -3603,9 +4603,7 @@ class TelemetryApp(QMainWindow):
         sess_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         sess_scroll.setWidget(self._sess_rows_widget)
         sess_scroll.setStyleSheet(
-            f'QScrollArea {{ border: none; background: transparent; }}'
-            f'QScrollBar:vertical {{ width: 6px; background: transparent; }}'
-            f'QScrollBar::handle:vertical {{ background: #333; border-radius: 3px; }}')
+            f'QScrollArea {{ border: none; background: transparent; }}')
         outer.addWidget(sess_scroll, stretch=1)
 
         # Empty-state label lives outside the rows layout so the clear loop never deletes it
@@ -3729,24 +4727,94 @@ class TelemetryApp(QMainWindow):
             return
 
         import csv
-        channels = ['lap', 'dist_m', 'time_ms', 'speed', 'throttle',
-                    'brake', 'steer_deg', 'rpm', 'gear', 'abs', 'tc']
+
+        def _fmt_time(seconds: float) -> str:
+            if seconds <= 0:
+                return '--:--.---'
+            m = int(seconds // 60)
+            s = seconds - m * 60
+            return f'{m}:{s:06.3f}'
+
+        def _sector_str(val) -> str:
+            if val is None or val <= 0:
+                return '--:--.---'
+            return _fmt_time(val)
 
         with open(path, 'w', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(channels)
+
+            # ── SECTION 1: Lap Summary ────────────────────────────────────
+            writer.writerow(['=== LAP SUMMARY ==='])
+            writer.writerow([
+                'Lap', 'Lap Time', 'Sector 1', 'Sector 2', 'Sector 3',
+                'Max Speed (km/h)', 'Avg Speed (km/h)',
+                'Max Throttle (%)', 'Max Brake (%)',
+                'Max RPM', 'Avg RPM',
+                'ABS Events', 'TC Events',
+            ])
+            for lap in self.session_laps:
+                d = lap['data']
+                speeds   = [v for v in d.get('speed', []) if v > 0]
+                throttles = d.get('throttle', [])
+                brakes   = d.get('brake', [])
+                rpms     = [v for v in d.get('rpm', []) if v > 0]
+                abs_vals = d.get('abs', [])
+                tc_vals  = d.get('tc', [])
+
+                max_spd  = round(max(speeds),   1) if speeds   else ''
+                avg_spd  = round(sum(speeds) / len(speeds), 1) if speeds else ''
+                max_thr  = round(max(throttles), 1) if throttles else ''
+                max_brk  = round(max(brakes),    1) if brakes   else ''
+                max_rpm  = round(max(rpms))         if rpms     else ''
+                avg_rpm  = round(sum(rpms) / len(rpms)) if rpms else ''
+                abs_evts = sum(1 for v in abs_vals if v > 0)
+                tc_evts  = sum(1 for v in tc_vals  if v > 0)
+
+                sects = lap.get('sectors', [None, None, None]) or [None, None, None]
+                writer.writerow([
+                    lap['lap_number'],
+                    _fmt_time(lap.get('total_time_s', 0)),
+                    _sector_str(sects[0] if len(sects) > 0 else None),
+                    _sector_str(sects[1] if len(sects) > 1 else None),
+                    _sector_str(sects[2] if len(sects) > 2 else None),
+                    max_spd, avg_spd,
+                    max_thr, max_brk,
+                    max_rpm, avg_rpm,
+                    abs_evts, tc_evts,
+                ])
+
+            writer.writerow([])
+            writer.writerow([])
+
+            # ── SECTION 2: Raw Telemetry ──────────────────────────────────
+            writer.writerow(['=== RAW TELEMETRY ==='])
+            writer.writerow([
+                'lap', 'dist_m', 'lap_time',
+                'speed_kmh', 'throttle_%', 'brake_%',
+                'steer_deg', 'rpm', 'gear',
+                'abs_%', 'tc_%',
+            ])
             for lap in self.session_laps:
                 d = lap['data']
                 n = len(d.get('dist_m', []))
                 for i in range(n):
-                    def _v(key):
+                    def _v(key, idx=i):
                         arr = d.get(key, [])
-                        return arr[i] if i < len(arr) else ''
+                        return arr[idx] if idx < len(arr) else ''
+                    time_ms = _v('time_ms')
+                    lap_time_str = _fmt_time(time_ms / 1000.0) if time_ms != '' else ''
                     writer.writerow([
                         lap['lap_number'],
-                        _v('dist_m'), _v('time_ms'), _v('speed'),
-                        _v('throttle'), _v('brake'), _v('steer_deg'),
-                        _v('rpm'), _v('gear'), _v('abs'), _v('tc'),
+                        round(_v('dist_m'), 1) if _v('dist_m') != '' else '',
+                        lap_time_str,
+                        round(_v('speed'), 1) if _v('speed') != '' else '',
+                        round(_v('throttle'), 1) if _v('throttle') != '' else '',
+                        round(_v('brake'), 1) if _v('brake') != '' else '',
+                        round(_v('steer_deg'), 2) if _v('steer_deg') != '' else '',
+                        round(_v('rpm')) if _v('rpm') != '' else '',
+                        int(_v('gear')) if _v('gear') != '' else '',
+                        round(_v('abs'), 1) if _v('abs') != '' else '',
+                        round(_v('tc'), 1) if _v('tc') != '' else '',
                     ])
 
         QMessageBox.information(self, 'Export CSV',
@@ -4359,6 +5427,98 @@ class TelemetryApp(QMainWindow):
         for key, td in TRACKS.items():
             self.track_combo.addItem(td['name'], userData=key)
         self.track_combo.blockSignals(False)
+
+    def _import_trackmap(self):
+        """Let the user pick a track JSON file and copy it into the tracks/ directory."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, 'Import Track Map', '', 'Track JSON files (*.json);;All files (*)')
+        if not path:
+            return
+
+        import re
+        try:
+            with open(path) as f:
+                td = json.load(f)
+        except Exception as e:
+            QMessageBox.warning(self, 'Import Failed', f'Could not read file:\n{e}')
+            return
+
+        # Validate required fields
+        if 'pts' not in td or not isinstance(td.get('pts'), list) or len(td['pts']) < 10:
+            QMessageBox.warning(self, 'Import Failed',
+                                'Invalid track JSON: missing or too-short "pts" array.')
+            return
+
+        # Derive key and name if not already present
+        name = td.get('name') or Path(path).stem
+        raw_key = td.get('track_key') or name
+        track_key = re.sub(r'[^a-z0-9_]', '_', raw_key.lower()).strip('_')
+        track_key = re.sub(r'_+', '_', track_key)
+        length_m = int(td.get('length_m', 0)) or MONZA_LENGTH_M
+
+        # Normalise pts to [[x, z], ...] — accept both lists and dicts
+        raw_pts = td['pts']
+        try:
+            if isinstance(raw_pts[0], dict):
+                pts = [[float(p.get('x', p.get('X', 0))),
+                        float(p.get('z', p.get('Z', p.get('y', p.get('Y', 0)))))]
+                       for p in raw_pts]
+            else:
+                pts = [[float(p[0]), float(p[1])] for p in raw_pts]
+        except Exception as e:
+            QMessageBox.warning(self, 'Import Failed', f'Could not parse pts:\n{e}')
+            return
+
+        # Re-normalise coordinates to [0..1] range with padding
+        xs = [p[0] for p in pts]
+        zs = [p[1] for p in pts]
+        min_x, max_x = min(xs), max(xs)
+        min_z, max_z = min(zs), max(zs)
+        span = max(max_x - min_x, max_z - min_z)
+        if span > 1.01 or span == 0:
+            # Raw world coords — normalise them
+            if span == 0:
+                QMessageBox.warning(self, 'Import Failed', 'All points are identical.')
+                return
+            PAD = 0.06
+            scale = (1.0 - 2 * PAD) / span
+            pts = [[round((p[0] - min_x) * scale + PAD, 4),
+                    round((p[1] - min_z) * scale + PAD, 4)] for p in pts]
+
+        out_data = {
+            'name': name,
+            'track_key': track_key,
+            'length_m': length_m,
+            'pts': pts,
+            'turns': [list(t) for t in td.get('turns', [])],
+        }
+
+        out_dir = _get_tracks_dir()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        dest = out_dir / f'{track_key}.json'
+
+        if dest.exists():
+            reply = QMessageBox.question(
+                self, 'Overwrite?',
+                f'A track named "{track_key}" already exists.\nOverwrite it?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        with open(dest, 'w') as f:
+            json.dump(out_data, f, indent=2)
+
+        _load_saved_tracks()
+        self._reload_track_combo()
+
+        # Select the just-imported track
+        for i in range(self.track_combo.count()):
+            if self.track_combo.itemData(i) == track_key:
+                self.track_combo.setCurrentIndex(i)
+                break
+
+        QMessageBox.information(self, 'Import Successful',
+                                f'Imported "{name}" ({len(pts)} pts)\nSaved to: {dest}')
 
     # ------------------------------------------------------------------
     # TELEMETRY UPDATE LOOP
