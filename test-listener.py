@@ -155,16 +155,24 @@ QPushButton:pressed {{
 }}
 
 QScrollBar:vertical {{
-    background: {BG1};
-    width: 8px;
+    background: transparent;
+    width: 6px;
     border: none;
-    border-radius: 4px;
+    margin: 3px 1px;
 }}
 
 QScrollBar::handle:vertical {{
-    background: {BG3};
-    border-radius: 4px;
-    min-height: 20px;
+    background: #2e2e2e;
+    border-radius: 3px;
+    min-height: 28px;
+}}
+
+QScrollBar::handle:vertical:hover {{
+    background: #4a4a4a;
+}}
+
+QScrollBar::handle:vertical:pressed {{
+    background: {C_SPEED};
 }}
 
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
@@ -172,21 +180,37 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
     background: none;
 }}
 
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+    background: none;
+}}
+
 QScrollBar:horizontal {{
-    background: {BG1};
-    height: 8px;
+    background: transparent;
+    height: 6px;
     border: none;
-    border-radius: 4px;
+    margin: 1px 3px;
 }}
 
 QScrollBar::handle:horizontal {{
-    background: {BG3};
-    border-radius: 4px;
-    min-width: 20px;
+    background: #2e2e2e;
+    border-radius: 3px;
+    min-width: 28px;
+}}
+
+QScrollBar::handle:horizontal:hover {{
+    background: #4a4a4a;
+}}
+
+QScrollBar::handle:horizontal:pressed {{
+    background: {C_SPEED};
 }}
 
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
     width: 0;
+    background: none;
+}}
+
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
     background: none;
 }}
 
@@ -2486,9 +2510,7 @@ class LapHistoryPanel(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }'
-                             'QScrollBar:vertical { width: 6px; background: transparent; }'
-                             'QScrollBar::handle:vertical { background: #333; border-radius: 3px; }')
+        scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }')
         self._rows_widget = QWidget()
         self._rows_widget.setStyleSheet('background: transparent;')
         self._rows_layout = QVBoxLayout(self._rows_widget)
@@ -4216,9 +4238,7 @@ class TelemetryApp(QMainWindow):
         graphs_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         graphs_scroll.setWidget(graphs_container)
         graphs_scroll.setStyleSheet(
-            f'QScrollArea {{ border: none; background: transparent; }}'
-            f'QScrollBar:vertical {{ width: 6px; background: transparent; }}'
-            f'QScrollBar::handle:vertical {{ background: #333; border-radius: 3px; }}')
+            f'QScrollArea {{ border: none; background: transparent; }}')
         graphs_scroll.setFixedHeight(240)
 
         outer.addWidget(graphs_scroll)
@@ -4583,9 +4603,7 @@ class TelemetryApp(QMainWindow):
         sess_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         sess_scroll.setWidget(self._sess_rows_widget)
         sess_scroll.setStyleSheet(
-            f'QScrollArea {{ border: none; background: transparent; }}'
-            f'QScrollBar:vertical {{ width: 6px; background: transparent; }}'
-            f'QScrollBar::handle:vertical {{ background: #333; border-radius: 3px; }}')
+            f'QScrollArea {{ border: none; background: transparent; }}')
         outer.addWidget(sess_scroll, stretch=1)
 
         # Empty-state label lives outside the rows layout so the clear loop never deletes it
