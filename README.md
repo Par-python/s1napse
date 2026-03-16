@@ -49,7 +49,7 @@ That's it. No Python, no installation, no setup.
 | Game                             | Windows | Mac |
 | -------------------------------- | ------- | --- |
 | Assetto Corsa Competizione (ACC) | ✅      | ❌  |
-| Assetto Corsa (AC)               | ✅      | ✅  |
+| Assetto Corsa (AC)               | ✅      | ❌  |
 | iRacing                          | ✅      | ❌  |
 
 ---
