@@ -2683,6 +2683,14 @@ class TelemetryApp(QMainWindow):
         self._active_track_key: str | None = None
         self._auto_track = True
 
+        # Last-known session metadata (updated every tick, saved with each lap)
+        self._last_car_name: str = ''
+        self._last_track_name: str = ''
+        self._last_session_type: str = ''
+        self._last_tyre_compound: str = ''
+        self._last_air_temp: float = 0.0
+        self._last_road_temp: float = 0.0
+
         # Track recorder
         self.recorder = TrackRecorder()
 
@@ -3195,9 +3203,24 @@ class TelemetryApp(QMainWindow):
         export_json_btn.setStyleSheet(_json_btn_style)
         export_json_btn.setToolTip('Export last completed lap as JSON (importable in Replay tab)')
         export_json_btn.clicked.connect(self._export_graphs_lap_json)
+
+        _full_btn_style = (
+            f'QPushButton {{ background: {BG3}; color: {C_THROTTLE}; border: 1px solid {C_THROTTLE}44;'
+            f' border-radius: 4px; padding: 5px 12px; font-size: 10px; letter-spacing: 1px; }}'
+            f'QPushButton:hover {{ color: {WHITE}; border-color: {C_THROTTLE}; background: {C_THROTTLE}22; }}'
+        )
+        export_full_btn = QPushButton('⬇  EXPORT FULL JSON')
+        export_full_btn.setFont(sans(8, bold=True))
+        export_full_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        export_full_btn.setStyleSheet(_full_btn_style)
+        export_full_btn.setToolTip(
+            'Export last lap with ALL data — telemetry, tyres, fuel, track map, session info')
+        export_full_btn.clicked.connect(self._export_full_lap_json)
+
         btn_row.addWidget(self.export_last_lap_button)
         btn_row.addWidget(self.export_session_button)
         btn_row.addWidget(export_json_btn)
+        btn_row.addWidget(export_full_btn)
         outer.addLayout(btn_row)
 
         # Scroll area for graphs
@@ -3353,16 +3376,39 @@ class TelemetryApp(QMainWindow):
 
     def _reset_current_lap_data(self):
         self.current_lap_data = {
-            'time_ms': [],
-            'dist_m':  [],
-            'speed': [],
-            'throttle': [],
-            'brake': [],
-            'steer_deg': [],
-            'rpm': [],
-            'gear': [],
-            'abs': [],
-            'tc': [],
+            'time_ms':          [],
+            'dist_m':           [],
+            'speed':            [],
+            'throttle':         [],
+            'brake':            [],
+            'steer_deg':        [],
+            'rpm':              [],
+            'gear':             [],
+            'abs':              [],
+            'tc':               [],
+            # Extended per-tick fields
+            'fuel_l':           [],
+            'brake_bias_pct':   [],
+            'world_x':          [],
+            'world_z':          [],
+            'air_temp':         [],
+            'road_temp':        [],
+            'tyre_temp_fl':     [],
+            'tyre_temp_fr':     [],
+            'tyre_temp_rl':     [],
+            'tyre_temp_rr':     [],
+            'tyre_pressure_fl': [],
+            'tyre_pressure_fr': [],
+            'tyre_pressure_rl': [],
+            'tyre_pressure_rr': [],
+            'brake_temp_fl':    [],
+            'brake_temp_fr':    [],
+            'brake_temp_rl':    [],
+            'brake_temp_rr':    [],
+            'tyre_wear_fl':     [],
+            'tyre_wear_fr':     [],
+            'tyre_wear_rl':     [],
+            'tyre_wear_rr':     [],
         }
         self._current_deltas = []
 
@@ -3383,10 +3429,22 @@ class TelemetryApp(QMainWindow):
                 sectors = _compute_sector_times(dists, times, boundaries)
 
             self.session_laps.append({
-                'lap_number': self.current_lap_count,
-                'total_time_s': total_time_s,
-                'sectors': sectors,
-                'data': {k: list(v) for k, v in self.current_lap_data.items()},
+                'lap_number':    self.current_lap_count,
+                'total_time_s':  total_time_s,
+                'sectors':       sectors,
+                'data':          {k: list(v) for k, v in self.current_lap_data.items()},
+                # Session metadata snapshot at lap completion
+                'meta': {
+                    'car_name':      self._last_car_name,
+                    'track_name':    self._last_track_name,
+                    'track_key':     self._active_track_key or '',
+                    'track_length_m': TRACKS.get(self._active_track_key or '', {}).get(
+                        'length_m', MONZA_LENGTH_M),
+                    'session_type':  self._last_session_type,
+                    'tyre_compound': self._last_tyre_compound,
+                    'air_temp_c':    round(self._last_air_temp, 1),
+                    'road_temp_c':   round(self._last_road_temp, 1),
+                },
             })
             self.lap_history.refresh(self.session_laps)
             self._populate_comparison_combos()
@@ -3849,6 +3907,172 @@ class TelemetryApp(QMainWindow):
         with open(path, 'w') as f:
             json.dump(payload, f)
         QMessageBox.information(self, 'Export JSON', f'Lap saved to:\n{path}')
+
+    def _export_full_lap_json(self):
+        """Export the last completed lap as a comprehensive JSON with all telemetry,
+        tyre data, fuel, track map, session metadata, and summary stats."""
+        import os, re as _re, datetime
+
+        if not self.session_laps:
+            QMessageBox.information(self, 'Export Full JSON',
+                                    'No completed laps to export yet.')
+            return
+
+        lap = self.session_laps[-1]
+        t   = lap.get('total_time_s', 0)
+        m, s = int(t // 60), t % 60
+
+        def _slug(text: str) -> str:
+            return _re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')
+
+        date_str  = datetime.date.today().strftime('%Y-%m-%d')
+        try:
+            user_str = _slug(os.getlogin())
+        except Exception:
+            user_str = 'user'
+        meta      = lap.get('meta', {})
+        track_str = _slug(meta.get('track_name', '') or self.track_label.text() or 'unknown-track')
+        lap_str   = f'lap{lap["lap_number"]}'
+        time_str  = f'{m}m{s:06.3f}s'
+
+        default_name = f'{date_str}-{user_str}-{track_str}-{lap_str}-{time_str}-full.json'
+        path, _ = QFileDialog.getSaveFileName(
+            self, 'Export Full Lap JSON', default_name, 'Lap JSON (*.json);;All files (*)')
+        if not path:
+            return
+
+        d = lap['data']
+
+        # ── Summary stats ────────────────────────────────────────────────
+        speeds  = d.get('speed', [])
+        rpms    = d.get('rpm', [])
+        throttles = d.get('throttle', [])
+        brakes  = d.get('brake', [])
+        fuels   = d.get('fuel_l', [])
+        def _safe_avg(lst): return round(sum(lst) / len(lst), 2) if lst else 0.0
+        def _safe_max(lst): return round(max(lst), 2) if lst else 0.0
+
+        fuel_used = round(fuels[0] - fuels[-1], 3) if len(fuels) >= 2 else 0.0
+
+        sectors_raw = lap.get('sectors', [None, None, None])
+        def _fmt_sector(s_val):
+            if s_val is None:
+                return None
+            sm, ss = int(s_val // 60), s_val % 60
+            return f'{sm}:{ss:06.3f}' if sm else f'{ss:.3f}'
+
+        # ── Track map points ─────────────────────────────────────────────
+        track_key = meta.get('track_key', '') or self._active_track_key or ''
+        track_pts = TRACKS.get(track_key, {}).get('pts', [])
+        # Fall back to live map norm if saved track has no pts
+        if not track_pts and self.track_map._norm:
+            track_pts = [[round(x, 5), round(y, 5)] for x, y in self.track_map._norm]
+
+        # ── Build payload ────────────────────────────────────────────────
+        payload = {
+            'schema_version': '2.0',
+            'export_timestamp': datetime.datetime.now().isoformat(timespec='seconds'),
+
+            'session': {
+                'date':          date_str,
+                'car':           meta.get('car_name', ''),
+                'track':         meta.get('track_name', ''),
+                'track_key':     track_key,
+                'track_length_m': meta.get('track_length_m', 0),
+                'session_type':  meta.get('session_type', ''),
+                'tyre_compound': meta.get('tyre_compound', ''),
+                'air_temp_c':    meta.get('air_temp_c', 0.0),
+                'road_temp_c':   meta.get('road_temp_c', 0.0),
+            },
+
+            'lap': {
+                'lap_number':   lap['lap_number'],
+                'total_time_s': lap.get('total_time_s', 0),
+                'total_time_fmt': f'{m}:{s:06.3f}',
+                'sectors_s':    sectors_raw,
+                'sectors_fmt':  [_fmt_sector(sv) for sv in sectors_raw],
+            },
+
+            'summary': {
+                'max_speed_kph':    _safe_max(speeds),
+                'avg_speed_kph':    _safe_avg(speeds),
+                'max_rpm':          _safe_max(rpms),
+                'avg_rpm':          _safe_avg(rpms),
+                'avg_throttle_pct': round(_safe_avg(throttles) * 100, 1),
+                'avg_brake_pct':    round(_safe_avg(brakes) * 100, 1),
+                'fuel_used_l':      fuel_used,
+                'tyre_wear_pct': {
+                    'fl': round(_safe_max(d.get('tyre_wear_fl', [])) * 100, 2),
+                    'fr': round(_safe_max(d.get('tyre_wear_fr', [])) * 100, 2),
+                    'rl': round(_safe_max(d.get('tyre_wear_rl', [])) * 100, 2),
+                    'rr': round(_safe_max(d.get('tyre_wear_rr', [])) * 100, 2),
+                },
+                'max_tyre_temp_c': {
+                    'fl': _safe_max(d.get('tyre_temp_fl', [])),
+                    'fr': _safe_max(d.get('tyre_temp_fr', [])),
+                    'rl': _safe_max(d.get('tyre_temp_rl', [])),
+                    'rr': _safe_max(d.get('tyre_temp_rr', [])),
+                },
+                'max_brake_temp_c': {
+                    'fl': _safe_max(d.get('brake_temp_fl', [])),
+                    'fr': _safe_max(d.get('brake_temp_fr', [])),
+                    'rl': _safe_max(d.get('brake_temp_rl', [])),
+                    'rr': _safe_max(d.get('brake_temp_rr', [])),
+                },
+            },
+
+            'telemetry': {
+                'time_ms':          d.get('time_ms', []),
+                'dist_m':           d.get('dist_m', []),
+                'speed_kph':        d.get('speed', []),
+                'throttle':         d.get('throttle', []),
+                'brake':            d.get('brake', []),
+                'steer_deg':        d.get('steer_deg', []),
+                'rpm':              d.get('rpm', []),
+                'gear':             d.get('gear', []),
+                'abs':              d.get('abs', []),
+                'tc':               d.get('tc', []),
+                'fuel_l':           d.get('fuel_l', []),
+                'brake_bias_pct':   d.get('brake_bias_pct', []),
+                'world_x':          d.get('world_x', []),
+                'world_z':          d.get('world_z', []),
+                'air_temp_c':       d.get('air_temp', []),
+                'road_temp_c':      d.get('road_temp', []),
+                'tyre_temp': {
+                    'fl': d.get('tyre_temp_fl', []),
+                    'fr': d.get('tyre_temp_fr', []),
+                    'rl': d.get('tyre_temp_rl', []),
+                    'rr': d.get('tyre_temp_rr', []),
+                },
+                'tyre_pressure': {
+                    'fl': d.get('tyre_pressure_fl', []),
+                    'fr': d.get('tyre_pressure_fr', []),
+                    'rl': d.get('tyre_pressure_rl', []),
+                    'rr': d.get('tyre_pressure_rr', []),
+                },
+                'brake_temp': {
+                    'fl': d.get('brake_temp_fl', []),
+                    'fr': d.get('brake_temp_fr', []),
+                    'rl': d.get('brake_temp_rl', []),
+                    'rr': d.get('brake_temp_rr', []),
+                },
+                'tyre_wear': {
+                    'fl': d.get('tyre_wear_fl', []),
+                    'fr': d.get('tyre_wear_fr', []),
+                    'rl': d.get('tyre_wear_rl', []),
+                    'rr': d.get('tyre_wear_rr', []),
+                },
+            },
+
+            'track_map': {
+                'pts':      track_pts,
+                'length_m': meta.get('track_length_m', 0),
+            },
+        }
+
+        with open(path, 'w') as f:
+            json.dump(payload, f)
+        QMessageBox.information(self, 'Export Full JSON', f'Full lap saved to:\n{path}')
 
     def _export_lap_json(self):
         """Export the lap currently selected in Combo A as a shareable JSON file."""
@@ -5751,6 +5975,47 @@ class TelemetryApp(QMainWindow):
         self.current_lap_data['gear'].append(gear_int)
         self.current_lap_data['abs'].append(data['abs'])
         self.current_lap_data['tc'].append(data['tc'])
+        # Extended fields
+        _raw_bias = data.get('brake_bias', 0.0)
+        if 0.0 < _raw_bias <= 1.0:
+            _bias_pct = round(_raw_bias * 100, 2)
+        elif 50.0 <= _raw_bias <= 80.0:
+            _bias_pct = round(_raw_bias, 2)
+        else:
+            _bias_pct = 0.0
+        self.current_lap_data['fuel_l'].append(round(data.get('fuel', 0.0), 3))
+        self.current_lap_data['brake_bias_pct'].append(_bias_pct)
+        self.current_lap_data['world_x'].append(round(data.get('world_x', 0.0), 2))
+        self.current_lap_data['world_z'].append(round(data.get('world_z', 0.0), 2))
+        self.current_lap_data['air_temp'].append(round(data.get('air_temp', 0.0), 1))
+        self.current_lap_data['road_temp'].append(round(data.get('road_temp', 0.0), 1))
+        _tt = data.get('tyre_temp', [0.0, 0.0, 0.0, 0.0])
+        self.current_lap_data['tyre_temp_fl'].append(round(_tt[0], 1))
+        self.current_lap_data['tyre_temp_fr'].append(round(_tt[1], 1))
+        self.current_lap_data['tyre_temp_rl'].append(round(_tt[2], 1))
+        self.current_lap_data['tyre_temp_rr'].append(round(_tt[3], 1))
+        _tp = data.get('tyre_pressure', [0.0, 0.0, 0.0, 0.0])
+        self.current_lap_data['tyre_pressure_fl'].append(round(_tp[0], 2))
+        self.current_lap_data['tyre_pressure_fr'].append(round(_tp[1], 2))
+        self.current_lap_data['tyre_pressure_rl'].append(round(_tp[2], 2))
+        self.current_lap_data['tyre_pressure_rr'].append(round(_tp[3], 2))
+        _bt = data.get('brake_temp', [0.0, 0.0, 0.0, 0.0])
+        self.current_lap_data['brake_temp_fl'].append(round(_bt[0], 1))
+        self.current_lap_data['brake_temp_fr'].append(round(_bt[1], 1))
+        self.current_lap_data['brake_temp_rl'].append(round(_bt[2], 1))
+        self.current_lap_data['brake_temp_rr'].append(round(_bt[3], 1))
+        _tw = data.get('tyre_wear', [0.0, 0.0, 0.0, 0.0])
+        self.current_lap_data['tyre_wear_fl'].append(round(_tw[0], 4))
+        self.current_lap_data['tyre_wear_fr'].append(round(_tw[1], 4))
+        self.current_lap_data['tyre_wear_rl'].append(round(_tw[2], 4))
+        self.current_lap_data['tyre_wear_rr'].append(round(_tw[3], 4))
+        # Cache session-level metadata for lap storage
+        self._last_car_name     = data.get('car_name', self._last_car_name)
+        self._last_track_name   = data.get('track_name', self._last_track_name)
+        self._last_session_type = data.get('session_type', self._last_session_type)
+        self._last_tyre_compound = data.get('tyre_compound', self._last_tyre_compound)
+        self._last_air_temp     = data.get('air_temp', self._last_air_temp)
+        self._last_road_temp    = data.get('road_temp', self._last_road_temp)
 
         # ── Delta vs reference lap ────────────────────────────────────────
         if self._ref_lap_dists:
