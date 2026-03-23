@@ -7,9 +7,11 @@ from PyQt6.QtWidgets import (
     QLabel, QComboBox, QPushButton, QLineEdit, QSlider,
     QTabWidget, QFileDialog, QMessageBox, QSplitter, QScrollArea,
     QFrame, QGridLayout, QSizePolicy, QSpinBox, QDoubleSpinBox,
+    QStackedWidget, QButtonGroup, QRadioButton,
 )
 from PyQt6.QtCore import QTimer, Qt, QRectF, QPointF, pyqtSignal
-from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QRadialGradient, QFontMetrics
+from PyQt6.QtGui import (QFont, QPainter, QColor, QPen, QBrush, QRadialGradient,
+                         QFontMetrics, QShortcut, QKeySequence)
 from abc import ABC, abstractmethod
 import threading
 import math
@@ -688,6 +690,327 @@ class IRacingReader(TelemetryReader):
                 self.ir.shutdown()
             except Exception:
                 pass
+
+
+# ---------------------------------------------------------------------------
+# ELM327 OBD-II READER  –  real car telemetry via Bluetooth / WiFi adapter
+# ---------------------------------------------------------------------------
+
+class ELM327Reader(TelemetryReader):
+    """Real car telemetry via ELM327 OBD-II adapter (WiFi or Bluetooth/serial)."""
+
+    def __init__(self, connection_string: str = '', simulate: bool = False):
+        self.connection_string = connection_string
+        self._simulate = simulate
+        self.obd_connection = None
+        self.connected = False
+        self.running = False
+        self.poll_thread = None
+        self.latest_data = None
+        self._lock = threading.Lock()
+
+        # Internal lap timing
+        self._lap_count = 0
+        self._lap_start_time: float | None = None
+        self._last_lap_time_s: float = 0.0
+        self._session_start_time: float | None = None
+
+        # Speed-integrated distance for approximate lap_dist_pct
+        self._cum_distance_m: float = 0.0
+        self._distance_at_lap_start: float = 0.0
+        self._lap_length_estimate: float = 0.0
+        self._last_poll_time: float | None = None
+
+    # ---- connection -------------------------------------------------------
+
+    def connect(self) -> bool:
+        if self._simulate:
+            self.connected = True
+            now = time.monotonic()
+            self._session_start_time = now
+            self._lap_start_time = now
+            self._last_poll_time = now
+            self.running = True
+            self.poll_thread = threading.Thread(target=self._sim_poll_loop, daemon=True)
+            self.poll_thread.start()
+            return True
+        try:
+            import obd
+            cs = self.connection_string.strip()
+            if ':' in cs and not cs.startswith('/'):
+                self.obd_connection = obd.OBD(portstr=cs, fast=False)
+            else:
+                self.obd_connection = obd.OBD(portstr=cs or None, fast=False)
+
+            if self.obd_connection.is_connected():
+                self.connected = True
+                now = time.monotonic()
+                self._session_start_time = now
+                self._lap_start_time = now
+                self._last_poll_time = now
+                self.running = True
+                self.poll_thread = threading.Thread(target=self._poll_loop, daemon=True)
+                self.poll_thread.start()
+                return True
+        except Exception as e:
+            print(f'ELM327 connection error: {e}')
+        return False
+
+    def disconnect(self):
+        self.running = False
+        if self.obd_connection:
+            try:
+                self.obd_connection.close()
+            except Exception:
+                pass
+        self.connected = False
+
+    # ---- TelemetryReader interface ----------------------------------------
+
+    def read(self):
+        with self._lock:
+            return self.latest_data
+
+    def is_connected(self):
+        if self._simulate:
+            return self.connected
+        if not self.connected or self.obd_connection is None:
+            return False
+        try:
+            return self.obd_connection.is_connected()
+        except Exception:
+            return False
+
+    # ---- manual lap trigger -----------------------------------------------
+
+    def trigger_lap(self):
+        now = time.monotonic()
+        if self._lap_start_time is not None:
+            self._last_lap_time_s = now - self._lap_start_time
+        self._lap_count += 1
+        self._lap_length_estimate = self._cum_distance_m - self._distance_at_lap_start
+        self._distance_at_lap_start = self._cum_distance_m
+        self._lap_start_time = now
+
+    # ---- background polling -----------------------------------------------
+
+    def _query_value(self, command, default=0.0):
+        try:
+            resp = self.obd_connection.query(command)
+            if resp and not resp.is_null():
+                return float(resp.value.magnitude)
+            return default
+        except Exception:
+            return default
+
+    def _estimate_gear(self, speed_kmh: float, rpm: float) -> int:
+        if rpm < 100 or speed_kmh < 2:
+            return 1  # Neutral
+        ratio = rpm / (speed_kmh / 3.6)  # rpm per m/s
+        if ratio > 200:  return 2   # 1st
+        if ratio > 130:  return 3   # 2nd
+        if ratio > 90:   return 4   # 3rd
+        if ratio > 65:   return 5   # 4th
+        if ratio > 50:   return 6   # 5th
+        return 7                    # 6th
+
+    # ---- simulation loop (no adapter needed) ------------------------------
+
+    def _sim_poll_loop(self):
+        """Generate realistic fake OBD-II data for testing without hardware."""
+        _t0 = time.monotonic()
+        _fuel = 72.0
+        while self.running:
+            try:
+                now = time.monotonic()
+                dt = now - self._last_poll_time if self._last_poll_time else 0.05
+                self._last_poll_time = now
+                elapsed = now - _t0
+
+                # Simulate a car doing laps: oscillating speed with acceleration/braking
+                phase = (elapsed % 90.0) / 90.0  # 90-second lap cycle
+                if phase < 0.15:
+                    # Hard acceleration out of corner
+                    speed = 40 + phase / 0.15 * 120
+                    throttle = 85 + random.random() * 15
+                elif phase < 0.45:
+                    # High-speed straight
+                    speed = 160 + 30 * math.sin(phase * 20) + random.random() * 5
+                    throttle = 70 + random.random() * 30
+                elif phase < 0.55:
+                    # Heavy braking zone
+                    bp = (phase - 0.45) / 0.10
+                    speed = 190 - bp * 130
+                    throttle = max(0, 10 - bp * 15)
+                elif phase < 0.70:
+                    # Mid-speed corner
+                    speed = 60 + 30 * math.sin((phase - 0.55) * 40)
+                    throttle = 30 + random.random() * 30
+                elif phase < 0.80:
+                    # Acceleration
+                    ap = (phase - 0.70) / 0.10
+                    speed = 70 + ap * 100
+                    throttle = 75 + random.random() * 25
+                else:
+                    # Cruise / mild braking into final corner
+                    speed = 170 - (phase - 0.80) / 0.20 * 80
+                    throttle = 20 + random.random() * 30
+
+                speed = max(5, speed + random.gauss(0, 2))
+                throttle = max(0, min(100, throttle))
+
+                # RPM derived from speed with gear simulation
+                if speed < 60:
+                    rpm = speed / 60 * 4000 + 2000
+                elif speed < 120:
+                    rpm = (speed - 60) / 60 * 3500 + 3000
+                else:
+                    rpm = (speed - 120) / 80 * 2500 + 4500
+                rpm = max(800, min(7500, rpm + random.gauss(0, 50)))
+
+                gear = self._estimate_gear(speed, rpm)
+                _fuel = max(0, _fuel - 0.00005 * dt * speed)
+                coolant = 88 + random.gauss(0, 1.5)
+                intake = 32 + random.gauss(0, 1)
+
+                # Distance integration
+                self._cum_distance_m += (speed / 3.6) * dt
+                lap_dist_m = self._cum_distance_m - self._distance_at_lap_start
+                if self._lap_length_estimate > 0:
+                    lap_dist_pct = min(1.0, lap_dist_m / self._lap_length_estimate)
+                else:
+                    lap_dist_pct = 0.0
+
+                current_time_ms = int((now - self._lap_start_time) * 1000) \
+                    if self._lap_start_time else 0
+
+                data = {
+                    'speed':           round(speed, 1),
+                    'rpm':             round(rpm, 0),
+                    'max_rpm':         7500.0,
+                    'gear':            gear,
+                    'throttle':        round(throttle, 1),
+                    'brake':           0.0,
+                    'steer_angle':     0.0,
+                    'abs':             0.0,
+                    'tc':              0.0,
+                    'fuel':            round(_fuel, 1),
+                    'max_fuel':        100.0,
+                    'lap_time':        self._last_lap_time_s,
+                    'position':        0,
+                    'car_name':        'OBD-II Demo',
+                    'track_name':      'Demo Track',
+                    'lap_count':       self._lap_count,
+                    'current_time':    current_time_ms,
+                    'lap_dist_pct':    lap_dist_pct,
+                    'world_x':         0.0,
+                    'world_z':         0.0,
+                    'lap_valid':       True,
+                    'is_in_pit_lane':  False,
+                    'tyre_temp':       [0.0, 0.0, 0.0, 0.0],
+                    'tyre_pressure':   [0.0, 0.0, 0.0, 0.0],
+                    'brake_temp':      [0.0, 0.0, 0.0, 0.0],
+                    'tyre_wear':       [0.0, 0.0, 0.0, 0.0],
+                    'tyre_compound':   '',
+                    'air_temp':        round(intake, 1),
+                    'road_temp':       round(coolant, 1),
+                    'brake_bias':      0.0,
+                    'gap_ahead':       0,
+                    'gap_behind':      0,
+                    'delta_lap_time':  0,
+                    'estimated_lap':   0,
+                    'stint_time_left': 0,
+                    'session_type':    'PRACTICE',
+                }
+
+                with self._lock:
+                    self.latest_data = data
+
+                time.sleep(0.05)  # ~20 Hz simulated polling
+
+            except Exception as e:
+                print(f'ELM327 sim error: {e}')
+                time.sleep(0.5)
+
+    # ---- real OBD polling -------------------------------------------------
+
+    def _poll_loop(self):
+        import obd
+        while self.running:
+            try:
+                if not self.obd_connection or not self.obd_connection.is_connected():
+                    time.sleep(1.0)
+                    continue
+
+                speed     = self._query_value(obd.commands.SPEED, 0.0)
+                rpm       = self._query_value(obd.commands.RPM, 0.0)
+                throttle  = self._query_value(obd.commands.THROTTLE_POS, 0.0)
+                coolant_t = self._query_value(obd.commands.COOLANT_TEMP, 0.0)
+                intake_t  = self._query_value(obd.commands.INTAKE_TEMP, 0.0)
+                fuel_lvl  = self._query_value(obd.commands.FUEL_LEVEL, 0.0)
+
+                now = time.monotonic()
+                dt = now - self._last_poll_time if self._last_poll_time else 0.0
+                self._last_poll_time = now
+
+                # Integrate distance from speed
+                self._cum_distance_m += (speed / 3.6) * dt
+                lap_dist_m = self._cum_distance_m - self._distance_at_lap_start
+
+                # Approximate lap progress (only meaningful after first lap)
+                if self._lap_length_estimate > 0:
+                    lap_dist_pct = min(1.0, lap_dist_m / self._lap_length_estimate)
+                else:
+                    lap_dist_pct = 0.0
+
+                current_time_ms = int((now - self._lap_start_time) * 1000) \
+                    if self._lap_start_time else 0
+
+                data = {
+                    'speed':           speed,
+                    'rpm':             rpm,
+                    'max_rpm':         7000.0,
+                    'gear':            self._estimate_gear(speed, rpm),
+                    'throttle':        throttle,
+                    'brake':           0.0,
+                    'steer_angle':     0.0,
+                    'abs':             0.0,
+                    'tc':              0.0,
+                    'fuel':            fuel_lvl,
+                    'max_fuel':        100.0,
+                    'lap_time':        self._last_lap_time_s,
+                    'position':        0,
+                    'car_name':        'OBD-II Vehicle',
+                    'track_name':      'Real Track',
+                    'lap_count':       self._lap_count,
+                    'current_time':    current_time_ms,
+                    'lap_dist_pct':    lap_dist_pct,
+                    'world_x':         0.0,
+                    'world_z':         0.0,
+                    'lap_valid':       True,
+                    'is_in_pit_lane':  False,
+                    'tyre_temp':       [0.0, 0.0, 0.0, 0.0],
+                    'tyre_pressure':   [0.0, 0.0, 0.0, 0.0],
+                    'brake_temp':      [0.0, 0.0, 0.0, 0.0],
+                    'tyre_wear':       [0.0, 0.0, 0.0, 0.0],
+                    'tyre_compound':   '',
+                    'air_temp':        intake_t,
+                    'road_temp':       coolant_t,
+                    'brake_bias':      0.0,
+                    'gap_ahead':       0,
+                    'gap_behind':      0,
+                    'delta_lap_time':  0,
+                    'estimated_lap':   0,
+                    'stint_time_left': 0,
+                    'session_type':    'PRACTICE',
+                }
+
+                with self._lock:
+                    self.latest_data = data
+
+            except Exception as e:
+                print(f'ELM327 poll error: {e}')
+                time.sleep(0.5)
 
 
 # ---------------------------------------------------------------------------
@@ -2641,7 +2964,7 @@ class LapHistoryPanel(QWidget):
 class TelemetryApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Synapse')
+        self.setWindowTitle('s1napse')
         _screen = QApplication.primaryScreen().availableGeometry()
         _w = min(1640, _screen.width() - 40)
         _h = min(980, _screen.height() - 60)
@@ -2651,8 +2974,10 @@ class TelemetryApp(QMainWindow):
         self.ac_reader  = None
         self.acc_reader = ACCReader()
         self.ir_reader  = IRacingReader()
+        self.elm_reader = None
         self.current_reader = None
         self.auto_detect = True
+        self._app_mode = 'sim'  # 'sim' or 'real'
 
         self.last_lap_time = 0
         self.current_lap_count = 0
@@ -2723,6 +3048,12 @@ class TelemetryApp(QMainWindow):
         self._replay_timer = QTimer()
         self._replay_timer.timeout.connect(self._replay_tick)
 
+        # Real racing update timer (started when OBD connects)
+        self._real_timer = QTimer()
+        self._real_timer.timeout.connect(self._update_real_telemetry)
+        self._real_lap_count = 0
+        self._real_lap_start = time.monotonic()
+
     # ------------------------------------------------------------------
     # UI CONSTRUCTION
     # ------------------------------------------------------------------
@@ -2734,13 +3065,24 @@ class TelemetryApp(QMainWindow):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
-        # Top connection strip
-        root_layout.addWidget(self._build_connection_strip())
-        root_layout.addWidget(h_line())
+        # Stacked widget: page 0 = welcome, page 1 = main app
+        self._stack = QStackedWidget()
+        root_layout.addWidget(self._stack)
 
-        # Tabs
+        # --- Page 0: Welcome screen ---
+        self._stack.addWidget(self._build_welcome_screen())
+
+        # --- Page 1: Main telemetry app ---
+        main_page = QWidget()
+        main_layout = QVBoxLayout(main_page)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        main_layout.addWidget(self._build_connection_strip())
+        main_layout.addWidget(h_line())
+
         self.tabs = QTabWidget()
-        root_layout.addWidget(self.tabs)
+        main_layout.addWidget(self.tabs)
 
         self.tabs.addTab(self._build_dashboard_tab(), 'DASHBOARD')
         self.tabs.addTab(self._build_graphs_tab(), 'TELEMETRY GRAPHS')
@@ -2751,7 +3093,911 @@ class TelemetryApp(QMainWindow):
         self.tabs.addTab(self._build_session_tab(), 'SESSION')
         self.tabs.addTab(self._build_replay_tab(), 'REPLAY')
 
+        self._stack.addWidget(main_page)
+
+        # --- Page 2: OBD-II connection setup ---
+        self._stack.addWidget(self._build_obd_setup_page())
+
+        # --- Page 3: Real racing dashboard ---
+        self._stack.addWidget(self._build_real_racing_page())
+
+        self._stack.setCurrentIndex(0)
+
         self._set_graph_title_suffix('Lap 1')
+
+    # ------------------------------------------------------------------
+    # WELCOME SCREEN
+    # ------------------------------------------------------------------
+
+    def _build_welcome_screen(self) -> QWidget:
+        page = QWidget()
+        page.setStyleSheet(f'background: {BG};')
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        # Centred content wrapper
+        outer.addStretch(3)
+
+        # Title: s1napse
+        title = QLabel('s1napse')
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setFont(sans(48, bold=True))
+        title.setStyleSheet(f'color: {WHITE}; background: transparent; letter-spacing: 6px;')
+        outer.addWidget(title)
+
+        # Accent line under title
+        line_w = QWidget()
+        line_w.setFixedSize(60, 3)
+        line_w.setStyleSheet(f'background: {C_SPEED}; border-radius: 1px;')
+        line_container = QHBoxLayout()
+        line_container.setContentsMargins(0, 8, 0, 0)
+        line_container.addStretch()
+        line_container.addWidget(line_w)
+        line_container.addStretch()
+        lc_widget = QWidget()
+        lc_widget.setLayout(line_container)
+        lc_widget.setStyleSheet('background: transparent;')
+        outer.addWidget(lc_widget)
+
+        outer.addSpacing(40)
+
+        # Mode selection cards
+        cards_row = QHBoxLayout()
+        cards_row.setContentsMargins(0, 0, 0, 0)
+        cards_row.setSpacing(24)
+        cards_row.addStretch()
+
+        self._mode_group = QButtonGroup(page)
+        self._mode_group.setExclusive(True)
+
+        # --- Sim Racing card ---
+        sim_card, sim_radio = self._make_mode_card(
+            'SIM RACING',
+            'ACC, iRacing, Assetto Corsa\nReal-time telemetry from simulators',
+            checked=True,
+        )
+        self._mode_group.addButton(sim_radio, 0)
+        cards_row.addWidget(sim_card)
+
+        # --- Real Racing card ---
+        real_card, real_radio = self._make_mode_card(
+            'REAL RACING',
+            'On-track data acquisition\nELM327 OBD-II adapter',
+        )
+        self._mode_group.addButton(real_radio, 1)
+        cards_row.addWidget(real_card)
+
+        cards_row.addStretch()
+        cards_container = QWidget()
+        cards_container.setLayout(cards_row)
+        cards_container.setStyleSheet('background: transparent;')
+        outer.addWidget(cards_container)
+
+        outer.addSpacing(36)
+
+        # Next button
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        next_btn = QPushButton('NEXT')
+        next_btn.setFont(sans(11, bold=True))
+        next_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        next_btn.setFixedSize(160, 44)
+        next_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {C_SPEED};
+                color: {BG};
+                border: none;
+                border-radius: 6px;
+                font-size: 13px;
+                font-weight: bold;
+                letter-spacing: 2px;
+            }}
+            QPushButton:hover {{
+                background: #33e0ff;
+            }}
+            QPushButton:pressed {{
+                background: #00a8cc;
+            }}
+        """)
+        next_btn.clicked.connect(self._on_welcome_next)
+        btn_row.addWidget(next_btn)
+        btn_row.addStretch()
+        btn_widget = QWidget()
+        btn_widget.setLayout(btn_row)
+        btn_widget.setStyleSheet('background: transparent;')
+        outer.addWidget(btn_widget)
+
+        outer.addStretch(2)
+
+        # Description at the bottom
+        desc = QLabel('Real-time telemetry analysis and lap replay')
+        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc.setFont(sans(10))
+        desc.setStyleSheet(f'color: {TXT2}; background: transparent; padding-bottom: 24px;')
+        outer.addWidget(desc)
+
+        return page
+
+    def _make_mode_card(self, title: str, subtitle: str,
+                        checked: bool = False, enabled: bool = True):
+        """Build a selectable mode card with a radio button. Returns (card_widget, radio)."""
+        card = QWidget()
+        card.setFixedSize(240, 150)
+        card.setEnabled(enabled)
+
+        border_col = BORDER2 if enabled else '#1a1a1a'
+        text_col = TXT if enabled else TXT2
+        sub_col = TXT2 if enabled else '#3a3a3a'
+
+        card.setStyleSheet(f"""
+            QWidget {{
+                background: {BG2};
+                border: 1px solid {border_col};
+                border-radius: 10px;
+            }}
+            QWidget:hover {{
+                border-color: {C_SPEED if enabled else border_col};
+            }}
+        """)
+
+        vl = QVBoxLayout(card)
+        vl.setContentsMargins(20, 18, 20, 18)
+        vl.setSpacing(8)
+
+        radio = QRadioButton()
+        radio.setChecked(checked)
+        radio.setEnabled(enabled)
+        radio.setStyleSheet(f"""
+            QRadioButton {{
+                background: transparent;
+                border: none;
+                color: {text_col};
+                spacing: 6px;
+            }}
+            QRadioButton::indicator {{
+                width: 14px; height: 14px;
+                border-radius: 7px;
+                border: 2px solid {BORDER2 if enabled else '#1a1a1a'};
+                background: {BG3};
+            }}
+            QRadioButton::indicator:checked {{
+                background: {C_SPEED};
+                border-color: {C_SPEED};
+            }}
+        """)
+        vl.addWidget(radio)
+
+        lbl = QLabel(title)
+        lbl.setFont(sans(14, bold=True))
+        lbl.setStyleSheet(f'color: {text_col}; background: transparent; border: none;'
+                          f' letter-spacing: 1.5px;')
+        vl.addWidget(lbl)
+
+        sub = QLabel(subtitle)
+        sub.setFont(sans(9))
+        sub.setWordWrap(True)
+        sub.setStyleSheet(f'color: {sub_col}; background: transparent; border: none;')
+        vl.addWidget(sub)
+
+        vl.addStretch()
+
+        if not enabled:
+            tag = QLabel('COMING SOON')
+            tag.setFont(sans(7, bold=True))
+            tag.setAlignment(Qt.AlignmentFlag.AlignRight)
+            tag.setStyleSheet(f'color: {TXT2}; background: transparent; border: none;'
+                              f' letter-spacing: 1px;')
+            vl.addWidget(tag)
+
+        return card, radio
+
+    def _on_welcome_next(self):
+        mode_id = self._mode_group.checkedId()
+        if mode_id == 1:
+            # Real racing — OBD setup page
+            self._app_mode = 'real'
+            self._stack.setCurrentIndex(2)
+            return
+        # Sim racing — show main app
+        self._app_mode = 'sim'
+        self._stack.setCurrentIndex(1)
+
+    # ------------------------------------------------------------------
+    # OBD-II SETUP PAGE
+    # ------------------------------------------------------------------
+
+    def _build_obd_setup_page(self) -> QWidget:
+        page = QWidget()
+        page.setStyleSheet(f'background: {BG};')
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addStretch(2)
+
+        # Title
+        title = QLabel('ELM327 OBD-II SETUP')
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setFont(sans(28, bold=True))
+        title.setStyleSheet(f'color: {WHITE}; background: transparent; letter-spacing: 4px;')
+        outer.addWidget(title)
+
+        # Accent line
+        line_w = QWidget()
+        line_w.setFixedSize(60, 3)
+        line_w.setStyleSheet(f'background: {C_SPEED}; border-radius: 1px;')
+        lc = QHBoxLayout()
+        lc.setContentsMargins(0, 8, 0, 0)
+        lc.addStretch(); lc.addWidget(line_w); lc.addStretch()
+        lc_w = QWidget(); lc_w.setLayout(lc)
+        lc_w.setStyleSheet('background: transparent;')
+        outer.addWidget(lc_w)
+
+        outer.addSpacing(32)
+
+        # --- Form container ---
+        form = QWidget()
+        form.setFixedWidth(400)
+        form.setStyleSheet(f"""
+            QWidget {{ background: {BG2}; border: 1px solid {BORDER2}; border-radius: 10px; }}
+        """)
+        fl = QVBoxLayout(form)
+        fl.setContentsMargins(28, 24, 28, 24)
+        fl.setSpacing(14)
+
+        # Connection type
+        type_lbl = QLabel('CONNECTION TYPE')
+        type_lbl.setFont(sans(8, bold=True))
+        type_lbl.setStyleSheet(f'color: {TXT2}; background: transparent; border: none;'
+                               f' letter-spacing: 1px;')
+        fl.addWidget(type_lbl)
+
+        self._obd_type_combo = QComboBox()
+        self._obd_type_combo.addItems(['WiFi', 'Bluetooth / Serial'])
+        self._obd_type_combo.setStyleSheet(f"""
+            QComboBox {{ background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};
+                         border-radius: 4px; padding: 6px 10px; }}
+        """)
+        self._obd_type_combo.currentIndexChanged.connect(self._on_obd_type_changed)
+        fl.addWidget(self._obd_type_combo)
+
+        # WiFi fields
+        self._obd_wifi_box = QWidget()
+        self._obd_wifi_box.setStyleSheet('background: transparent; border: none;')
+        wfl = QVBoxLayout(self._obd_wifi_box)
+        wfl.setContentsMargins(0, 0, 0, 0)
+        wfl.setSpacing(8)
+
+        ip_lbl = QLabel('IP ADDRESS')
+        ip_lbl.setFont(sans(8, bold=True))
+        ip_lbl.setStyleSheet(f'color: {TXT2}; background: transparent; border: none;'
+                             f' letter-spacing: 1px;')
+        wfl.addWidget(ip_lbl)
+        self._obd_ip = QLineEdit('192.168.0.10')
+        self._obd_ip.setStyleSheet(f"""
+            QLineEdit {{ background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};
+                         border-radius: 4px; padding: 6px 10px; }}
+        """)
+        wfl.addWidget(self._obd_ip)
+
+        port_lbl = QLabel('PORT')
+        port_lbl.setFont(sans(8, bold=True))
+        port_lbl.setStyleSheet(f'color: {TXT2}; background: transparent; border: none;'
+                               f' letter-spacing: 1px;')
+        wfl.addWidget(port_lbl)
+        self._obd_port = QLineEdit('35000')
+        self._obd_port.setStyleSheet(f"""
+            QLineEdit {{ background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};
+                         border-radius: 4px; padding: 6px 10px; }}
+        """)
+        wfl.addWidget(self._obd_port)
+        fl.addWidget(self._obd_wifi_box)
+
+        # Bluetooth fields (hidden by default)
+        self._obd_bt_box = QWidget()
+        self._obd_bt_box.setStyleSheet('background: transparent; border: none;')
+        self._obd_bt_box.setVisible(False)
+        bfl = QVBoxLayout(self._obd_bt_box)
+        bfl.setContentsMargins(0, 0, 0, 0)
+        bfl.setSpacing(8)
+
+        serial_lbl = QLabel('SERIAL PORT')
+        serial_lbl.setFont(sans(8, bold=True))
+        serial_lbl.setStyleSheet(f'color: {TXT2}; background: transparent; border: none;'
+                                 f' letter-spacing: 1px;')
+        bfl.addWidget(serial_lbl)
+        import platform as _plat
+        default_serial = 'COM3' if _plat.system() == 'Windows' else '/dev/rfcomm0'
+        self._obd_serial = QLineEdit(default_serial)
+        self._obd_serial.setStyleSheet(f"""
+            QLineEdit {{ background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};
+                         border-radius: 4px; padding: 6px 10px; }}
+        """)
+        bfl.addWidget(self._obd_serial)
+        fl.addWidget(self._obd_bt_box)
+
+        # Status label
+        self._obd_status = QLabel('')
+        self._obd_status.setFont(sans(9))
+        self._obd_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._obd_status.setStyleSheet(f'color: {TXT2}; background: transparent; border: none;')
+        fl.addWidget(self._obd_status)
+
+        # Buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(12)
+
+        back_btn = QPushButton('BACK')
+        back_btn.setFont(sans(10, bold=True))
+        back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        back_btn.setFixedHeight(40)
+        back_btn.setStyleSheet(f"""
+            QPushButton {{ background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};
+                           border-radius: 6px; letter-spacing: 1px; }}
+            QPushButton:hover {{ background: #2d2d2d; border-color: #4a4a4a; }}
+        """)
+        back_btn.clicked.connect(lambda: self._stack.setCurrentIndex(0))
+        btn_row.addWidget(back_btn)
+
+        connect_btn = QPushButton('CONNECT')
+        connect_btn.setFont(sans(10, bold=True))
+        connect_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        connect_btn.setFixedHeight(40)
+        connect_btn.setStyleSheet(f"""
+            QPushButton {{ background: {C_SPEED}; color: {BG}; border: none;
+                           border-radius: 6px; font-weight: bold; letter-spacing: 2px; }}
+            QPushButton:hover {{ background: #33e0ff; }}
+            QPushButton:pressed {{ background: #00a8cc; }}
+        """)
+        connect_btn.clicked.connect(self._on_obd_connect)
+        btn_row.addWidget(connect_btn)
+
+        btn_w = QWidget()
+        btn_w.setLayout(btn_row)
+        btn_w.setStyleSheet('background: transparent; border: none;')
+        fl.addWidget(btn_w)
+
+        # Demo button — test without real adapter
+        demo_btn = QPushButton('DEMO MODE (no adapter)')
+        demo_btn.setFont(sans(9))
+        demo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        demo_btn.setFixedHeight(32)
+        demo_btn.setStyleSheet(f"""
+            QPushButton {{ background: transparent; color: {TXT2};
+                           border: 1px solid {BORDER2}; border-radius: 4px;
+                           letter-spacing: 0.5px; }}
+            QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}
+        """)
+        demo_btn.clicked.connect(self._on_obd_demo)
+        fl.addWidget(demo_btn)
+
+        # Centre the form card
+        form_row = QHBoxLayout()
+        form_row.addStretch()
+        form_row.addWidget(form)
+        form_row.addStretch()
+        form_w = QWidget()
+        form_w.setLayout(form_row)
+        form_w.setStyleSheet('background: transparent;')
+        outer.addWidget(form_w)
+
+        outer.addStretch(3)
+
+        # Bottom hint
+        hint = QLabel('Plug the ELM327 adapter into your OBD-II port and ensure it is powered on')
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hint.setFont(sans(9))
+        hint.setStyleSheet(f'color: {TXT2}; background: transparent; padding-bottom: 24px;')
+        outer.addWidget(hint)
+
+        return page
+
+    def _on_obd_type_changed(self, idx: int):
+        self._obd_wifi_box.setVisible(idx == 0)
+        self._obd_bt_box.setVisible(idx == 1)
+
+    def _on_obd_connect(self):
+        if self._obd_type_combo.currentIndex() == 0:
+            conn_str = f"{self._obd_ip.text().strip()}:{self._obd_port.text().strip()}"
+        else:
+            conn_str = self._obd_serial.text().strip()
+
+        self._obd_status.setText('Connecting...')
+        self._obd_status.setStyleSheet(f'color: {C_SPEED}; background: transparent; border: none;')
+        QApplication.processEvents()
+
+        self.elm_reader = ELM327Reader(conn_str)
+        if self.elm_reader.connect():
+            self.current_reader = self.elm_reader
+            self.auto_detect = False
+            self._obd_status.setText('Connected!')
+            self._obd_status.setStyleSheet(f'color: {C_THROTTLE}; background: transparent;'
+                                           f' border: none;')
+            # Show manual lap button in connection strip
+            if hasattr(self, '_manual_lap_btn'):
+                self._manual_lap_btn.setVisible(True)
+            # Enable lap keyboard shortcut
+            if hasattr(self, '_lap_shortcut'):
+                self._lap_shortcut.setEnabled(True)
+            # Select ELM327 in game combo if available
+            if hasattr(self, 'game_combo'):
+                idx = self.game_combo.findText('ELM327 (OBD-II)')
+                if idx >= 0:
+                    self.game_combo.setCurrentIndex(idx)
+            self._start_real_racing_ui()
+            QTimer.singleShot(600, lambda: self._stack.setCurrentIndex(3))
+        else:
+            self._obd_status.setText('Connection failed — check adapter and settings.')
+            self._obd_status.setStyleSheet(f'color: {C_BRAKE}; background: transparent;'
+                                           f' border: none;')
+            self.elm_reader = None
+
+    def _on_obd_demo(self):
+        """Start simulated OBD-II data — no adapter needed."""
+        self._obd_status.setText('Starting demo...')
+        self._obd_status.setStyleSheet(f'color: {C_SPEED}; background: transparent; border: none;')
+        QApplication.processEvents()
+
+        self.elm_reader = ELM327Reader(simulate=True)
+        self.elm_reader.connect()
+        self.current_reader = self.elm_reader
+        self.auto_detect = False
+
+        self._start_real_racing_ui()
+        QTimer.singleShot(400, lambda: self._stack.setCurrentIndex(3))
+
+    def _start_real_racing_ui(self):
+        """Enable real-racing-specific UI elements and start the update timer."""
+        if hasattr(self, '_manual_lap_btn'):
+            self._manual_lap_btn.setVisible(True)
+        if hasattr(self, '_lap_shortcut'):
+            self._lap_shortcut.setEnabled(True)
+        if not self._real_timer.isActive():
+            self._real_timer.start(50)
+
+    def _on_manual_lap(self):
+        if self.elm_reader and self.elm_reader.is_connected():
+            self.elm_reader.trigger_lap()
+
+    # ------------------------------------------------------------------
+    # REAL RACING PAGE
+    # ------------------------------------------------------------------
+
+    def _build_real_racing_page(self) -> QWidget:
+        page = QWidget()
+        page.setStyleSheet(f'background: {BG};')
+        root = QVBoxLayout(page)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        # ── Top bar ──────────────────────────────────────────────────────
+        top = QWidget()
+        top.setFixedHeight(42)
+        top.setStyleSheet(f'background: {BG2}; border-bottom: 1px solid {BORDER2};')
+        tl = QHBoxLayout(top)
+        tl.setContentsMargins(16, 0, 16, 0)
+        tl.setSpacing(14)
+
+        self._real_dot = QLabel('\u25cf')
+        self._real_dot.setFont(sans(10))
+        self._real_dot.setStyleSheet(f'color: {C_THROTTLE};')
+        tl.addWidget(self._real_dot)
+
+        self._real_status = QLabel('OBD-II CONNECTED')
+        self._real_status.setFont(sans(9, bold=True))
+        self._real_status.setStyleSheet(f'color: {WHITE}; letter-spacing: 1px;')
+        tl.addWidget(self._real_status)
+
+        tl.addWidget(_vsep())
+
+        # Lap button in top bar
+        real_lap_btn = QPushButton('LAP')
+        real_lap_btn.setFixedSize(60, 26)
+        real_lap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        real_lap_btn.setFont(sans(9, bold=True))
+        real_lap_btn.setStyleSheet(
+            f'QPushButton {{ background: #0a2218; color: {C_THROTTLE};'
+            f' border: 1px solid {C_THROTTLE}; border-radius: 4px;'
+            f' letter-spacing: 1px; }}'
+            f'QPushButton:hover {{ background: #0f3322; }}'
+            f'QPushButton:pressed {{ background: #061a10; }}'
+        )
+        real_lap_btn.setToolTip('Complete current lap (shortcut: L)')
+        real_lap_btn.clicked.connect(self._on_manual_lap)
+        tl.addWidget(real_lap_btn)
+
+        tl.addStretch()
+
+        # Lap info
+        self._real_lap_lbl = QLabel('LAP 0')
+        self._real_lap_lbl.setFont(sans(9, bold=True))
+        self._real_lap_lbl.setStyleSheet(f'color: {TXT}; letter-spacing: 1px;')
+        tl.addWidget(self._real_lap_lbl)
+
+        tl.addWidget(_vsep())
+
+        self._real_laptime_lbl = QLabel('0:00.000')
+        self._real_laptime_lbl.setFont(mono(12, bold=True))
+        self._real_laptime_lbl.setStyleSheet(f'color: {C_SPEED};')
+        tl.addWidget(self._real_laptime_lbl)
+
+        tl.addWidget(_vsep())
+
+        self._real_last_lbl = QLabel('LAST  --:--.---')
+        self._real_last_lbl.setFont(mono(10))
+        self._real_last_lbl.setStyleSheet(f'color: {TXT2};')
+        tl.addWidget(self._real_last_lbl)
+
+        tl.addWidget(_vsep())
+
+        # Back to menu
+        back_btn = QPushButton('MENU')
+        back_btn.setFixedSize(60, 26)
+        back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        back_btn.setFont(sans(8, bold=True))
+        back_btn.setStyleSheet(
+            f'QPushButton {{ background: {BG3}; color: {TXT2};'
+            f' border: 1px solid {BORDER2}; border-radius: 4px; letter-spacing: 1px; }}'
+            f'QPushButton:hover {{ color: {TXT}; border-color: #4a4a4a; }}'
+        )
+        back_btn.clicked.connect(self._on_real_back)
+        tl.addWidget(back_btn)
+
+        root.addWidget(top)
+
+        # ── Main content ─────────────────────────────────────────────────
+        content = QWidget()
+        content.setStyleSheet(f'background: {BG};')
+        cl = QVBoxLayout(content)
+        cl.setContentsMargins(16, 16, 16, 16)
+        cl.setSpacing(14)
+
+        # ── Row 1: Speed + RPM (big hero gauges) ────────────────────────
+        hero_row = QHBoxLayout()
+        hero_row.setSpacing(14)
+
+        # Speed card
+        speed_card = QFrame()
+        speed_card.setStyleSheet(
+            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+        sc_l = QVBoxLayout(speed_card)
+        sc_l.setContentsMargins(24, 20, 24, 20)
+        sc_l.setSpacing(4)
+        sc_hdr = QLabel('SPEED')
+        sc_hdr.setFont(sans(8, bold=True))
+        sc_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
+        sc_l.addWidget(sc_hdr)
+        self._real_speed = QLabel('0')
+        self._real_speed.setFont(mono(52, bold=True))
+        self._real_speed.setStyleSheet(f'color: {C_SPEED};')
+        self._real_speed.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sc_l.addWidget(self._real_speed)
+        sc_unit = QLabel('km/h')
+        sc_unit.setFont(sans(10))
+        sc_unit.setStyleSheet(f'color: {TXT2};')
+        sc_unit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sc_l.addWidget(sc_unit)
+        hero_row.addWidget(speed_card, 3)
+
+        # RPM card
+        rpm_card = QFrame()
+        rpm_card.setStyleSheet(
+            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+        rc_l = QVBoxLayout(rpm_card)
+        rc_l.setContentsMargins(24, 20, 24, 20)
+        rc_l.setSpacing(4)
+        rc_hdr = QLabel('RPM')
+        rc_hdr.setFont(sans(8, bold=True))
+        rc_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
+        rc_l.addWidget(rc_hdr)
+        self._real_rpm = QLabel('0')
+        self._real_rpm.setFont(mono(52, bold=True))
+        self._real_rpm.setStyleSheet(f'color: {C_RPM};')
+        self._real_rpm.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        rc_l.addWidget(self._real_rpm)
+        # RPM bar
+        self._real_rev_bar = RevBar()
+        self._real_rev_bar.setFixedHeight(36)
+        rc_l.addWidget(self._real_rev_bar)
+        hero_row.addWidget(rpm_card, 3)
+
+        # Gear card
+        gear_card = QFrame()
+        gear_card.setStyleSheet(
+            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+        gc_l = QVBoxLayout(gear_card)
+        gc_l.setContentsMargins(16, 20, 16, 20)
+        gc_l.setSpacing(4)
+        gc_hdr = QLabel('GEAR')
+        gc_hdr.setFont(sans(8, bold=True))
+        gc_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
+        gc_hdr.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        gc_l.addWidget(gc_hdr)
+        self._real_gear = QLabel('N')
+        self._real_gear.setFont(mono(64, bold=True))
+        self._real_gear.setStyleSheet(f'color: {WHITE};')
+        self._real_gear.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        gc_l.addWidget(self._real_gear)
+        gc_l.addStretch()
+        hero_row.addWidget(gear_card, 1)
+
+        cl.addLayout(hero_row, 4)
+
+        # ── Row 2: Throttle + secondary gauges ──────────────────────────
+        gauge_row = QHBoxLayout()
+        gauge_row.setSpacing(14)
+
+        # Throttle card
+        thr_card = QFrame()
+        thr_card.setStyleSheet(
+            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+        tc_l = QVBoxLayout(thr_card)
+        tc_l.setContentsMargins(20, 14, 20, 14)
+        tc_l.setSpacing(6)
+        tc_hdr = QLabel('THROTTLE')
+        tc_hdr.setFont(sans(8, bold=True))
+        tc_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
+        tc_l.addWidget(tc_hdr)
+        self._real_throttle_val = QLabel('0%')
+        self._real_throttle_val.setFont(mono(24, bold=True))
+        self._real_throttle_val.setStyleSheet(f'color: {C_THROTTLE};')
+        tc_l.addWidget(self._real_throttle_val)
+        # Throttle progress bar
+        self._real_throttle_bar = QWidget()
+        self._real_throttle_bar.setFixedHeight(10)
+        self._real_throttle_bar.setStyleSheet(
+            f'background: {BG3}; border-radius: 5px;')
+        tc_l.addWidget(self._real_throttle_bar)
+        self._real_thr_fill = QWidget(self._real_throttle_bar)
+        self._real_thr_fill.setFixedHeight(10)
+        self._real_thr_fill.setStyleSheet(
+            f'background: {C_THROTTLE}; border-radius: 5px;')
+        self._real_thr_fill.setFixedWidth(0)
+        gauge_row.addWidget(thr_card, 2)
+
+        # Fuel card
+        fuel_card = QFrame()
+        fuel_card.setStyleSheet(
+            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+        fc_l = QVBoxLayout(fuel_card)
+        fc_l.setContentsMargins(20, 14, 20, 14)
+        fc_l.setSpacing(6)
+        fc_hdr = QLabel('FUEL LEVEL')
+        fc_hdr.setFont(sans(8, bold=True))
+        fc_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
+        fc_l.addWidget(fc_hdr)
+        self._real_fuel = QLabel('--%')
+        self._real_fuel.setFont(mono(24, bold=True))
+        self._real_fuel.setStyleSheet(f'color: {C_SPEED};')
+        fc_l.addWidget(self._real_fuel)
+        # Fuel bar
+        self._real_fuel_bar = QWidget()
+        self._real_fuel_bar.setFixedHeight(10)
+        self._real_fuel_bar.setStyleSheet(
+            f'background: {BG3}; border-radius: 5px;')
+        fc_l.addWidget(self._real_fuel_bar)
+        self._real_fuel_fill = QWidget(self._real_fuel_bar)
+        self._real_fuel_fill.setFixedHeight(10)
+        self._real_fuel_fill.setStyleSheet(
+            f'background: {C_SPEED}; border-radius: 5px;')
+        self._real_fuel_fill.setFixedWidth(0)
+        gauge_row.addWidget(fuel_card, 2)
+
+        # Coolant temp card
+        cool_card = QFrame()
+        cool_card.setStyleSheet(
+            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+        cc_l = QVBoxLayout(cool_card)
+        cc_l.setContentsMargins(20, 14, 20, 14)
+        cc_l.setSpacing(6)
+        cc_hdr = QLabel('COOLANT TEMP')
+        cc_hdr.setFont(sans(8, bold=True))
+        cc_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
+        cc_l.addWidget(cc_hdr)
+        self._real_coolant = QLabel('--\u00b0C')
+        self._real_coolant.setFont(mono(24, bold=True))
+        self._real_coolant.setStyleSheet(f'color: {C_BRAKE};')
+        cc_l.addWidget(self._real_coolant)
+        cc_l.addStretch()
+        gauge_row.addWidget(cool_card, 1)
+
+        # Intake temp card
+        intake_card = QFrame()
+        intake_card.setStyleSheet(
+            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+        ic_l = QVBoxLayout(intake_card)
+        ic_l.setContentsMargins(20, 14, 20, 14)
+        ic_l.setSpacing(6)
+        ic_hdr = QLabel('INTAKE TEMP')
+        ic_hdr.setFont(sans(8, bold=True))
+        ic_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
+        ic_l.addWidget(ic_hdr)
+        self._real_intake = QLabel('--\u00b0C')
+        self._real_intake.setFont(mono(24, bold=True))
+        self._real_intake.setStyleSheet(f'color: {C_STEER};')
+        ic_l.addWidget(self._real_intake)
+        ic_l.addStretch()
+        gauge_row.addWidget(intake_card, 1)
+
+        cl.addLayout(gauge_row, 2)
+
+        # ── Row 3: Live graphs (speed + throttle over time) ─────────────
+        graph_row = QHBoxLayout()
+        graph_row.setSpacing(14)
+
+        # Speed history graph
+        self._real_speed_history: list[float] = []
+        self._real_speed_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=BG2))
+        self._real_speed_ax = self._real_speed_canvas.figure.add_subplot(111)
+        self._real_speed_ax.set_facecolor(BG2)
+        self._real_speed_ax.tick_params(colors=TXT2, labelsize=7)
+        self._real_speed_ax.spines['top'].set_visible(False)
+        self._real_speed_ax.spines['right'].set_visible(False)
+        self._real_speed_ax.spines['left'].set_color(BORDER)
+        self._real_speed_ax.spines['bottom'].set_color(BORDER)
+        self._real_speed_ax.set_ylabel('km/h', color=TXT2, fontsize=7)
+        self._real_speed_ax.set_title('SPEED', color=TXT2, fontsize=8, pad=4)
+        self._real_speed_canvas.figure.subplots_adjust(
+            left=0.12, right=0.97, top=0.82, bottom=0.15)
+
+        s_frame = QFrame()
+        s_frame.setStyleSheet(
+            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+        sfl = QVBoxLayout(s_frame)
+        sfl.setContentsMargins(4, 4, 4, 4)
+        sfl.addWidget(self._real_speed_canvas)
+        graph_row.addWidget(s_frame)
+
+        # Throttle history graph
+        self._real_thr_history: list[float] = []
+        self._real_thr_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=BG2))
+        self._real_thr_ax = self._real_thr_canvas.figure.add_subplot(111)
+        self._real_thr_ax.set_facecolor(BG2)
+        self._real_thr_ax.tick_params(colors=TXT2, labelsize=7)
+        self._real_thr_ax.spines['top'].set_visible(False)
+        self._real_thr_ax.spines['right'].set_visible(False)
+        self._real_thr_ax.spines['left'].set_color(BORDER)
+        self._real_thr_ax.spines['bottom'].set_color(BORDER)
+        self._real_thr_ax.set_ylabel('%', color=TXT2, fontsize=7)
+        self._real_thr_ax.set_title('THROTTLE', color=TXT2, fontsize=8, pad=4)
+        self._real_thr_canvas.figure.subplots_adjust(
+            left=0.12, right=0.97, top=0.82, bottom=0.15)
+
+        t_frame = QFrame()
+        t_frame.setStyleSheet(
+            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+        tfl = QVBoxLayout(t_frame)
+        tfl.setContentsMargins(4, 4, 4, 4)
+        tfl.addWidget(self._real_thr_canvas)
+        graph_row.addWidget(t_frame)
+
+        # RPM history graph
+        self._real_rpm_history: list[float] = []
+        self._real_rpm_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=BG2))
+        self._real_rpm_ax = self._real_rpm_canvas.figure.add_subplot(111)
+        self._real_rpm_ax.set_facecolor(BG2)
+        self._real_rpm_ax.tick_params(colors=TXT2, labelsize=7)
+        self._real_rpm_ax.spines['top'].set_visible(False)
+        self._real_rpm_ax.spines['right'].set_visible(False)
+        self._real_rpm_ax.spines['left'].set_color(BORDER)
+        self._real_rpm_ax.spines['bottom'].set_color(BORDER)
+        self._real_rpm_ax.set_ylabel('rpm', color=TXT2, fontsize=7)
+        self._real_rpm_ax.set_title('RPM', color=TXT2, fontsize=8, pad=4)
+        self._real_rpm_canvas.figure.subplots_adjust(
+            left=0.12, right=0.97, top=0.82, bottom=0.15)
+
+        r_frame = QFrame()
+        r_frame.setStyleSheet(
+            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+        rfl = QVBoxLayout(r_frame)
+        rfl.setContentsMargins(4, 4, 4, 4)
+        rfl.addWidget(self._real_rpm_canvas)
+        graph_row.addWidget(r_frame)
+
+        cl.addLayout(graph_row, 3)
+
+        root.addWidget(content)
+        return page
+
+    def _on_real_back(self):
+        """Return to welcome screen from real racing mode."""
+        self._real_timer.stop()
+        if self.elm_reader:
+            self.elm_reader.disconnect()
+            self.elm_reader = None
+        self.current_reader = None
+        self._stack.setCurrentIndex(0)
+
+    def _update_real_telemetry(self):
+        """Update the real racing dashboard from ELM327Reader data."""
+        if not self.elm_reader or not self.elm_reader.is_connected():
+            self._real_dot.setStyleSheet('color: #444;')
+            self._real_status.setText('DISCONNECTED')
+            return
+
+        data = self.elm_reader.read()
+        if data is None:
+            return
+
+        speed = data.get('speed', 0)
+        rpm = data.get('rpm', 0)
+        max_rpm = data.get('max_rpm', 7000)
+        gear = data.get('gear', 1)
+        throttle = data.get('throttle', 0)
+        fuel = data.get('fuel', 0)
+        coolant = data.get('road_temp', 0)
+        intake = data.get('air_temp', 0)
+        lap_count = data.get('lap_count', 0)
+        current_time_ms = data.get('current_time', 0)
+        last_lap_s = data.get('lap_time', 0)
+
+        # Speed / RPM / Gear
+        self._real_speed.setText(str(int(speed)))
+        self._real_rpm.setText(str(int(rpm)))
+        self._real_rev_bar.set_value(rpm, max_rpm)
+
+        gear_map = {0: 'R', 1: 'N'}
+        self._real_gear.setText(gear_map.get(gear, str(gear - 1)))
+
+        # Throttle
+        self._real_throttle_val.setText(f'{int(throttle)}%')
+        bar_w = self._real_throttle_bar.width()
+        self._real_thr_fill.setFixedWidth(max(0, int(bar_w * throttle / 100)))
+
+        # Fuel
+        self._real_fuel.setText(f'{fuel:.0f}%')
+        fuel_w = self._real_fuel_bar.width()
+        self._real_fuel_fill.setFixedWidth(max(0, int(fuel_w * fuel / 100)))
+
+        # Temps
+        self._real_coolant.setText(f'{coolant:.0f}\u00b0C')
+        self._real_intake.setText(f'{intake:.0f}\u00b0C')
+
+        # Lap info
+        self._real_lap_lbl.setText(f'LAP {lap_count}')
+        mins = current_time_ms // 60000
+        secs = (current_time_ms % 60000) / 1000.0
+        self._real_laptime_lbl.setText(f'{mins}:{secs:06.3f}')
+
+        if last_lap_s > 0:
+            lm = int(last_lap_s) // 60
+            ls = last_lap_s - lm * 60
+            self._real_last_lbl.setText(f'LAST  {lm}:{ls:06.3f}')
+
+        # Live graphs — keep last 200 samples (~10 sec at 20Hz)
+        max_hist = 200
+        self._real_speed_history.append(speed)
+        self._real_thr_history.append(throttle)
+        self._real_rpm_history.append(rpm)
+        if len(self._real_speed_history) > max_hist:
+            self._real_speed_history = self._real_speed_history[-max_hist:]
+        if len(self._real_thr_history) > max_hist:
+            self._real_thr_history = self._real_thr_history[-max_hist:]
+        if len(self._real_rpm_history) > max_hist:
+            self._real_rpm_history = self._real_rpm_history[-max_hist:]
+
+        # Redraw graphs every 4th tick (~5 Hz) to avoid perf issues
+        if len(self._real_speed_history) % 4 == 0:
+            for ax, hist, color in [
+                (self._real_speed_ax, self._real_speed_history, C_SPEED),
+                (self._real_thr_ax,   self._real_thr_history,   C_THROTTLE),
+                (self._real_rpm_ax,   self._real_rpm_history,   C_RPM),
+            ]:
+                ax.clear()
+                ax.set_facecolor(BG2)
+                ax.plot(hist, color=color, linewidth=1.2)
+                ax.tick_params(colors=TXT2, labelsize=7)
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+                ax.spines['left'].set_color(BORDER)
+                ax.spines['bottom'].set_color(BORDER)
+            self._real_speed_ax.set_title('SPEED', color=TXT2, fontsize=8, pad=4)
+            self._real_speed_ax.set_ylabel('km/h', color=TXT2, fontsize=7)
+            self._real_thr_ax.set_title('THROTTLE', color=TXT2, fontsize=8, pad=4)
+            self._real_thr_ax.set_ylabel('%', color=TXT2, fontsize=7)
+            self._real_rpm_ax.set_title('RPM', color=TXT2, fontsize=8, pad=4)
+            self._real_rpm_ax.set_ylabel('rpm', color=TXT2, fontsize=7)
+            self._real_speed_canvas.draw_idle()
+            self._real_thr_canvas.draw_idle()
+            self._real_rpm_canvas.draw_idle()
 
     def _build_connection_strip(self) -> QWidget:
         strip = QWidget()
@@ -2781,6 +4027,7 @@ class TelemetryApp(QMainWindow):
         self.game_combo = QComboBox()
         self.game_combo.addItems([
             'Auto-Detect', 'ACC (Shared Memory)', 'AC (UDP)', 'iRacing (SDK)',
+            'ELM327 (OBD-II)',
         ])
         self.game_combo.setFixedWidth(170)
         self.game_combo.currentTextChanged.connect(self._on_game_changed)
@@ -2851,6 +4098,29 @@ class TelemetryApp(QMainWindow):
         )
         self.import_track_btn.clicked.connect(self._import_trackmap)
         layout.addWidget(self.import_track_btn)
+
+        layout.addWidget(_vsep())
+
+        # Manual lap trigger (visible only in real racing mode)
+        self._manual_lap_btn = QPushButton('LAP')
+        self._manual_lap_btn.setFixedSize(55, 22)
+        self._manual_lap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._manual_lap_btn.setStyleSheet(
+            f'QPushButton {{ background: #0a2218; color: {C_THROTTLE};'
+            f' border: 1px solid {C_THROTTLE}; border-radius: 3px;'
+            f' font-size: 10px; font-weight: bold; letter-spacing: 1px; }}'
+            f'QPushButton:hover {{ background: #0f3322; }}'
+            f'QPushButton:pressed {{ background: #061a10; }}'
+        )
+        self._manual_lap_btn.setToolTip('Complete current lap and start next (shortcut: L)')
+        self._manual_lap_btn.clicked.connect(self._on_manual_lap)
+        self._manual_lap_btn.setVisible(False)
+        layout.addWidget(self._manual_lap_btn)
+
+        # Keyboard shortcut for lap trigger
+        self._lap_shortcut = QShortcut(QKeySequence('L'), self)
+        self._lap_shortcut.activated.connect(self._on_manual_lap)
+        self._lap_shortcut.setEnabled(False)
 
         layout.addStretch()
 
@@ -5556,6 +6826,11 @@ class TelemetryApp(QMainWindow):
             self.current_reader = self.acc_reader
         elif game == 'iRacing (SDK)':
             self.current_reader = self.ir_reader
+        elif game == 'ELM327 (OBD-II)':
+            if self.elm_reader and self.elm_reader.is_connected():
+                self.current_reader = self.elm_reader
+            else:
+                self.current_reader = None
         else:  # 'AC (UDP)'
             if self.ac_reader:
                 self.ac_reader.disconnect()
@@ -5563,7 +6838,11 @@ class TelemetryApp(QMainWindow):
             self.current_reader = self.ac_reader
 
     def _detect_game(self):
-        """Priority: ACC → iRacing → AC UDP."""
+        """Priority: ELM327 (real mode) → ACC → iRacing → AC UDP."""
+        if self._app_mode == 'real':
+            if self.elm_reader and self.elm_reader.is_connected():
+                return self.elm_reader
+            return None
         if self.acc_reader.is_connected():
             return self.acc_reader
         if self.ir_reader.is_connected():
@@ -5807,7 +7086,9 @@ class TelemetryApp(QMainWindow):
         self.current_lap_count = current_lap
         self.last_lap_time = current_time
 
-        if isinstance(self.current_reader, ACUDPReader):
+        if isinstance(self.current_reader, ELM327Reader):
+            game_type = 'OBD-II'
+        elif isinstance(self.current_reader, ACUDPReader):
             game_type = 'AC'
         elif isinstance(self.current_reader, IRacingReader):
             game_type = 'iRacing'
