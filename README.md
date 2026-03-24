@@ -1,6 +1,6 @@
 # S1napse
 
-A real-time telemetry dashboard for racing simulators. Connects directly to your sim and displays live car data, lap analysis, race strategy, and a self-building track map.
+A real-time telemetry dashboard for **sim racing** and **real racing**. Connects directly to your sim or to your car's OBD-II port via an ELM327 adapter, and displays live data, lap analysis, race strategy, and a self-building track map.
 
 ---
 
@@ -30,27 +30,51 @@ That's it. No Python, no installation, no setup.
 
 ---
 
-### Step 3 — Connect to your sim
+### Step 3 — Choose your mode
 
-1. Launch your sim first, then open S1napsse
-2. S1napsse will **auto-detect** whichever sim is running
-3. The status bar at the top will show **● CONNECTED** when it picks up data
+When S1napse launches you'll see a welcome screen with two options:
+
+#### Sim Racing
+
+1. Select **SIM RACING** and click **NEXT**
+2. Launch your sim first, then open S1napse
+3. S1napse will **auto-detect** whichever sim is running
+4. The status bar at the top will show **● CONNECTED** when it picks up data
 
 | Sim               | What to do                                                                                                                                                                            |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **ACC**           | Just launch the game — S1napsse connects automatically                                                                                                                                 |
+| **ACC**           | Just launch the game — S1napse connects automatically                                                                                                                                 |
 | **Assetto Corsa** | Enable UDP telemetry in AC's settings: `Options → General → Enable Custom Shaders Patch` is not required — just go to `Options → General` and enable **UDP telemetry** on port `9996` |
-| **iRacing**       | Launch iRacing, go to the track — S1napsse connects automatically                                                                                                                      |
+| **iRacing**       | Launch iRacing, go to the track — S1napse connects automatically                                                                                                                      |
+
+#### Real Racing (ELM327 OBD-II)
+
+1. Select **REAL RACING** and click **NEXT**
+2. Choose your connection type — **WiFi** or **Bluetooth**
+3. Enter your adapter's connection details (IP:port for WiFi, serial port for Bluetooth)
+4. Click **CONNECT** — or use **DEMO MODE** to test without hardware
+5. The real racing dashboard shows live speed, RPM, throttle, gear, fuel, and temperatures
+
+> See [REAL_RACING_GUIDE.md](REAL_RACING_GUIDE.md) for full setup instructions, adapter recommendations, and troubleshooting.
 
 ---
 
-## Supported Games
+## Supported Platforms
+
+### Sim Racing
 
 | Game                             | Windows | Mac |
 | -------------------------------- | ------- | --- |
 | Assetto Corsa Competizione (ACC) | ✅      | ❌  |
 | Assetto Corsa (AC)               | ✅      | ❌  |
 | iRacing                          | ✅      | ❌  |
+
+### Real Racing
+
+| Source                  | Windows | Mac |
+| ----------------------- | ------- | --- |
+| ELM327 OBD-II (WiFi)   | ✅      | ✅  |
+| ELM327 OBD-II (Bluetooth) | ✅   | ✅  |
 
 ---
 
@@ -89,6 +113,20 @@ Pick any two laps from your session and overlay them on the same graphs. See exa
 
 Full lap table with times, sector splits, and validity flags. Export everything to CSV with one click.
 
+### Real Racing Dashboard
+
+A dedicated single-page layout for real car telemetry via ELM327 OBD-II:
+
+- **Speed, RPM, Gear** — large hero gauges front and center
+- **Throttle** — live percentage with fill bar
+- **Fuel level** — percentage remaining with fill bar
+- **Coolant & intake temps** — engine temperature monitoring
+- **Live graphs** — scrolling speed, throttle, and RPM traces (~10 seconds of history)
+- **Manual lap trigger** — press the **LAP** button or **L** key to mark laps
+- **Lap timer** — live running time and last lap display
+
+> Standard OBD-II does not provide brake, steering, tyre, or ABS/TC data — these channels are only available in sim racing mode.
+
 ---
 
 ## Track Map
@@ -111,7 +149,7 @@ You can also press **⏺ REC** in the top bar to start/stop a recording manually
 Clone the repo and run from source:
 
 ```bash
-pip install PyQt6 matplotlib pyaccsharedmemory irsdk
+pip install PyQt6 matplotlib pyaccsharedmemory irsdk obd
 python test-listener.py
 ```
 
@@ -126,11 +164,12 @@ pyinstaller S1napsse.spec
 **Project structure:**
 
 ```
-S1napsse/
-├── test-listener.py   # Main application
-├── S1napsse.spec       # PyInstaller build config
-├── requirements.txt   # Python dependencies
-├── tracks/            # Auto-generated track JSON files
+S1napse/
+├── test-listener.py        # Main application
+├── S1napsse.spec            # PyInstaller build config
+├── requirements.txt        # Python dependencies
+├── tracks/                 # Auto-generated track JSON files
+├── REAL_RACING_GUIDE.md    # ELM327 setup & usage guide
 └── README.md
 ```
 
@@ -158,5 +197,7 @@ S1napsse/
 
 ## Notes
 
-- ACC and iRacing use shared memory — S1napsse must be running on the **same Windows PC** as the sim
+- ACC and iRacing use shared memory — S1napse must be running on the **same Windows PC** as the sim
 - AC UDP works over a local network too (change the HOST field in the top bar)
+- ELM327 OBD-II works on Windows and Mac via WiFi or Bluetooth — see [REAL_RACING_GUIDE.md](REAL_RACING_GUIDE.md)
+- OBD-II polling is slower than sim telemetry (~2-4 Hz vs 20 Hz) — this is a hardware limitation, not a bug
