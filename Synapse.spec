@@ -33,7 +33,7 @@ hidden = (
 )
 
 a = Analysis(
-    ['test-listener.py'],
+    ['s1napse.py'],
     pathex=[],
     binaries=pyqt6_binaries + mpl_binaries,
     datas=pyqt6_datas + mpl_datas,
