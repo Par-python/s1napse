@@ -18,10 +18,14 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 pyqt6_datas,    pyqt6_binaries,    pyqt6_hiddens    = collect_all('PyQt6')
 mpl_datas,      mpl_binaries,      mpl_hiddens      = collect_all('matplotlib')
 
+# ── Collect the s1napse package and all submodules ──────────────────────────
+s1napse_hiddens = collect_submodules('s1napse')
+
 # ── Hidden imports that PyInstaller misses with conditional imports ──────────
 hidden = (
     pyqt6_hiddens
     + mpl_hiddens
+    + s1napse_hiddens
     + [
         'matplotlib.backends.backend_qt5agg',
         'matplotlib.backends.backend_agg',

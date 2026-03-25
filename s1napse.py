@@ -2,7 +2,7 @@
 """S1napse telemetry dashboard — thin entry point.
 
 All application code lives in the s1napse/ package.
-Run with:  python test-listener.py
+Run with:  python s1napse.py
     or:    python -m s1napse
 """
 
