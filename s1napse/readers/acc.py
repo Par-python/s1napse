@@ -8,6 +8,7 @@ class ACCReader(TelemetryReader):
     """Assetto Corsa Competizione via pyaccsharedmemory (Windows shared memory)."""
 
     def __init__(self):
+        self._last_read_ok = False
         try:
             from pyaccsharedmemory import accSharedMemory
             self.asm = accSharedMemory()
@@ -19,11 +20,14 @@ class ACCReader(TelemetryReader):
 
     def read(self):
         if not self.available:
+            self._last_read_ok = False
             return None
         try:
             sm = self.asm.read_shared_memory()
             if sm is None:
+                self._last_read_ok = False
                 return None
+            self._last_read_ok = True
             return {
                 'speed': sm.Physics.speed_kmh,
                 'rpm': sm.Physics.rpm,
@@ -80,13 +84,18 @@ class ACCReader(TelemetryReader):
             }
         except Exception as e:
             print(f"ACC read error: {e}")
+            self._last_read_ok = False
             return None
 
     def is_connected(self):
         if not self.available:
             return False
+        if self._last_read_ok:
+            return True
+        # First-time probe
         try:
             sm = self.asm.read_shared_memory()
-            return sm is not None
+            self._last_read_ok = sm is not None
+            return self._last_read_ok
         except Exception:
             return False

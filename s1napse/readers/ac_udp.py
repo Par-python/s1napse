@@ -16,6 +16,7 @@ class ACUDPReader(TelemetryReader):
         self.socket = None
         self.connected = False
         self.latest_data = None
+        self._lock = threading.Lock()
         self.handshake_sent = False
         self.running = False
         self.listener_thread = None
@@ -60,7 +61,9 @@ class ACUDPReader(TelemetryReader):
                 if data and len(data) > 4:
                     packet_id = struct.unpack('<i', data[0:4])[0]
                     if packet_id == 2:
-                        self.latest_data = self._parse_car_info(data)
+                        parsed = self._parse_car_info(data)
+                        with self._lock:
+                            self.latest_data = parsed
             except socket.timeout:
                 continue
             except Exception:
@@ -182,7 +185,8 @@ class ACUDPReader(TelemetryReader):
         if not self.connected:
             if not self.connect():
                 return None
-        return self.latest_data
+        with self._lock:
+            return self.latest_data
 
     def is_connected(self):
         return self.connected and self.latest_data is not None

@@ -54,6 +54,49 @@ from .coaching.lap_coach import LapCoach
 from .coaching.math_engine import MathEngine
 
 
+class TelemetrySampler(threading.Thread):
+    """Background thread: reads shared memory at ~22 Hz, buffers raw dicts."""
+
+    def __init__(self):
+        super().__init__(daemon=True)
+        self._lock = threading.Lock()
+        self._buffer: list[dict] = []
+        self._latest: dict | None = None
+        self._reader = None
+        self._running = True
+
+    def set_reader(self, reader):
+        self._reader = reader
+
+    def run(self):
+        while self._running:
+            reader = self._reader
+            if reader is not None:
+                try:
+                    data = reader.read()
+                except Exception:
+                    data = None
+                if data is not None:
+                    with self._lock:
+                        self._buffer.append(data)
+                        self._latest = data
+            time.sleep(0.045)
+
+    def drain(self) -> list[dict]:
+        with self._lock:
+            buf = self._buffer
+            self._buffer = []
+            return buf
+
+    @property
+    def latest(self) -> dict | None:
+        with self._lock:
+            return self._latest
+
+    def stop(self):
+        self._running = False
+
+
 class TelemetryApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -137,10 +180,17 @@ class TelemetryApp(QMainWindow):
 
         self._init_ui()
 
-        # Fast data sampler — 20 Hz (50 ms), lightweight read + record only
-        self.timer = QTimer()
-        self.timer.timeout.connect(self._sample_telemetry)
-        self.timer.start(50)
+        # Background sampler thread — ~22 Hz shared memory reads
+        self._sampler = TelemetrySampler()
+        self._sampler.start()
+        self._empty_drain_count = 0
+
+        # Attempt initial detection immediately
+        if self.auto_detect:
+            detected = self._detect_game()
+            if detected:
+                self.current_reader = detected
+                self._sampler.set_reader(detected)
 
         # UI render timer — ~5 Hz (200 ms), all widget updates
         self._render_timer = QTimer()
@@ -4018,6 +4068,8 @@ class TelemetryApp(QMainWindow):
                 self.ac_reader.disconnect()
             self.ac_reader = ACUDPReader(self.udp_host.text(), int(self.udp_port.text()))
             self.current_reader = self.ac_reader
+        self._sampler.set_reader(self.current_reader)
+        self._empty_drain_count = 0
 
     def _detect_game(self):
         """Priority: ELM327 (real mode) → ACC → iRacing → AC UDP."""
@@ -4090,7 +4142,7 @@ class TelemetryApp(QMainWindow):
             self._finish_recording()
 
     def _finish_recording(self):
-        data = self.current_reader.read() if self.current_reader else None
+        data = self._sampler.latest
         track_name = data['track_name'] if data else 'Unknown Track'
         length_m = TRACKS.get(self._active_track_key or '', {}).get('length_m', MONZA_LENGTH_M)
 
@@ -4216,19 +4268,8 @@ class TelemetryApp(QMainWindow):
         self.steering_widget.tick_lerp()
         self._rpl_steer.tick_lerp()
 
-    def _sample_telemetry(self):
-        """Fast 20 Hz sampler — read shared memory + record data.  No UI."""
-        if self.auto_detect:
-            self.current_reader = self._detect_game()
-
-        if self.current_reader is None:
-            self._last_data = None
-            return
-
-        data = self.current_reader.read()
-        if data is None:
-            return
-
+    def _process_sample(self, data: dict):
+        """Process a single raw telemetry sample on the main thread."""
         # Lap change detection
         current_lap = data.get('lap_count', 0)
         current_time = data.get('current_time', 0)
@@ -4381,14 +4422,33 @@ class TelemetryApp(QMainWindow):
         self._last_data = data
 
     def _render_telemetry(self):
-        """~5 Hz UI render — update all widgets from cached data."""
-        data = self._last_data
-        if data is None:
+        """~5 Hz UI render — drain buffered samples, then update widgets."""
+        # ── Phase 1: Drain and process all buffered samples ──
+        samples = self._sampler.drain()
+        for s in samples:
+            self._process_sample(s)
+
+        # ── Phase 2: Connection hysteresis ──
+        if samples:
+            self._empty_drain_count = 0
+        else:
+            self._empty_drain_count += 1
+
+        if self._empty_drain_count > 5:          # >1s with no data
+            if self.auto_detect:
+                detected = self._detect_game()
+                self._sampler.set_reader(detected)
+                self.current_reader = detected
             if self.current_reader is None:
                 self.connection_dot.setStyleSheet('color: #444;')
                 self.connection_label.setText('DISCONNECTED')
                 self.connection_label.setStyleSheet(f'color: {TXT2}; letter-spacing: 0.5px;')
                 self._reset_display()
+                return
+
+        # ── Phase 3: Render UI from cached data ──
+        data = self._last_data
+        if data is None:
             return
 
         if isinstance(self.current_reader, ELM327Reader):
@@ -4739,6 +4799,11 @@ class TelemetryApp(QMainWindow):
         export_fig.tight_layout(pad=0.5)
         export_fig.savefig(file_path, dpi=150, facecolor=BG)
         QMessageBox.information(self, 'Export', f'Graphs saved to:\n{file_path}')
+
+    def closeEvent(self, event):
+        self._sampler.stop()
+        self._sampler.join(timeout=1.0)
+        super().closeEvent(event)
 
     def export_last_lap_graphs(self):
         self._export_graphs(self._get_last_lap_data(), 'Save Last Lap Graphs', 'last_lap.png')
