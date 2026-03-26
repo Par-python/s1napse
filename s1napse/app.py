@@ -2418,8 +2418,8 @@ class TelemetryApp(QMainWindow):
                 'avg_speed_kph':    _safe_avg(speeds),
                 'max_rpm':          _safe_max(rpms),
                 'avg_rpm':          _safe_avg(rpms),
-                'avg_throttle_pct': round(_safe_avg(throttles) * 100, 1),
-                'avg_brake_pct':    round(_safe_avg(brakes) * 100, 1),
+                'avg_throttle_pct': round(_safe_avg(throttles), 1),
+                'avg_brake_pct':    round(_safe_avg(brakes), 1),
                 'fuel_used_l':      fuel_used,
                 'tyre_wear_pct': {
                     'fl': round(_safe_max(d.get('tyre_wear_fl', [])) * 100, 2),
@@ -3002,7 +3002,7 @@ class TelemetryApp(QMainWindow):
         if not times:
             return
 
-        # Binary-search for closest index
+        # Binary-search for insertion point
         lo, hi = 0, len(times) - 1
         while lo < hi:
             mid = (lo + hi) // 2
@@ -3012,15 +3012,40 @@ class TelemetryApp(QMainWindow):
                 hi = mid
         idx = lo
 
-        speed    = self._replay_data.get('speed',    [0])[idx]
-        rpm      = self._replay_data.get('rpm',      [0])[idx]
-        gear     = self._replay_data.get('gear',     [1])[idx]
-        throttle = self._replay_data.get('throttle', [0])[idx]
-        brake    = self._replay_data.get('brake',    [0])[idx]
-        steer_d  = self._replay_data.get('steer_deg',[0])[idx]
-        abs_v    = self._replay_data.get('abs',      [0])[idx]
-        tc_v     = self._replay_data.get('tc',       [0])[idx]
-        dist_m   = self._replay_data.get('dist_m',   [0])[idx]
+        # Interpolate between surrounding samples for smooth playback
+        if idx > 0 and idx < len(times):
+            t0, t1 = times[idx - 1], times[idx]
+            span = t1 - t0
+            t = (self._replay_pos_ms - t0) / span if span > 0 else 0.0
+            t = max(0.0, min(1.0, t))
+            i0, i1 = idx - 1, idx
+        else:
+            t = 0.0
+            i0 = i1 = idx
+
+        def _lerp(key, default=0):
+            vals = self._replay_data.get(key, [default])
+            v0 = vals[i0] if i0 < len(vals) else default
+            v1 = vals[i1] if i1 < len(vals) else default
+            return v0 + t * (v1 - v0)
+
+        def _nearest(key, default=0):
+            vals = self._replay_data.get(key, [default])
+            pick = i1 if t >= 0.5 else i0
+            return vals[pick] if pick < len(vals) else default
+
+        # Continuous channels → lerp for smooth transitions
+        speed    = _lerp('speed')
+        rpm      = _lerp('rpm')
+        throttle = _lerp('throttle')
+        brake    = _lerp('brake')
+        steer_d  = _lerp('steer_deg')
+        dist_m   = _lerp('dist_m')
+
+        # Discrete channels → snap to nearest sample
+        gear  = _nearest('gear', 1)
+        abs_v = _nearest('abs')
+        tc_v  = _nearest('tc')
 
         # Dashboard widgets
         self._rpl_speed_lbl.setText(f'{int(speed)}')
@@ -4486,10 +4511,10 @@ class TelemetryApp(QMainWindow):
             pass  # never crash the tick loop for math channels
 
         # Cache session-level metadata for lap storage
-        self._last_car_name     = data.get('car_name', self._last_car_name)
-        self._last_track_name   = data.get('track_name', self._last_track_name)
+        self._last_car_name     = data.get('car_name', self._last_car_name).split('\x00')[0]
+        self._last_track_name   = data.get('track_name', self._last_track_name).split('\x00')[0]
         self._last_session_type = data.get('session_type', self._last_session_type)
-        self._last_tyre_compound = data.get('tyre_compound', self._last_tyre_compound)
+        self._last_tyre_compound = data.get('tyre_compound', self._last_tyre_compound).split('\x00')[0]
         self._last_air_temp     = data.get('air_temp', self._last_air_temp)
         self._last_road_temp    = data.get('road_temp', self._last_road_temp)
 
