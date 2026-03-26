@@ -18,13 +18,19 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 pyqt6_datas,    pyqt6_binaries,    pyqt6_hiddens    = collect_all('PyQt6')
 mpl_datas,      mpl_binaries,      mpl_hiddens      = collect_all('matplotlib')
 
+# ── Collect the s1napse package and all submodules ──────────────────────────
+s1napse_hiddens = collect_submodules('s1napse')
+
 # ── Hidden imports that PyInstaller misses with conditional imports ──────────
 hidden = (
     pyqt6_hiddens
     + mpl_hiddens
+    + s1napse_hiddens
     + [
         'matplotlib.backends.backend_qt5agg',
         'matplotlib.backends.backend_agg',
+        # scipy.signal used by coaching corner detector
+        'scipy.signal',
         # ACC shared memory (Windows-only, imported inside try/except)
         'pyaccsharedmemory',
         # iRacing SDK (Windows-only, imported inside try/except)
@@ -33,7 +39,7 @@ hidden = (
 )
 
 a = Analysis(
-    ['test-listener.py'],
+    ['s1napse.py'],
     pathex=[],
     binaries=pyqt6_binaries + mpl_binaries,
     datas=pyqt6_datas + mpl_datas,
@@ -44,7 +50,6 @@ a = Analysis(
     excludes=[
         # Trim unused heavy packages to keep the EXE smaller
         'tkinter',
-        'scipy',
         'numpy.distutils',
         'IPython',
         'pandas',
