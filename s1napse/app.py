@@ -202,9 +202,8 @@ class TelemetryApp(QMainWindow):
         self._anim_timer.timeout.connect(self._anim_tick)
         self._anim_timer.start(16)
 
-        # Replay playback timer (100 ms ticks, scaled by replay speed)
-        self._replay_timer = QTimer()
-        self._replay_timer.timeout.connect(self._replay_tick)
+        # Replay uses wall-clock deltas via _anim_tick (no separate timer)
+        self._replay_last_mono: float = 0.0
 
         # Real racing update timer (started when OBD connects)
         self._real_timer = QTimer()
@@ -2970,7 +2969,7 @@ class TelemetryApp(QMainWindow):
 
         # Stop any running playback
         self._replay_playing = False
-        self._replay_timer.stop()
+        self._replay_last_mono = 0.0
         self._replay_play_btn.setText('PLAY')
 
         self._replay_data = data
@@ -3157,23 +3156,10 @@ class TelemetryApp(QMainWindow):
             if self._replay_pos_ms >= self._replay_total_ms:
                 self._replay_seek(0)
             self._replay_play_btn.setText('PAUSE')
-            self._replay_timer.start(100)
+            self._replay_last_mono = time.monotonic()
         else:
             self._replay_play_btn.setText('PLAY')
-            self._replay_timer.stop()
-
-    def _replay_tick(self):
-        """Advance playback by speed * 100 ms."""
-        if not self._replay_playing or not self._replay_data:
-            return
-        advance_ms = int(self._replay_speed * 100)
-        new_pos = self._replay_pos_ms + advance_ms
-        if new_pos >= self._replay_total_ms:
-            new_pos = self._replay_total_ms
-            self._replay_playing = False
-            self._replay_play_btn.setText('PLAY')
-            self._replay_timer.stop()
-        self._replay_seek(new_pos)
+            self._replay_last_mono = 0.0
 
     def _on_replay_speed_changed(self, text: str):
         try:
@@ -4266,11 +4252,24 @@ class TelemetryApp(QMainWindow):
     # ------------------------------------------------------------------
 
     def _anim_tick(self):
-        """60 fps animation tick — smooth lerp for car dot and steering."""
+        """60 fps animation tick — smooth lerp for car dot, steering, and replay."""
         self.track_map.tick_lerp()
         self._rpl_map.tick_lerp()
         self.steering_widget.tick_lerp()
         self._rpl_steer.tick_lerp()
+
+        # Replay: advance using wall-clock delta for smooth playback
+        if self._replay_playing and self._replay_data:
+            now = time.monotonic()
+            if self._replay_last_mono > 0:
+                dt_ms = (now - self._replay_last_mono) * 1000.0 * self._replay_speed
+                new_pos = self._replay_pos_ms + dt_ms
+                if new_pos >= self._replay_total_ms:
+                    new_pos = self._replay_total_ms
+                    self._replay_playing = False
+                    self._replay_play_btn.setText('PLAY')
+                self._replay_seek(int(new_pos))
+            self._replay_last_mono = now
 
     def _process_sample(self, data: dict):
         """Process a single raw telemetry sample on the main thread."""
