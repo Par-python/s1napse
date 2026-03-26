@@ -3056,8 +3056,6 @@ class TelemetryApp(QMainWindow):
         # Track map car position
         lap_prog = (dist_m / track_len) if track_len > 0 else 0
         self._rpl_map.car_progress = max(0.0, min(1.0, lap_prog))
-        self._rpl_map._car_smooth = self._rpl_map.car_progress
-        self._rpl_map.update()
 
         # Time display
         cur_m  = int(self._replay_pos_ms // 60000)
@@ -4180,6 +4178,7 @@ class TelemetryApp(QMainWindow):
     def _anim_tick(self):
         """60 fps animation tick — smooth lerp for car dot and steering."""
         self.track_map.tick_lerp()
+        self._rpl_map.tick_lerp()
         self.steering_widget.tick_lerp()
         self._rpl_steer.tick_lerp()
 

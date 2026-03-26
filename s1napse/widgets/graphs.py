@@ -393,26 +393,39 @@ class ReplayGraph(FigureCanvas):
         self.setMinimumHeight(110)
         self.line, = self.ax.plot([], [], color=color, linewidth=1.2)
         self.vline = self.ax.axvline(0, color=WHITE, linewidth=1.0, alpha=0.7)
+        self._bg = None
 
     def set_lap_data(self, times_ms: list, values: list):
         if not times_ms:
             self.line.set_data([], [])
             self.ax.set_xlim(0, 1)
+            self._bg = None
             self.draw_idle()
             return
         times_s = [t / 1000.0 for t in times_ms]
         self.line.set_data(times_s, values)
         self.ax.set_xlim(0, max(times_s[-1], 0.001))
-        self.draw_idle()
+        self.draw()
+        self._bg = self.copy_from_bbox(self.ax.bbox)
 
     def set_playhead(self, time_ms: float):
         self.vline.set_xdata([time_ms / 1000.0])
-        self.draw_idle()
+        if self._bg is None:
+            self.draw()
+            self._bg = self.copy_from_bbox(self.ax.bbox)
+        self.restore_region(self._bg)
+        self.ax.draw_artist(self.vline)
+        self.blit(self.ax.bbox)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._bg = None
 
     def clear(self):
         self.line.set_data([], [])
         self.vline.set_xdata([0])
         self.ax.set_xlim(0, 1)
+        self._bg = None
         self.draw_idle()
 
 
@@ -432,27 +445,40 @@ class ReplayMultiGraph(FigureCanvas):
         self.line2, = self.ax.plot([], [], color=color2, linewidth=1.2, label=label2)
         self.ax.legend(fontsize=7, framealpha=0, loc='upper right', labelcolor=TXT2)
         self.vline = self.ax.axvline(0, color=WHITE, linewidth=1.0, alpha=0.7)
+        self._bg = None
 
     def set_lap_data(self, times_ms: list, vals1: list, vals2: list):
         if not times_ms:
             self.line1.set_data([], [])
             self.line2.set_data([], [])
             self.ax.set_xlim(0, 1)
+            self._bg = None
             self.draw_idle()
             return
         times_s = [t / 1000.0 for t in times_ms]
         self.line1.set_data(times_s, vals1)
         self.line2.set_data(times_s, vals2)
         self.ax.set_xlim(0, max(times_s[-1], 0.001))
-        self.draw_idle()
+        self.draw()
+        self._bg = self.copy_from_bbox(self.ax.bbox)
 
     def set_playhead(self, time_ms: float):
         self.vline.set_xdata([time_ms / 1000.0])
-        self.draw_idle()
+        if self._bg is None:
+            self.draw()
+            self._bg = self.copy_from_bbox(self.ax.bbox)
+        self.restore_region(self._bg)
+        self.ax.draw_artist(self.vline)
+        self.blit(self.ax.bbox)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._bg = None
 
     def clear(self):
         self.line1.set_data([], [])
         self.line2.set_data([], [])
         self.vline.set_xdata([0])
         self.ax.set_xlim(0, 1)
+        self._bg = None
         self.draw_idle()
