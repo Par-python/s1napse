@@ -138,9 +138,9 @@ class TelemetryApp(QMainWindow):
         self.timer.timeout.connect(self._update_telemetry)
         self.timer.start(50)
 
-        # 60 fps animation timer — smooth car dot lerp (does NOT read telemetry)
+        # 60 fps animation timer — smooth lerp for car dot + steering
         self._anim_timer = QTimer()
-        self._anim_timer.timeout.connect(self.track_map.tick_lerp)
+        self._anim_timer.timeout.connect(self._anim_tick)
         self._anim_timer.start(16)
 
         # Replay playback timer (100 ms ticks, scaled by replay speed)
@@ -4177,6 +4177,12 @@ class TelemetryApp(QMainWindow):
     # TELEMETRY UPDATE LOOP
     # ------------------------------------------------------------------
 
+    def _anim_tick(self):
+        """60 fps animation tick — smooth lerp for car dot and steering."""
+        self.track_map.tick_lerp()
+        self.steering_widget.tick_lerp()
+        self._rpl_steer.tick_lerp()
+
     def _update_telemetry(self):
         if self.auto_detect:
             self.current_reader = self._detect_game()
@@ -4358,15 +4364,18 @@ class TelemetryApp(QMainWindow):
         self._last_gap_behind = data.get('gap_behind', 0)
         self._update_race_tab(data)
 
-        # ── Graph updates ────────────────────────────────────────────────
+        # ── Graph updates (only render when visible) ──────────────────────
         steer_deg = math.degrees(data['steer_angle'])
-        self.speed_graph.update_data(data['speed'])
-        self.pedals_graph.update_data(data['throttle'], data['brake'])
-        self.steering_graph.update_data(steer_deg)
-        self.rpm_graph.update_data(rpm)
         gear_int = gear if isinstance(gear, int) else 0
-        self.gear_graph.update_data(gear_int)
-        self.aids_graph.update_data(data['abs'], data['tc'])
+        _current_tab = self.tabs.currentIndex()
+
+        if _current_tab == 1:  # TELEMETRY GRAPHS
+            self.speed_graph.update_data(data['speed'])
+            self.pedals_graph.update_data(data['throttle'], data['brake'])
+            self.steering_graph.update_data(steer_deg)
+            self.rpm_graph.update_data(rpm)
+            self.gear_graph.update_data(gear_int)
+            self.aids_graph.update_data(data['abs'], data['tc'])
 
         # ── Lap Analysis updates ─────────────────────────────────────────
         # iRacing provides exact lap fraction; other sims estimate from time.
@@ -4398,11 +4407,12 @@ class TelemetryApp(QMainWindow):
             )
             self.rec_label.setText(f'{self.recorder.sample_count} pts')
 
-        self.ana_speed.update_data(distance_m, data['speed'])
-        self.ana_throttle_brake.update_data(distance_m, data['throttle'], data['brake'])
-        self.ana_gear.update_data(distance_m, gear_int)
-        self.ana_rpm.update_data(distance_m, rpm)
-        self.ana_steer.update_data(distance_m, steer_deg)
+        if _current_tab == 2:  # LAP ANALYSIS
+            self.ana_speed.update_data(distance_m, data['speed'])
+            self.ana_throttle_brake.update_data(distance_m, data['throttle'], data['brake'])
+            self.ana_gear.update_data(distance_m, gear_int)
+            self.ana_rpm.update_data(distance_m, rpm)
+            self.ana_steer.update_data(distance_m, steer_deg)
 
         # ── Store raw lap data ───────────────────────────────────────────
         self.current_lap_data['time_ms'].append(current_time)
@@ -4471,7 +4481,8 @@ class TelemetryApp(QMainWindow):
         self._math_engine.set_raw_channels(set(_math_raw.keys()))
         try:
             _math_vals = self._math_engine.evaluate(_math_raw, time.monotonic())
-            self._update_math_graphs(_math_vals)
+            if _current_tab == 1:  # TELEMETRY GRAPHS
+                self._update_math_graphs(_math_vals)
         except Exception:
             pass  # never crash the tick loop for math channels
 
@@ -4489,12 +4500,13 @@ class TelemetryApp(QMainWindow):
                                          distance_m)
             if ref_t is not None:
                 self._current_deltas.append((current_time - ref_t) / 1000.0)
-            n_d = min(len(self.current_lap_data['dist_m']), len(self._current_deltas))
-            self.time_delta_graph.update_data(
-                self.current_lap_data['dist_m'][:n_d],
-                self._current_deltas[:n_d],
-                distance_m)
-        else:
+            if _current_tab == 2:  # LAP ANALYSIS
+                n_d = min(len(self.current_lap_data['dist_m']), len(self._current_deltas))
+                self.time_delta_graph.update_data(
+                    self.current_lap_data['dist_m'][:n_d],
+                    self._current_deltas[:n_d],
+                    distance_m)
+        elif _current_tab == 2:
             self.time_delta_graph.update_data([], [], distance_m)
 
         # ── Sector panel ─────────────────────────────────────────────────

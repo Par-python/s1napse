@@ -155,12 +155,23 @@ class SteeringWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.angle = 0.0
+        self._target = 0.0
+        self._smooth = 0.0
         self.setMinimumSize(140, 140)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
+    @property
+    def angle(self) -> float:
+        return self._smooth
+
     def set_angle(self, angle: float):
-        self.angle = angle
+        self._target = angle
+
+    def tick_lerp(self):
+        diff = self._target - self._smooth
+        if abs(diff) < 0.001:
+            return
+        self._smooth += diff * 0.25
         self.update()
 
     def paintEvent(self, event):
@@ -172,7 +183,7 @@ class SteeringWidget(QWidget):
         text_h = 18
         radius = min(cx, cy - text_h // 2) - 6
 
-        angle_deg = math.degrees(self.angle)
+        angle_deg = math.degrees(self._smooth)
         abs_deg = abs(angle_deg)
 
         if abs_deg < 90:
@@ -201,7 +212,7 @@ class SteeringWidget(QWidget):
         painter.setPen(spoke_pen)
         spoke_len = radius - 8
         for offset_deg in [0, 120, 240]:
-            rad = math.radians(offset_deg) + self.angle
+            rad = math.radians(offset_deg) + self._smooth
             ex = cx + spoke_len * math.sin(rad)
             ey = cy - spoke_len * math.cos(rad)
             painter.drawLine(cx, cy, int(ex), int(ey))
@@ -225,12 +236,23 @@ class SteeringBar(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.angle = 0.0
+        self._target = 0.0
+        self._smooth = 0.0
         self.setFixedHeight(22)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
+    @property
+    def angle(self) -> float:
+        return self._smooth
+
     def set_angle(self, angle: float):
-        self.angle = angle
+        self._target = angle
+
+    def tick_lerp(self):
+        diff = self._target - self._smooth
+        if abs(diff) < 0.001:
+            return
+        self._smooth += diff * 0.25
         self.update()
 
     def paintEvent(self, event):
@@ -239,7 +261,7 @@ class SteeringBar(QWidget):
         w, h = self.width(), self.height()
         cx, cy = w // 2, h // 2
 
-        deg = math.degrees(self.angle)
+        deg = math.degrees(self._smooth)
         t = max(-1.0, min(1.0, deg / 270.0))
         ix = int(cx + t * (cx - 14))
 

@@ -141,7 +141,9 @@ class TrackMapWidget(QWidget):
             diff -= 1.0
         elif diff < -0.5:
             diff += 1.0
-        self._car_smooth = (self._car_smooth + diff * 0.20) % 1.0
+        if abs(diff) < 1e-5:
+            return  # no visible change, skip repaint
+        self._car_smooth = (self._car_smooth + diff * 0.35) % 1.0
         self.update()
 
     def reset(self):
