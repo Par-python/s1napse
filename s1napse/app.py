@@ -109,6 +109,9 @@ class TelemetryApp(QMainWindow):
         self._last_air_temp: float = 0.0
         self._last_road_temp: float = 0.0
 
+        # Cached telemetry data — written by fast sampler, read by render timer
+        self._last_data: dict | None = None
+
         # Track recorder
         self.recorder = TrackRecorder()
 
@@ -134,9 +137,15 @@ class TelemetryApp(QMainWindow):
 
         self._init_ui()
 
+        # Fast data sampler — 20 Hz (50 ms), lightweight read + record only
         self.timer = QTimer()
-        self.timer.timeout.connect(self._update_telemetry)
+        self.timer.timeout.connect(self._sample_telemetry)
         self.timer.start(50)
+
+        # UI render timer — ~5 Hz (200 ms), all widget updates
+        self._render_timer = QTimer()
+        self._render_timer.timeout.connect(self._render_telemetry)
+        self._render_timer.start(200)
 
         # 60 fps animation timer — smooth lerp for car dot + steering
         self._anim_timer = QTimer()
@@ -4207,22 +4216,17 @@ class TelemetryApp(QMainWindow):
         self.steering_widget.tick_lerp()
         self._rpl_steer.tick_lerp()
 
-    def _update_telemetry(self):
+    def _sample_telemetry(self):
+        """Fast 20 Hz sampler — read shared memory + record data.  No UI."""
         if self.auto_detect:
             self.current_reader = self._detect_game()
 
         if self.current_reader is None:
-            self.connection_dot.setStyleSheet('color: #444;')
-            self.connection_label.setText('DISCONNECTED')
-            self.connection_label.setStyleSheet(f'color: {TXT2}; letter-spacing: 0.5px;')
-            self._reset_display()
+            self._last_data = None
             return
 
         data = self.current_reader.read()
         if data is None:
-            self.connection_dot.setStyleSheet('color: #8a4a00;')
-            self.connection_label.setText('CONNECTION LOST')
-            self.connection_label.setStyleSheet(f'color: {C_ABS}; letter-spacing: 0.5px;')
             return
 
         # Lap change detection
@@ -4252,13 +4256,12 @@ class TelemetryApp(QMainWindow):
             self._fuel_at_lap_start = _fuel_now
             self._math_engine.on_lap_complete()
             self._store_completed_lap()
-            self._current_lap_had_pit_exit = False  # reset for new lap
-            self._current_lap_valid = True           # reset validity for new lap
+            self._current_lap_had_pit_exit = False
+            self._current_lap_valid = True
             self._tyre_stint_laps += 1
             self._reset_graphs()
             self._reset_analysis_graphs()
             self._reset_current_lap_data()
-            # Snapshot math engine lap start values
             try:
                 self._math_engine.on_lap_start({
                     'speed': data['speed'], 'throttle': data['throttle'],
@@ -4268,12 +4271,125 @@ class TelemetryApp(QMainWindow):
                 pass
             display_lap = current_lap if current_lap > 0 else 1
             self.header_lap_label.setText(f'LAP {display_lap}')
-            # Auto-save recording on lap completion
             if self.recorder.recording and self.recorder.sample_count >= TrackRecorder.MIN_SAMPLES:
-                self.rec_btn.setChecked(False)  # triggers _on_rec_toggled → _finish_recording
+                self.rec_btn.setChecked(False)
 
         self.current_lap_count = current_lap
         self.last_lap_time = current_time
+
+        # ── Compute lap progress & distance (needed for data recording) ──
+        lap_dur_ms = 90000
+        if 'lap_dist_pct' in data and data['lap_dist_pct'] > 0:
+            lap_progress = float(data['lap_dist_pct'])
+        else:
+            lap_progress = min(1.0, current_time / lap_dur_ms) if lap_dur_ms > 0 else 0
+        _track_length_m = TRACKS.get(self._active_track_key or '', {}).get('length_m', MONZA_LENGTH_M)
+        distance_m = lap_progress * _track_length_m
+
+        # ── Track map (lightweight — no Qt paint, just data) ─────────────
+        self.track_map.update_telemetry(lap_progress, data['throttle'], data['brake'])
+        if self.current_lap_count >= 1 and self._current_lap_valid:
+            self.track_map.feed_world_pos(
+                lap_progress,
+                data.get('world_x', 0.0),
+                data.get('world_z', 0.0),
+            )
+
+        # Feed recorder
+        if self.recorder.recording:
+            self.recorder.feed(
+                lap_progress,
+                data.get('world_x', 0.0),
+                data.get('world_z', 0.0),
+            )
+
+        # Seed fuel-at-lap-start on first telemetry tick
+        fuel = data.get('fuel', 0.0)
+        if self._fuel_at_lap_start is None and fuel > 0:
+            self._fuel_at_lap_start = fuel
+
+        # ── Store raw lap data ───────────────────────────────────────────
+        gear = data['gear']
+        gear_int = gear if isinstance(gear, int) else 0
+        steer_deg = math.degrees(data['steer_angle'])
+        rpm = data['rpm']
+
+        self.current_lap_data['time_ms'].append(current_time)
+        self.current_lap_data['dist_m'].append(distance_m)
+        self.current_lap_data['speed'].append(data['speed'])
+        self.current_lap_data['throttle'].append(data['throttle'])
+        self.current_lap_data['brake'].append(data['brake'])
+        self.current_lap_data['steer_deg'].append(steer_deg)
+        self.current_lap_data['rpm'].append(rpm)
+        self.current_lap_data['gear'].append(gear_int)
+        self.current_lap_data['abs'].append(data['abs'])
+        self.current_lap_data['tc'].append(data['tc'])
+        _raw_bias = data.get('brake_bias', 0.0)
+        if 0.0 < _raw_bias <= 1.0:
+            _bias_pct = round(_raw_bias * 100, 2)
+        elif 50.0 <= _raw_bias <= 80.0:
+            _bias_pct = round(_raw_bias, 2)
+        else:
+            _bias_pct = 0.0
+        self.current_lap_data['fuel_l'].append(round(fuel, 3))
+        self.current_lap_data['brake_bias_pct'].append(_bias_pct)
+        self.current_lap_data['world_x'].append(round(data.get('world_x', 0.0), 2))
+        self.current_lap_data['world_z'].append(round(data.get('world_z', 0.0), 2))
+        self.current_lap_data['air_temp'].append(round(data.get('air_temp', 0.0), 1))
+        self.current_lap_data['road_temp'].append(round(data.get('road_temp', 0.0), 1))
+        _tt = data.get('tyre_temp', [0.0, 0.0, 0.0, 0.0])
+        self.current_lap_data['tyre_temp_fl'].append(round(_tt[0], 1))
+        self.current_lap_data['tyre_temp_fr'].append(round(_tt[1], 1))
+        self.current_lap_data['tyre_temp_rl'].append(round(_tt[2], 1))
+        self.current_lap_data['tyre_temp_rr'].append(round(_tt[3], 1))
+        _tp = data.get('tyre_pressure', [0.0, 0.0, 0.0, 0.0])
+        self.current_lap_data['tyre_pressure_fl'].append(round(_tp[0], 2))
+        self.current_lap_data['tyre_pressure_fr'].append(round(_tp[1], 2))
+        self.current_lap_data['tyre_pressure_rl'].append(round(_tp[2], 2))
+        self.current_lap_data['tyre_pressure_rr'].append(round(_tp[3], 2))
+        _bt = data.get('brake_temp', [0.0, 0.0, 0.0, 0.0])
+        self.current_lap_data['brake_temp_fl'].append(round(_bt[0], 1))
+        self.current_lap_data['brake_temp_fr'].append(round(_bt[1], 1))
+        self.current_lap_data['brake_temp_rl'].append(round(_bt[2], 1))
+        self.current_lap_data['brake_temp_rr'].append(round(_bt[3], 1))
+        _tw = data.get('tyre_wear', [0.0, 0.0, 0.0, 0.0])
+        self.current_lap_data['tyre_wear_fl'].append(round(_tw[0], 4))
+        self.current_lap_data['tyre_wear_fr'].append(round(_tw[1], 4))
+        self.current_lap_data['tyre_wear_rl'].append(round(_tw[2], 4))
+        self.current_lap_data['tyre_wear_rr'].append(round(_tw[3], 4))
+
+        # ── Delta vs reference lap (data part only) ──────────────────────
+        if self._ref_lap_dists:
+            ref_t = _interp_time_at_dist(self._ref_lap_dists, self._ref_lap_times,
+                                         distance_m)
+            if ref_t is not None:
+                self._current_deltas.append((current_time - ref_t) / 1000.0)
+
+        # Cache session-level metadata for lap storage
+        self._last_car_name     = data.get('car_name', self._last_car_name).split('\x00')[0]
+        self._last_track_name   = data.get('track_name', self._last_track_name).split('\x00')[0]
+        self._last_session_type = data.get('session_type', self._last_session_type)
+        self._last_tyre_compound = data.get('tyre_compound', self._last_tyre_compound).split('\x00')[0]
+        self._last_air_temp     = data.get('air_temp', self._last_air_temp)
+        self._last_road_temp    = data.get('road_temp', self._last_road_temp)
+
+        self._last_known_fuel = fuel
+        self._last_gap_ahead  = data.get('gap_ahead', 0)
+        self._last_gap_behind = data.get('gap_behind', 0)
+
+        # Cache for the render timer
+        self._last_data = data
+
+    def _render_telemetry(self):
+        """~5 Hz UI render — update all widgets from cached data."""
+        data = self._last_data
+        if data is None:
+            if self.current_reader is None:
+                self.connection_dot.setStyleSheet('color: #444;')
+                self.connection_label.setText('DISCONNECTED')
+                self.connection_label.setStyleSheet(f'color: {TXT2}; letter-spacing: 0.5px;')
+                self._reset_display()
+            return
 
         if isinstance(self.current_reader, ELM327Reader):
             game_type = 'OBD-II'
@@ -4338,12 +4454,8 @@ class TelemetryApp(QMainWindow):
         self._road_temp_lbl.setText(f'{road_t:.1f}°C' if road_t else '—')
         self._update_tyre_insights(t_temps, t_pres, road_t)
 
-        fuel = data['fuel']
+        fuel = data.get('fuel', 0.0)
         self._fuel_lbl.setText(f"{fuel:.1f}")
-
-        # Seed fuel-at-lap-start on first telemetry tick
-        if self._fuel_at_lap_start is None and fuel > 0:
-            self._fuel_at_lap_start = fuel
 
         # Fuel strategy sub-labels
         if self._fuel_per_lap_history:
@@ -4383,10 +4495,11 @@ class TelemetryApp(QMainWindow):
             s = lt % 60
             self._laptime_lbl.setText(f'{m}:{s:06.3f}')
 
-        self._last_known_fuel = data.get('fuel', 0.0)
-        self._last_gap_ahead  = data.get('gap_ahead', 0)
-        self._last_gap_behind = data.get('gap_behind', 0)
         self._update_race_tab(data)
+
+        # Recorder label
+        if self.recorder.recording:
+            self.rec_label.setText(f'{self.recorder.sample_count} pts')
 
         # ── Graph updates (only render when visible) ──────────────────────
         steer_deg = math.degrees(data['steer_angle'])
@@ -4401,8 +4514,8 @@ class TelemetryApp(QMainWindow):
             self.gear_graph.update_data(gear_int)
             self.aids_graph.update_data(data['abs'], data['tc'])
 
-        # ── Lap Analysis updates ─────────────────────────────────────────
-        # iRacing provides exact lap fraction; other sims estimate from time.
+        # ── Lap Analysis graphs ──────────────────────────────────────────
+        current_time = data.get('current_time', 0)
         lap_dur_ms = 90000
         if 'lap_dist_pct' in data and data['lap_dist_pct'] > 0:
             lap_progress = float(data['lap_dist_pct'])
@@ -4410,26 +4523,6 @@ class TelemetryApp(QMainWindow):
             lap_progress = min(1.0, current_time / lap_dur_ms) if lap_dur_ms > 0 else 0
         _track_length_m = TRACKS.get(self._active_track_key or '', {}).get('length_m', MONZA_LENGTH_M)
         distance_m = lap_progress * _track_length_m
-        self.track_map.update_telemetry(lap_progress, data['throttle'], data['brake'])
-        # Only accumulate track shape after the outlap and during valid laps.
-        # current_lap_count >= 1 skips the outlap from pits.
-        # _current_lap_valid latches to False the moment ACC marks the lap
-        # invalid (off-track / track limits) and stays False until next lap.
-        if self.current_lap_count >= 1 and self._current_lap_valid:
-            self.track_map.feed_world_pos(
-                lap_progress,
-                data.get('world_x', 0.0),
-                data.get('world_z', 0.0),
-            )
-
-        # Feed recorder
-        if self.recorder.recording:
-            self.recorder.feed(
-                lap_progress,
-                data.get('world_x', 0.0),
-                data.get('world_z', 0.0),
-            )
-            self.rec_label.setText(f'{self.recorder.sample_count} pts')
 
         if _current_tab == 2:  # LAP ANALYSIS
             self.ana_speed.update_data(distance_m, data['speed'])
@@ -4438,18 +4531,11 @@ class TelemetryApp(QMainWindow):
             self.ana_rpm.update_data(distance_m, rpm)
             self.ana_steer.update_data(distance_m, steer_deg)
 
-        # ── Store raw lap data ───────────────────────────────────────────
-        self.current_lap_data['time_ms'].append(current_time)
-        self.current_lap_data['dist_m'].append(distance_m)
-        self.current_lap_data['speed'].append(data['speed'])
-        self.current_lap_data['throttle'].append(data['throttle'])
-        self.current_lap_data['brake'].append(data['brake'])
-        self.current_lap_data['steer_deg'].append(steer_deg)
-        self.current_lap_data['rpm'].append(rpm)
-        self.current_lap_data['gear'].append(gear_int)
-        self.current_lap_data['abs'].append(data['abs'])
-        self.current_lap_data['tc'].append(data['tc'])
-        # Extended fields
+        # ── Math channel evaluation ────────────────────────────────────────
+        _tt = data.get('tyre_temp', [0.0, 0.0, 0.0, 0.0])
+        _tp = data.get('tyre_pressure', [0.0, 0.0, 0.0, 0.0])
+        _bt = data.get('brake_temp', [0.0, 0.0, 0.0, 0.0])
+        _tw = data.get('tyre_wear', [0.0, 0.0, 0.0, 0.0])
         _raw_bias = data.get('brake_bias', 0.0)
         if 0.0 < _raw_bias <= 1.0:
             _bias_pct = round(_raw_bias * 100, 2)
@@ -4457,34 +4543,6 @@ class TelemetryApp(QMainWindow):
             _bias_pct = round(_raw_bias, 2)
         else:
             _bias_pct = 0.0
-        self.current_lap_data['fuel_l'].append(round(data.get('fuel', 0.0), 3))
-        self.current_lap_data['brake_bias_pct'].append(_bias_pct)
-        self.current_lap_data['world_x'].append(round(data.get('world_x', 0.0), 2))
-        self.current_lap_data['world_z'].append(round(data.get('world_z', 0.0), 2))
-        self.current_lap_data['air_temp'].append(round(data.get('air_temp', 0.0), 1))
-        self.current_lap_data['road_temp'].append(round(data.get('road_temp', 0.0), 1))
-        _tt = data.get('tyre_temp', [0.0, 0.0, 0.0, 0.0])
-        self.current_lap_data['tyre_temp_fl'].append(round(_tt[0], 1))
-        self.current_lap_data['tyre_temp_fr'].append(round(_tt[1], 1))
-        self.current_lap_data['tyre_temp_rl'].append(round(_tt[2], 1))
-        self.current_lap_data['tyre_temp_rr'].append(round(_tt[3], 1))
-        _tp = data.get('tyre_pressure', [0.0, 0.0, 0.0, 0.0])
-        self.current_lap_data['tyre_pressure_fl'].append(round(_tp[0], 2))
-        self.current_lap_data['tyre_pressure_fr'].append(round(_tp[1], 2))
-        self.current_lap_data['tyre_pressure_rl'].append(round(_tp[2], 2))
-        self.current_lap_data['tyre_pressure_rr'].append(round(_tp[3], 2))
-        _bt = data.get('brake_temp', [0.0, 0.0, 0.0, 0.0])
-        self.current_lap_data['brake_temp_fl'].append(round(_bt[0], 1))
-        self.current_lap_data['brake_temp_fr'].append(round(_bt[1], 1))
-        self.current_lap_data['brake_temp_rl'].append(round(_bt[2], 1))
-        self.current_lap_data['brake_temp_rr'].append(round(_bt[3], 1))
-        _tw = data.get('tyre_wear', [0.0, 0.0, 0.0, 0.0])
-        self.current_lap_data['tyre_wear_fl'].append(round(_tw[0], 4))
-        self.current_lap_data['tyre_wear_fr'].append(round(_tw[1], 4))
-        self.current_lap_data['tyre_wear_rl'].append(round(_tw[2], 4))
-        self.current_lap_data['tyre_wear_rr'].append(round(_tw[3], 4))
-
-        # ── Math channel evaluation ────────────────────────────────────────
         _math_raw = {
             'speed': data['speed'], 'throttle': data['throttle'],
             'brake': data['brake'], 'steer_deg': steer_deg,
@@ -4510,20 +4568,8 @@ class TelemetryApp(QMainWindow):
         except Exception:
             pass  # never crash the tick loop for math channels
 
-        # Cache session-level metadata for lap storage
-        self._last_car_name     = data.get('car_name', self._last_car_name).split('\x00')[0]
-        self._last_track_name   = data.get('track_name', self._last_track_name).split('\x00')[0]
-        self._last_session_type = data.get('session_type', self._last_session_type)
-        self._last_tyre_compound = data.get('tyre_compound', self._last_tyre_compound).split('\x00')[0]
-        self._last_air_temp     = data.get('air_temp', self._last_air_temp)
-        self._last_road_temp    = data.get('road_temp', self._last_road_temp)
-
-        # ── Delta vs reference lap ────────────────────────────────────────
+        # ── Delta graph render ───────────────────────────────────────────
         if self._ref_lap_dists:
-            ref_t = _interp_time_at_dist(self._ref_lap_dists, self._ref_lap_times,
-                                         distance_m)
-            if ref_t is not None:
-                self._current_deltas.append((current_time - ref_t) / 1000.0)
             if _current_tab == 2:  # LAP ANALYSIS
                 n_d = min(len(self.current_lap_data['dist_m']), len(self._current_deltas))
                 self.time_delta_graph.update_data(
