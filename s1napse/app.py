@@ -49,7 +49,9 @@ from .widgets import (
 )
 from .widgets.graphs import _style_ax
 from .widgets.coach_tab import CoachTab
+from .widgets.math_channel_panel import MathChannelPanel
 from .coaching.lap_coach import LapCoach
+from .coaching.math_engine import MathEngine
 
 
 class TelemetryApp(QMainWindow):
@@ -112,6 +114,9 @@ class TelemetryApp(QMainWindow):
 
         # Coaching engine
         self._lap_coach = LapCoach()
+
+        # Math channel engine
+        self._math_engine = MathEngine()
 
         # Reference lap for delta / sector comparison (last completed lap)
         self._ref_lap_dists: list[float] = []
@@ -189,6 +194,16 @@ class TelemetryApp(QMainWindow):
 
         self.coach_tab = CoachTab()
         self.tabs.addTab(self.coach_tab, 'COACH')
+
+        # Math channel panel (side panel on graphs tab, initialized after UI)
+        self._math_panel = MathChannelPanel(self._math_engine)
+        self._math_panel.hide()
+        self._math_panel.initialize()
+        self._math_panel.start()
+        self._math_panel.channels_changed.connect(self._sync_math_graphs)
+        self._math_panel.visibility_changed.connect(
+            lambda _n, _v: self._sync_math_graphs())
+        self._sync_math_graphs()
 
         self._stack.addWidget(main_page)
 
@@ -1554,6 +1569,23 @@ class TelemetryApp(QMainWindow):
 
         # Export buttons — right-aligned
         btn_row = QHBoxLayout()
+
+        # Math channel toggle button
+        _math_btn_style = (
+            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
+            f' border-radius: 4px; padding: 5px 12px; font-size: 10px; letter-spacing: 0.5px; }}'
+            f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
+            f'QPushButton:checked {{ color: {C_SPEED}; border-color: {C_SPEED}; background: #0d2a3a; }}'
+        )
+        self._math_toggle_btn = QPushButton('\U0001f9ee  MATH CHANNELS')
+        self._math_toggle_btn.setFont(sans(8, bold=True))
+        self._math_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._math_toggle_btn.setStyleSheet(_math_btn_style)
+        self._math_toggle_btn.setCheckable(True)
+        self._math_toggle_btn.setToolTip('Open the math channel manager')
+        self._math_toggle_btn.toggled.connect(self._toggle_math_panel)
+        btn_row.addWidget(self._math_toggle_btn)
+
         btn_row.addStretch()
         self.export_last_lap_button = QPushButton('EXPORT LAP')
         self.export_last_lap_button.clicked.connect(self.export_last_lap_graphs)
@@ -1590,7 +1622,9 @@ class TelemetryApp(QMainWindow):
         btn_row.addWidget(export_full_btn)
         outer.addLayout(btn_row)
 
-        # Scroll area for graphs
+        # Scroll area for graphs + math panel in a horizontal splitter
+        self._graphs_splitter = QSplitter(Qt.Orientation.Horizontal)
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -1601,7 +1635,9 @@ class TelemetryApp(QMainWindow):
         vbox.setContentsMargins(4, 8, 4, 8)
         vbox.setSpacing(10)
         scroll.setWidget(container)
-        outer.addWidget(scroll)
+
+        self._graphs_splitter.addWidget(scroll)
+        outer.addWidget(self._graphs_splitter)
 
         self.speed_graph_title = _channel_header(C_SPEED, 'SPEED', 'km/h')
         vbox.addWidget(self.speed_graph_title)
@@ -1639,6 +1675,11 @@ class TelemetryApp(QMainWindow):
         self.aids_graph = MultiChannelGraph(
             C_ABS, C_TC, 'activity', 'ABS', 'TC', ylim=(0, 10))
         vbox.addWidget(self.aids_graph)
+
+        # Placeholder container for dynamically-added math channel graphs
+        self._math_graphs_container = QVBoxLayout()
+        vbox.addLayout(self._math_graphs_container)
+        self._math_graph_widgets: dict[str, tuple[QWidget, ChannelGraph]] = {}
 
         return tab
 
@@ -4179,6 +4220,7 @@ class TelemetryApp(QMainWindow):
             if self._fuel_at_lap_start is not None and 0 < _fuel_now < self._fuel_at_lap_start:
                 self._fuel_per_lap_history.append(self._fuel_at_lap_start - _fuel_now)
             self._fuel_at_lap_start = _fuel_now
+            self._math_engine.on_lap_complete()
             self._store_completed_lap()
             self._current_lap_had_pit_exit = False  # reset for new lap
             self._current_lap_valid = True           # reset validity for new lap
@@ -4186,6 +4228,14 @@ class TelemetryApp(QMainWindow):
             self._reset_graphs()
             self._reset_analysis_graphs()
             self._reset_current_lap_data()
+            # Snapshot math engine lap start values
+            try:
+                self._math_engine.on_lap_start({
+                    'speed': data['speed'], 'throttle': data['throttle'],
+                    'brake': data['brake'], 'fuel_l': data.get('fuel', 0.0),
+                })
+            except Exception:
+                pass
             display_lap = current_lap if current_lap > 0 else 1
             self.header_lap_label.setText(f'LAP {display_lap}')
             # Auto-save recording on lap completion
@@ -4399,6 +4449,32 @@ class TelemetryApp(QMainWindow):
         self.current_lap_data['tyre_wear_fr'].append(round(_tw[1], 4))
         self.current_lap_data['tyre_wear_rl'].append(round(_tw[2], 4))
         self.current_lap_data['tyre_wear_rr'].append(round(_tw[3], 4))
+
+        # ── Math channel evaluation ────────────────────────────────────────
+        _math_raw = {
+            'speed': data['speed'], 'throttle': data['throttle'],
+            'brake': data['brake'], 'steer_deg': steer_deg,
+            'rpm': float(rpm), 'gear': float(gear_int),
+            'abs': data['abs'], 'tc': data['tc'],
+            'fuel_l': data.get('fuel', 0.0), 'brake_bias_pct': _bias_pct,
+            'air_temp': data.get('air_temp', 0.0),
+            'road_temp': data.get('road_temp', 0.0),
+            'tyre_temp_fl': _tt[0], 'tyre_temp_fr': _tt[1],
+            'tyre_temp_rl': _tt[2], 'tyre_temp_rr': _tt[3],
+            'tyre_pressure_fl': _tp[0], 'tyre_pressure_fr': _tp[1],
+            'tyre_pressure_rl': _tp[2], 'tyre_pressure_rr': _tp[3],
+            'brake_temp_fl': _bt[0], 'brake_temp_fr': _bt[1],
+            'brake_temp_rl': _bt[2], 'brake_temp_rr': _bt[3],
+            'tyre_wear_fl': _tw[0], 'tyre_wear_fr': _tw[1],
+            'tyre_wear_rl': _tw[2], 'tyre_wear_rr': _tw[3],
+        }
+        self._math_engine.set_raw_channels(set(_math_raw.keys()))
+        try:
+            _math_vals = self._math_engine.evaluate(_math_raw, time.monotonic())
+            self._update_math_graphs(_math_vals)
+        except Exception:
+            pass  # never crash the tick loop for math channels
+
         # Cache session-level metadata for lap storage
         self._last_car_name     = data.get('car_name', self._last_car_name)
         self._last_track_name   = data.get('track_name', self._last_track_name)
@@ -4439,6 +4515,45 @@ class TelemetryApp(QMainWindow):
     # GRAPH RESET
     # ------------------------------------------------------------------
 
+    def _toggle_math_panel(self, checked: bool) -> None:
+        if checked:
+            self._graphs_splitter.addWidget(self._math_panel)
+            self._math_panel.show()
+            self._math_panel.rebuild_list()
+        else:
+            self._math_panel.hide()
+
+    def _sync_math_graphs(self) -> None:
+        """Ensure a live graph widget exists for each visible math channel."""
+        visible = {
+            ch.name: ch for ch in self._math_engine.get_all_channels()
+            if ch.visible
+        }
+        # Remove graphs for channels no longer visible
+        for name in list(self._math_graph_widgets):
+            if name not in visible:
+                hdr, graph = self._math_graph_widgets.pop(name)
+                hdr.setParent(None)
+                hdr.deleteLater()
+                graph.setParent(None)
+                graph.deleteLater()
+
+        # Add graphs for newly visible channels
+        for name, ch in visible.items():
+            if name not in self._math_graph_widgets:
+                hdr = _channel_header(ch.color, name.upper(), ch.unit)
+                graph = ChannelGraph(ch.color, ch.unit)
+                self._math_graphs_container.addWidget(hdr)
+                self._math_graphs_container.addWidget(graph)
+                self._math_graphs_container.addWidget(h_line())
+                self._math_graph_widgets[name] = (hdr, graph)
+
+    def _update_math_graphs(self, values: dict[str, float]) -> None:
+        """Push new math channel values into their live graph widgets."""
+        for name, (_, graph) in self._math_graph_widgets.items():
+            if name in values:
+                graph.update_data(values[name])
+
     def _reset_graphs(self):
         self.speed_graph.clear()
         self.pedals_graph.clear()
@@ -4446,6 +4561,8 @@ class TelemetryApp(QMainWindow):
         self.rpm_graph.clear()
         self.gear_graph.clear()
         self.aids_graph.clear()
+        for _, graph in self._math_graph_widgets.values():
+            graph.clear()
 
     def _reset_analysis_graphs(self):
         self.ana_speed.clear()

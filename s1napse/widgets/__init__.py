@@ -12,6 +12,8 @@ from .graphs import (
 from .panels import SectorTimesPanel, SectorScrubWidget, LapHistoryPanel
 from .badges import AidBadge
 from .coach_tab import CoachTab
+from .math_formula_editor import FormulaEditorWidget
+from .math_channel_panel import MathChannelPanel
 
 __all__ = [
     'RevBar', 'PedalBar', 'ValueDisplay', 'SteeringWidget', 'SteeringBar',
@@ -23,4 +25,5 @@ __all__ = [
     'RacePaceChart', 'ReplayGraph', 'ReplayMultiGraph',
     'SectorTimesPanel', 'SectorScrubWidget', 'LapHistoryPanel',
     'AidBadge', 'CoachTab',
+    'FormulaEditorWidget', 'MathChannelPanel',
 ]
