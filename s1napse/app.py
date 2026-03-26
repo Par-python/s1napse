@@ -1879,12 +1879,16 @@ class TelemetryApp(QMainWindow):
         }
         self._current_deltas = []
 
+    _MIN_LAP_TIME_S = 45  # ignore false laps from pause/resume glitches
+
     def _store_completed_lap(self):
         if self._current_lap_had_pit_exit:
             return  # outlap — car exited pit lane this lap, don't record
         if self.current_lap_data.get('speed'):
             dists = self.current_lap_data.get('dist_m', [])
             times = self.current_lap_data.get('time_ms', [])
+            if times and times[-1] / 1000.0 < self._MIN_LAP_TIME_S:
+                return  # too short — likely a pause/resume glitch
 
             total_time_s = (times[-1] / 1000.0) if times else 0.0
 
@@ -2387,50 +2391,23 @@ class TelemetryApp(QMainWindow):
             json.dump(payload, f)
         QMessageBox.information(self, 'Export JSON', f'Lap saved to:\n{path}')
 
-    def _export_full_lap_json(self):
-        """Export the last completed lap as a comprehensive JSON with all telemetry,
-        tyre data, fuel, track map, session metadata, and summary stats."""
-        import os, re as _re, datetime
+    def _build_lap_json_payload(self, lap: dict) -> dict:
+        """Build a full JSON payload dict for any stored lap."""
+        import datetime
 
-        if not self.session_laps:
-            QMessageBox.information(self, 'Export Full JSON',
-                                    'No completed laps to export yet.')
-            return
-
-        lap = self.session_laps[-1]
-        t   = lap.get('total_time_s', 0)
+        d    = lap['data']
+        meta = lap.get('meta', {})
+        t    = lap.get('total_time_s', 0)
         m, s = int(t // 60), t % 60
 
-        def _slug(text: str) -> str:
-            return _re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')
-
-        date_str  = datetime.date.today().strftime('%Y-%m-%d')
-        try:
-            user_str = _slug(os.getlogin())
-        except Exception:
-            user_str = 'user'
-        meta      = lap.get('meta', {})
-        track_str = _slug(meta.get('track_name', '') or self.track_label.text() or 'unknown-track')
-        lap_str   = f'lap{lap["lap_number"]}'
-        time_str  = f'{m}m{s:06.3f}s'
-
-        default_name = f'{date_str}-{user_str}-{track_str}-{lap_str}-{time_str}-full.json'
-        path, _ = QFileDialog.getSaveFileName(
-            self, 'Export Full Lap JSON', default_name, 'Lap JSON (*.json);;All files (*)')
-        if not path:
-            return
-
-        d = lap['data']
-
-        # ── Summary stats ────────────────────────────────────────────────
-        speeds  = d.get('speed', [])
-        rpms    = d.get('rpm', [])
-        throttles = d.get('throttle', [])
-        brakes  = d.get('brake', [])
-        fuels   = d.get('fuel_l', [])
         def _safe_avg(lst): return round(sum(lst) / len(lst), 2) if lst else 0.0
         def _safe_max(lst): return round(max(lst), 2) if lst else 0.0
 
+        speeds    = d.get('speed', [])
+        rpms      = d.get('rpm', [])
+        throttles = d.get('throttle', [])
+        brakes    = d.get('brake', [])
+        fuels     = d.get('fuel_l', [])
         fuel_used = round(fuels[0] - fuels[-1], 3) if len(fuels) >= 2 else 0.0
 
         sectors_raw = lap.get('sectors', [None, None, None])
@@ -2440,20 +2417,16 @@ class TelemetryApp(QMainWindow):
             sm, ss = int(s_val // 60), s_val % 60
             return f'{sm}:{ss:06.3f}' if sm else f'{ss:.3f}'
 
-        # ── Track map points ─────────────────────────────────────────────
         track_key = meta.get('track_key', '') or self._active_track_key or ''
         track_pts = TRACKS.get(track_key, {}).get('pts', [])
-        # Fall back to live map norm if saved track has no pts
         if not track_pts and self.track_map._norm:
             track_pts = [[round(x, 5), round(y, 5)] for x, y in self.track_map._norm]
 
-        # ── Build payload ────────────────────────────────────────────────
-        payload = {
+        return {
             'schema_version': '2.0',
             'export_timestamp': datetime.datetime.now().isoformat(timespec='seconds'),
-
             'session': {
-                'date':          date_str,
+                'date':          datetime.date.today().strftime('%Y-%m-%d'),
                 'car':           meta.get('car_name', ''),
                 'track':         meta.get('track_name', ''),
                 'track_key':     track_key,
@@ -2463,15 +2436,13 @@ class TelemetryApp(QMainWindow):
                 'air_temp_c':    meta.get('air_temp_c', 0.0),
                 'road_temp_c':   meta.get('road_temp_c', 0.0),
             },
-
             'lap': {
-                'lap_number':   lap['lap_number'],
-                'total_time_s': lap.get('total_time_s', 0),
+                'lap_number':    lap['lap_number'],
+                'total_time_s':  t,
                 'total_time_fmt': f'{m}:{s:06.3f}',
-                'sectors_s':    sectors_raw,
-                'sectors_fmt':  [_fmt_sector(sv) for sv in sectors_raw],
+                'sectors_s':     sectors_raw,
+                'sectors_fmt':   [_fmt_sector(sv) for sv in sectors_raw],
             },
-
             'summary': {
                 'max_speed_kph':    _safe_max(speeds),
                 'avg_speed_kph':    _safe_avg(speeds),
@@ -2499,59 +2470,78 @@ class TelemetryApp(QMainWindow):
                     'rr': _safe_max(d.get('brake_temp_rr', [])),
                 },
             },
-
             'telemetry': {
-                'time_ms':          d.get('time_ms', []),
-                'dist_m':           d.get('dist_m', []),
-                'speed_kph':        d.get('speed', []),
-                'throttle':         d.get('throttle', []),
-                'brake':            d.get('brake', []),
-                'steer_deg':        d.get('steer_deg', []),
-                'rpm':              d.get('rpm', []),
-                'gear':             d.get('gear', []),
-                'abs':              d.get('abs', []),
-                'tc':               d.get('tc', []),
-                'fuel_l':           d.get('fuel_l', []),
-                'brake_bias_pct':   d.get('brake_bias_pct', []),
-                'world_x':          d.get('world_x', []),
-                'world_z':          d.get('world_z', []),
-                'air_temp_c':       d.get('air_temp', []),
-                'road_temp_c':      d.get('road_temp', []),
-                'tyre_temp': {
-                    'fl': d.get('tyre_temp_fl', []),
-                    'fr': d.get('tyre_temp_fr', []),
-                    'rl': d.get('tyre_temp_rl', []),
-                    'rr': d.get('tyre_temp_rr', []),
-                },
-                'tyre_pressure': {
-                    'fl': d.get('tyre_pressure_fl', []),
-                    'fr': d.get('tyre_pressure_fr', []),
-                    'rl': d.get('tyre_pressure_rl', []),
-                    'rr': d.get('tyre_pressure_rr', []),
-                },
-                'brake_temp': {
-                    'fl': d.get('brake_temp_fl', []),
-                    'fr': d.get('brake_temp_fr', []),
-                    'rl': d.get('brake_temp_rl', []),
-                    'rr': d.get('brake_temp_rr', []),
-                },
-                'tyre_wear': {
-                    'fl': d.get('tyre_wear_fl', []),
-                    'fr': d.get('tyre_wear_fr', []),
-                    'rl': d.get('tyre_wear_rl', []),
-                    'rr': d.get('tyre_wear_rr', []),
-                },
+                'time_ms':        d.get('time_ms', []),
+                'dist_m':         d.get('dist_m', []),
+                'speed_kph':      d.get('speed', []),
+                'throttle':       d.get('throttle', []),
+                'brake':          d.get('brake', []),
+                'steer_deg':      d.get('steer_deg', []),
+                'rpm':            d.get('rpm', []),
+                'gear':           d.get('gear', []),
+                'abs':            d.get('abs', []),
+                'tc':             d.get('tc', []),
+                'fuel_l':         d.get('fuel_l', []),
+                'brake_bias_pct': d.get('brake_bias_pct', []),
+                'world_x':        d.get('world_x', []),
+                'world_z':        d.get('world_z', []),
+                'air_temp_c':     d.get('air_temp', []),
+                'road_temp_c':    d.get('road_temp', []),
+                'tyre_temp':     {'fl': d.get('tyre_temp_fl', []),     'fr': d.get('tyre_temp_fr', []),
+                                  'rl': d.get('tyre_temp_rl', []),     'rr': d.get('tyre_temp_rr', [])},
+                'tyre_pressure': {'fl': d.get('tyre_pressure_fl', []), 'fr': d.get('tyre_pressure_fr', []),
+                                  'rl': d.get('tyre_pressure_rl', []), 'rr': d.get('tyre_pressure_rr', [])},
+                'brake_temp':    {'fl': d.get('brake_temp_fl', []),    'fr': d.get('brake_temp_fr', []),
+                                  'rl': d.get('brake_temp_rl', []),    'rr': d.get('brake_temp_rr', [])},
+                'tyre_wear':     {'fl': d.get('tyre_wear_fl', []),     'fr': d.get('tyre_wear_fr', []),
+                                  'rl': d.get('tyre_wear_rl', []),     'rr': d.get('tyre_wear_rr', [])},
             },
-
             'track_map': {
                 'pts':      track_pts,
                 'length_m': meta.get('track_length_m', 0),
             },
         }
 
+    def _export_lap_to_json(self, lap: dict):
+        """Export any stored lap as a full JSON file (save dialog)."""
+        import os, re as _re, datetime
+
+        t   = lap.get('total_time_s', 0)
+        m, s = int(t // 60), t % 60
+
+        def _slug(text: str) -> str:
+            return _re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')
+
+        date_str  = datetime.date.today().strftime('%Y-%m-%d')
+        try:
+            user_str = _slug(os.getlogin())
+        except Exception:
+            user_str = 'user'
+        meta      = lap.get('meta', {})
+        track_str = _slug(meta.get('track_name', '') or self.track_label.text() or 'unknown-track')
+        lap_str   = f'lap{lap["lap_number"]}'
+        time_str  = f'{m}m{s:06.3f}s'
+
+        default_name = f'{date_str}-{user_str}-{track_str}-{lap_str}-{time_str}-full.json'
+        path, _ = QFileDialog.getSaveFileName(
+            self, 'Export Lap JSON', default_name, 'Lap JSON (*.json);;All files (*)')
+        if not path:
+            return
+
+        payload = self._build_lap_json_payload(lap)
         with open(path, 'w') as f:
             json.dump(payload, f)
-        QMessageBox.information(self, 'Export Full JSON', f'Full lap saved to:\n{path}')
+        QMessageBox.information(self, 'Export JSON',
+                                f'Lap {lap["lap_number"]} saved to:\n{path}')
+
+    def _export_full_lap_json(self):
+        """Export the last completed lap as a comprehensive JSON with all telemetry,
+        tyre data, fuel, track map, session metadata, and summary stats."""
+        if not self.session_laps:
+            QMessageBox.information(self, 'Export Full JSON',
+                                    'No completed laps to export yet.')
+            return
+        self._export_lap_to_json(self.session_laps[-1])
 
     def _export_lap_json(self):
         """Export the lap currently selected in Combo A as a shareable JSON file."""
@@ -3305,6 +3295,7 @@ class TelemetryApp(QMainWindow):
             ('S3',       1, Qt.AlignmentFlag.AlignCenter),
             ('SAMPLES',  1, Qt.AlignmentFlag.AlignCenter),
             ('VALID',    0, Qt.AlignmentFlag.AlignCenter),
+            ('',         0, Qt.AlignmentFlag.AlignCenter),
         ]:
             l = QLabel(txt)
             l.setFont(sans(7, bold=True))
@@ -3436,6 +3427,19 @@ class TelemetryApp(QMainWindow):
             valid_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             valid_lbl.setMinimumWidth(40)
             rl.addWidget(valid_lbl)
+
+            export_btn = QPushButton('⬇')
+            export_btn.setFont(sans(9))
+            export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            export_btn.setFixedSize(32, 24)
+            export_btn.setToolTip('Export this lap as JSON')
+            export_btn.setStyleSheet(
+                f'QPushButton {{ background: transparent; color: {TXT2}; border: 1px solid {BORDER2};'
+                f' border-radius: 3px; }}'
+                f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}')
+            _lap_ref = lap  # capture for lambda
+            export_btn.clicked.connect(lambda _, lr=_lap_ref: self._export_lap_to_json(lr))
+            rl.addWidget(export_btn)
 
             self._sess_rows_layout.insertWidget(0, row)
 
