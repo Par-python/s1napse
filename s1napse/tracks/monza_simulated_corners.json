@@ -1,0 +1,74 @@
+[
+  {
+    "corner_id": 1,
+    "direction": "RIGHT",
+    "entry_distance": 2.9,
+    "turn_in_distance": 2.9,
+    "apex_distance": 167.2,
+    "exit_distance": 762.6,
+    "braking_start_distance": 2.9
+  },
+  {
+    "corner_id": 2,
+    "direction": "LEFT",
+    "entry_distance": 799.3,
+    "turn_in_distance": 799.3,
+    "apex_distance": 1167.9,
+    "exit_distance": 1785.8,
+    "braking_start_distance": 799.3
+  },
+  {
+    "corner_id": 3,
+    "direction": "RIGHT",
+    "entry_distance": 1584.5,
+    "turn_in_distance": 1584.5,
+    "apex_distance": 1777.3,
+    "exit_distance": 1785.8,
+    "braking_start_distance": 1584.5
+  },
+  {
+    "corner_id": 4,
+    "direction": "RIGHT",
+    "entry_distance": 1899.2,
+    "turn_in_distance": 1899.2,
+    "apex_distance": 2310.3,
+    "exit_distance": 2605.3,
+    "braking_start_distance": 1899.2
+  },
+  {
+    "corner_id": 5,
+    "direction": "LEFT",
+    "entry_distance": 2684.7,
+    "turn_in_distance": 2684.7,
+    "apex_distance": 2684.7,
+    "exit_distance": 3112.7,
+    "braking_start_distance": 2684.7
+  },
+  {
+    "corner_id": 6,
+    "direction": "LEFT",
+    "entry_distance": 3220.3,
+    "turn_in_distance": 3220.3,
+    "apex_distance": 3413.1,
+    "exit_distance": 4203.9,
+    "braking_start_distance": 3220.3
+  },
+  {
+    "corner_id": 7,
+    "direction": "RIGHT",
+    "entry_distance": 3322.4,
+    "turn_in_distance": 3464.2,
+    "apex_distance": 3489.7,
+    "exit_distance": 4203.9,
+    "braking_start_distance": 3322.4
+  },
+  {
+    "corner_id": 8,
+    "direction": "LEFT",
+    "entry_distance": 4243.6,
+    "turn_in_distance": 4243.6,
+    "apex_distance": 4490.4,
+    "exit_distance": 4997.8,
+    "braking_start_distance": 4243.6
+  }
+]

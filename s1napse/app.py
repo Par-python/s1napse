@@ -39,7 +39,7 @@ from .readers import ACUDPReader, ACCReader, IRacingReader, ELM327Reader
 from .track_recorder import TrackRecorder, TRACKS, TRACK_NAME_MAP, load_saved_tracks, _get_tracks_dir
 from .widgets import (
     RevBar, PedalBar, ValueDisplay, SteeringWidget, SteeringBar,
-    TyreCard, TrackMapWidget,
+    TyreCard, _lerp_color, _TYRE_TEMP_KP, TrackMapWidget,
     ChannelGraph, MultiChannelGraph,
     AnalysisTelemetryGraph, AnalysisMultiLineGraph,
     TimeDeltaGraph, ComparisonGraph, ComparisonDeltaGraph,
@@ -48,6 +48,8 @@ from .widgets import (
     AidBadge,
 )
 from .widgets.graphs import _style_ax
+from .widgets.coach_tab import CoachTab
+from .coaching.lap_coach import LapCoach
 
 
 class TelemetryApp(QMainWindow):
@@ -107,6 +109,9 @@ class TelemetryApp(QMainWindow):
 
         # Track recorder
         self.recorder = TrackRecorder()
+
+        # Coaching engine
+        self._lap_coach = LapCoach()
 
         # Reference lap for delta / sector comparison (last completed lap)
         self._ref_lap_dists: list[float] = []
@@ -181,6 +186,9 @@ class TelemetryApp(QMainWindow):
         self.tabs.addTab(self._build_comparison_tab(), 'LAP COMPARISON')
         self.tabs.addTab(self._build_session_tab(), 'SESSION')
         self.tabs.addTab(self._build_replay_tab(), 'REPLAY')
+
+        self.coach_tab = CoachTab()
+        self.tabs.addTab(self.coach_tab, 'COACH')
 
         self._stack.addWidget(main_page)
 
@@ -1810,6 +1818,18 @@ class TelemetryApp(QMainWindow):
             self._populate_replay_combo()
             self._refresh_session_tab()
             self._race_pace_chart.refresh(self.session_laps)
+
+            # ── Coaching analysis ────────────────────────────────────────
+            try:
+                report = self._lap_coach.analyze(self.session_laps[-1])
+                if report is not None:
+                    self.coach_tab.set_report(report)
+                    self.coach_tab.set_corners_on_map(
+                        self._lap_coach.corners,
+                        report.trail_brake_analyses,
+                        self.track_map)
+            except Exception as e:
+                print(f'Coaching analysis error: {e}')
 
             # Promote this lap to the reference for delta / sector comparison
             if dists and times and len(dists) == len(times):

@@ -29,6 +29,8 @@ hidden = (
     + [
         'matplotlib.backends.backend_qt5agg',
         'matplotlib.backends.backend_agg',
+        # scipy.signal used by coaching corner detector
+        'scipy.signal',
         # ACC shared memory (Windows-only, imported inside try/except)
         'pyaccsharedmemory',
         # iRacing SDK (Windows-only, imported inside try/except)
@@ -48,7 +50,6 @@ a = Analysis(
     excludes=[
         # Trim unused heavy packages to keep the EXE smaller
         'tkinter',
-        'scipy',
         'numpy.distutils',
         'IPython',
         'pandas',
