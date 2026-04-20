@@ -1,0 +1,222 @@
+"""Import TUMFTM/racetrack-database CSVs into s1napse/tracks/*.json.
+
+For each track:
+  - tracks-db/{Name}.csv -> centerline (x_m, y_m, w_tr_right_m, w_tr_left_m)
+  - racelines/{Name}.csv -> raceline (x_m, y_m)
+Both CSVs share the same coordinate frame, so the raceline is normalized with
+the SAME transform as the centerline so the two overlay correctly.
+
+Curvature is computed along the raceline, smoothed, and normalized [0, 1] so
+the widget can render a green->white->red gradient without extra per-frame work.
+"""
+
+import json
+import math
+import re
+import sys
+from pathlib import Path
+
+REPO        = Path(__file__).resolve().parent.parent
+TRACKS_DIR  = REPO / 's1napse' / 'tracks-db'
+RACELN_DIR  = REPO / 's1napse' / 'racelines'
+DST_DIR     = REPO / 's1napse' / 'tracks'
+N_OUT       = 250
+PAD         = 0.06
+SMOOTH_SIGMA = 6.0  # gaussian kernel std-dev for curvature smoothing
+SOURCE_TAG  = 'TUMFTM/racetrack-database (CC-BY-4.0)'
+
+
+def slug(name: str) -> str:
+    s = re.sub(r'[^a-z0-9_]', '_', name.lower())
+    return re.sub(r'_+', '_', s).strip('_')
+
+
+def load_xy(csv_path: Path) -> list[tuple[float, float]]:
+    pts = []
+    with open(csv_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            parts = line.split(',')
+            if len(parts) < 2:
+                continue
+            pts.append((float(parts[0]), float(parts[1])))
+    return pts
+
+
+def polyline_length(pts: list[tuple[float, float]]) -> float:
+    total = 0.0
+    for i in range(len(pts)):
+        x0, y0 = pts[i]
+        x1, y1 = pts[(i + 1) % len(pts)]
+        total += math.hypot(x1 - x0, y1 - y0)
+    return total
+
+
+def resample_closed(pts: list[tuple[float, float]], n_out: int) -> list[tuple[float, float]]:
+    """Resample a closed polyline to n_out evenly-spaced points by arc length."""
+    if len(pts) < 2:
+        return []
+    cum = [0.0]
+    for i in range(len(pts)):
+        x0, y0 = pts[i]
+        x1, y1 = pts[(i + 1) % len(pts)]
+        cum.append(cum[-1] + math.hypot(x1 - x0, y1 - y0))
+    total = cum[-1]
+    if total == 0:
+        return []
+
+    out = []
+    j = 0
+    for i in range(n_out):
+        target = (i / n_out) * total
+        while j < len(cum) - 1 and cum[j + 1] < target:
+            j += 1
+        seg = cum[j + 1] - cum[j]
+        t = 0.0 if seg == 0 else (target - cum[j]) / seg
+        x0, y0 = pts[j % len(pts)]
+        x1, y1 = pts[(j + 1) % len(pts)]
+        out.append((x0 + t * (x1 - x0), y0 + t * (y1 - y0)))
+    return out
+
+
+def curvature(pts: list[tuple[float, float]]) -> list[float]:
+    """Absolute turn angle at each point (closed polyline)."""
+    n = len(pts)
+    c = [0.0] * n
+    for i in range(n):
+        x0, y0 = pts[(i - 1) % n]
+        x1, y1 = pts[i]
+        x2, y2 = pts[(i + 1) % n]
+        dx1, dy1 = x1 - x0, y1 - y0
+        dx2, dy2 = x2 - x1, y2 - y1
+        cross = dx1 * dy2 - dy1 * dx2
+        dot   = dx1 * dx2 + dy1 * dy2
+        c[i]  = abs(math.atan2(cross, dot))
+    return c
+
+
+def gaussian_smooth_closed(values: list[float], sigma: float) -> list[float]:
+    """Gaussian smoothing on a closed list (wraps around)."""
+    n = len(values)
+    r = max(1, int(math.ceil(3 * sigma)))
+    kernel = [math.exp(-(k * k) / (2 * sigma * sigma)) for k in range(-r, r + 1)]
+    ksum = sum(kernel)
+    kernel = [k / ksum for k in kernel]
+    out = [0.0] * n
+    for i in range(n):
+        s = 0.0
+        for k in range(-r, r + 1):
+            s += kernel[k + r] * values[(i + k) % n]
+        out[i] = s
+    return out
+
+
+def normalize_with_frame(pts: list[tuple[float, float]],
+                         min_x: float, max_x: float,
+                         min_y: float, max_y: float) -> list[list[float]]:
+    span = max(max_x - min_x, max_y - min_y)
+    if span == 0:
+        return []
+    scale    = (1.0 - 2 * PAD) / span
+    offset_x = (1.0 - (max_x - min_x) * scale) / 2.0
+    offset_y = (1.0 - (max_y - min_y) * scale) / 2.0
+    out = []
+    for x, y in pts:
+        nx = (x - min_x) * scale + offset_x + PAD
+        ny = (y - min_y) * scale + offset_y + PAD
+        out.append([round(nx, 4), round(ny, 4)])
+    return out
+
+
+def bounds(pts: list[tuple[float, float]]):
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    return min(xs), max(xs), min(ys), max(ys)
+
+
+def percentile_normalize(values: list[float], lo_p: float = 0.05, hi_p: float = 0.95) -> list[float]:
+    """Map values to [0,1] using percentile bounds so outliers don't dominate."""
+    s = sorted(values)
+    n = len(s)
+    if n == 0:
+        return []
+    lo = s[max(0, int(lo_p * n))]
+    hi = s[min(n - 1, int(hi_p * n))]
+    if hi - lo < 1e-9:
+        return [0.5] * len(values)
+    return [max(0.0, min(1.0, (v - lo) / (hi - lo))) for v in values]
+
+
+def convert(name: str, force: bool) -> str:
+    key = slug(name)
+    dst = DST_DIR / f'{key}.json'
+    if dst.exists() and not force:
+        return f'SKIP  {name:24s} -> {dst.name} (exists)'
+
+    track_csv = TRACKS_DIR / f'{name}.csv'
+    raceln_csv = RACELN_DIR / f'{name}.csv'
+    if not track_csv.exists():
+        return f'FAIL  {name:24s} (no track csv)'
+
+    track_raw = load_xy(track_csv)
+    if len(track_raw) < 10:
+        return f'FAIL  {name:24s} (only {len(track_raw)} track pts)'
+
+    length = int(round(polyline_length(track_raw)))
+
+    # Resample centerline to N_OUT evenly-spaced pts (arc-length).
+    track_rs = resample_closed(track_raw, N_OUT)
+    # Shared bounds derived from the centerline so both curves fit in the same frame.
+    min_x, max_x, min_y, max_y = bounds(track_rs)
+
+    pts = normalize_with_frame(track_rs, min_x, max_x, min_y, max_y)
+    data = {
+        'name':      name,
+        'track_key': key,
+        'length_m':  length,
+        'pts':       pts,
+        'turns':     [],
+        'source':    SOURCE_TAG,
+    }
+
+    # Raceline: normalize with track's frame, resample, compute + smooth + normalize curvature.
+    note = ''
+    if raceln_csv.exists():
+        raceln_raw = load_xy(raceln_csv)
+        if len(raceln_raw) >= 10:
+            raceln_rs = resample_closed(raceln_raw, N_OUT)
+            raceln_norm = normalize_with_frame(raceln_rs, min_x, max_x, min_y, max_y)
+            curv_raw    = curvature(raceln_rs)
+            curv_smooth = gaussian_smooth_closed(curv_raw, SMOOTH_SIGMA)
+            curv_norm   = percentile_normalize(curv_smooth, 0.05, 0.95)
+            data['raceline']      = raceln_norm
+            data['raceline_curv'] = [round(c, 4) for c in curv_norm]
+            note = f', raceline ({len(raceln_norm)} pts)'
+        else:
+            note = ', no raceline (too few pts)'
+    else:
+        note = ', no raceline csv'
+
+    DST_DIR.mkdir(parents=True, exist_ok=True)
+    with open(dst, 'w') as f:
+        json.dump(data, f, indent=2)
+    return f'OK    {name:24s} -> {dst.name}  ({length} m, {len(pts)} pts{note})'
+
+
+def main():
+    force = '--force' in sys.argv
+    if not TRACKS_DIR.exists():
+        print(f'Source dir not found: {TRACKS_DIR}')
+        sys.exit(1)
+    csvs = sorted(TRACKS_DIR.glob('*.csv'))
+    if not csvs:
+        print(f'No CSVs in {TRACKS_DIR}')
+        sys.exit(1)
+    for csv_path in csvs:
+        print(convert(csv_path.stem, force))
+
+
+if __name__ == '__main__':
+    main()

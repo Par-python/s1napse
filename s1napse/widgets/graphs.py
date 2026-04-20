@@ -31,6 +31,9 @@ def _style_ax(ax, fig, ylabel: str = '', ylim=None):
     fig.subplots_adjust(left=0.09, right=0.98, top=0.95, bottom=0.22)
 
 
+_XLIM_CHUNK = 200  # Grow xlim in chunks so full redraws are rare
+
+
 class ChannelGraph(FigureCanvas):
     """Single-channel live telemetry graph."""
 
@@ -43,20 +46,40 @@ class ChannelGraph(FigureCanvas):
         _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
         self.setMinimumHeight(160)
         self.data = []
-        self.line, = self.ax.plot([], [], color=color, linewidth=1.4)
+        self.line, = self.ax.plot([], [], color=color, linewidth=1.4, animated=True)
+        self._xlim_max = _XLIM_CHUNK
+        self.ax.set_xlim(0, self._xlim_max)
+        self._bg = None
+
+    def _ensure_bg(self):
+        if self._bg is None:
+            self.draw()
+            self._bg = self.copy_from_bbox(self.ax.bbox)
 
     def update_data(self, value: float):
         self.data.append(value)
-        x = range(len(self.data))
-        self.line.set_data(x, self.data)
-        self.ax.set_xlim(0, max(1, len(self.data)))
-        self.draw_idle()
+        n = len(self.data)
+        self.line.set_data(range(n), self.data)
+        if n > self._xlim_max:
+            self._xlim_max = ((n // _XLIM_CHUNK) + 1) * _XLIM_CHUNK
+            self.ax.set_xlim(0, self._xlim_max)
+            self._bg = None
+        self._ensure_bg()
+        self.restore_region(self._bg)
+        self.ax.draw_artist(self.line)
+        self.blit(self.ax.bbox)
 
     def clear(self):
         self.data.clear()
         self.line.set_data([], [])
-        self.ax.set_xlim(0, 1)
+        self._xlim_max = _XLIM_CHUNK
+        self.ax.set_xlim(0, self._xlim_max)
+        self._bg = None
         self.draw_idle()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._bg = None
 
 
 class MultiChannelGraph(FigureCanvas):
@@ -72,27 +95,49 @@ class MultiChannelGraph(FigureCanvas):
         _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
         self.setMinimumHeight(160)
         self.data1, self.data2 = [], []
-        self.line1, = self.ax.plot([], [], color=color1, linewidth=1.4, label=label1)
-        self.line2, = self.ax.plot([], [], color=color2, linewidth=1.4, label=label2)
+        self.line1, = self.ax.plot([], [], color=color1, linewidth=1.4, label=label1, animated=True)
+        self.line2, = self.ax.plot([], [], color=color2, linewidth=1.4, label=label2, animated=True)
         self.ax.legend(fontsize=7, framealpha=0, loc='upper right',
                        labelcolor=TXT2)
+        self._xlim_max = _XLIM_CHUNK
+        self.ax.set_xlim(0, self._xlim_max)
+        self._bg = None
+
+    def _ensure_bg(self):
+        if self._bg is None:
+            self.draw()
+            self._bg = self.copy_from_bbox(self.ax.bbox)
 
     def update_data(self, v1: float, v2: float):
         self.data1.append(v1)
         self.data2.append(v2)
-        x = range(len(self.data1))
+        n = len(self.data1)
+        x = range(n)
         self.line1.set_data(x, self.data1)
         self.line2.set_data(x, self.data2)
-        self.ax.set_xlim(0, max(1, len(self.data1)))
-        self.draw_idle()
+        if n > self._xlim_max:
+            self._xlim_max = ((n // _XLIM_CHUNK) + 1) * _XLIM_CHUNK
+            self.ax.set_xlim(0, self._xlim_max)
+            self._bg = None
+        self._ensure_bg()
+        self.restore_region(self._bg)
+        self.ax.draw_artist(self.line1)
+        self.ax.draw_artist(self.line2)
+        self.blit(self.ax.bbox)
 
     def clear(self):
         self.data1.clear()
         self.data2.clear()
         self.line1.set_data([], [])
         self.line2.set_data([], [])
-        self.ax.set_xlim(0, 1)
+        self._xlim_max = _XLIM_CHUNK
+        self.ax.set_xlim(0, self._xlim_max)
+        self._bg = None
         self.draw_idle()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._bg = None
 
 
 class AnalysisTelemetryGraph(FigureCanvas):

@@ -1,7 +1,20 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -c \"from s1napse.widgets.track_map import TrackMapWidget; print\\('OK'\\)\")",
+      "Bash(python3 -m py_compile /Users/jjpardo/Documents/acc-telemetry/s1napse/widgets/track_map.py)",
+      "Bash(python3 -m py_compile /Users/jjpardo/Documents/acc-telemetry/s1napse/widgets/graphs.py)",
+      "Bash(python3 tools/import_tracks.py)",
+      "Bash(python3 /Users/jjpardo/Documents/acc-telemetry/tools/import_tracks.py)",
+      "Bash(python3 /Users/jjpardo/Documents/acc-telemetry/tools/import_tracks.py --force)",
+      "Bash(python3 -m py_compile /Users/jjpardo/Documents/acc-telemetry/s1napse/app.py)",
+      "Bash(node -e ' *)",
+      "Bash(timeout 3 node telemetry_simulator.js)",
+      "Bash(python3 -m py_compile s1napse/widgets/track_map.py s1napse/track_recorder.py s1napse/app.py)",
+      "Bash(python3 -m py_compile s1napse/widgets/track_map.py s1napse/app.py)",
+      "Bash(python3 -m py_compile s1napse/widgets/track_map.py)",
+      "Bash(python3 -m py_compile s1napse/widgets/track_map.py s1napse/track_recorder.py)"
     ]
   }
 }

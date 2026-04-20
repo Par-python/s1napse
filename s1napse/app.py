@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QLabel, QComboBox, QPushButton, QLineEdit, QSlider,
     QTabWidget, QFileDialog, QMessageBox, QSplitter, QScrollArea,
     QFrame, QGridLayout, QSizePolicy, QSpinBox, QDoubleSpinBox,
-    QStackedWidget, QButtonGroup, QRadioButton,
+    QStackedWidget, QButtonGroup, QRadioButton, QCheckBox,
 )
 from PyQt6.QtCore import QTimer, Qt, QRectF, QPointF
 from PyQt6.QtGui import (QFont, QPainter, QColor, QPen, QBrush, QFontMetrics,
@@ -1762,6 +1762,10 @@ class TelemetryApp(QMainWindow):
         self.track_map = TrackMapWidget()
         self.track_map.setMinimumWidth(300)
         map_vbox.addWidget(self.track_map, stretch=1)
+        ctrl_row = QHBoxLayout()
+        ctrl_row.setContentsMargins(0, 0, 0, 0)
+        ctrl_row.setSpacing(8)
+
         self._track_lock_btn = QPushButton('LOCK SHAPE')
         self._track_lock_btn.setFont(mono(9, bold=True))
         self._track_lock_btn.setCheckable(True)
@@ -1771,7 +1775,21 @@ class TelemetryApp(QMainWindow):
             f'QPushButton:checked {{background:#b45309;color:#fff;border-color:#d97706;}}'
         )
         self._track_lock_btn.toggled.connect(self._on_track_lock_toggled)
-        map_vbox.addWidget(self._track_lock_btn)
+        ctrl_row.addWidget(self._track_lock_btn)
+
+        self._raceline_chk = QCheckBox('Raceline')
+        self._raceline_chk.setFont(mono(9, bold=True))
+        self._raceline_chk.setChecked(True)
+        self._raceline_chk.setStyleSheet(
+            f'QCheckBox {{color:{TXT};spacing:6px;}}'
+            f'QCheckBox::indicator {{width:14px;height:14px;border:1px solid {BORDER};'
+            f'border-radius:3px;background:{BG3};}}'
+            f'QCheckBox::indicator:checked {{background:{C_THROTTLE};border-color:{C_THROTTLE};}}'
+        )
+        self._raceline_chk.toggled.connect(self._on_raceline_toggled)
+        ctrl_row.addWidget(self._raceline_chk)
+        ctrl_row.addStretch(1)
+        map_vbox.addLayout(ctrl_row)
         splitter.addWidget(map_container)
 
         # Right: analysis telemetry graphs in a scroll area
@@ -4097,6 +4115,26 @@ class TelemetryApp(QMainWindow):
             # New unknown track – reset to live-build mode
             display = key.replace('_', ' ').title()
             self.track_map.reset_track(display_name=display)
+        self._update_track_edit_buttons()
+
+    def _update_track_edit_buttons(self):
+        """Disable REC / LOCK SHAPE when the active track is already saved."""
+        already_saved = bool(self._active_track_key and self._active_track_key in TRACKS)
+        tip = 'Track already saved — delete the JSON to re-record.' if already_saved else ''
+        rec = getattr(self, 'rec_btn', None)
+        if rec is not None:
+            if already_saved and rec.isChecked():
+                rec.setChecked(False)
+            rec.setEnabled(not already_saved)
+            rec.setToolTip(tip)
+        lock = getattr(self, '_track_lock_btn', None)
+        if lock is not None:
+            lock.blockSignals(True)
+            lock.setChecked(already_saved)
+            lock.blockSignals(False)
+            lock.setText('UNLOCK SHAPE' if already_saved else 'LOCK SHAPE')
+            lock.setEnabled(not already_saved)
+            lock.setToolTip(tip)
 
     def _auto_detect_track(self, track_name: str):
         if not self._auto_track:
@@ -4122,6 +4160,11 @@ class TelemetryApp(QMainWindow):
         self.track_map._shape_locked = checked
         self._track_lock_btn.setText('UNLOCK SHAPE' if checked else 'LOCK SHAPE')
 
+    def _on_raceline_toggled(self, checked: bool):
+        self.track_map.set_show_raceline(checked)
+        if hasattr(self, '_rpl_map'):
+            self._rpl_map.set_show_raceline(checked)
+
     def _on_rec_toggled(self, checked: bool):
         if checked:
             self.recorder.start()
@@ -4140,6 +4183,7 @@ class TelemetryApp(QMainWindow):
         if path:
             load_saved_tracks()
             self._reload_track_combo()
+            self._update_track_edit_buttons()
             self.rec_label.setText(f'Saved: {Path(path).stem}')
             self.rec_label.setStyleSheet(f'color: {C_THROTTLE};')
         else:
