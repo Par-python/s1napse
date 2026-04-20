@@ -38,6 +38,8 @@ def load_saved_tracks():
         try:
             with open(json_file) as f:
                 td = json.load(f)
+            if not isinstance(td, dict) or 'track_key' not in td or 'pts' not in td:
+                continue
             key = td['track_key']
             TRACKS[key] = {
                 'name': td['name'],
