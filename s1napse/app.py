@@ -2592,10 +2592,11 @@ class TelemetryApp(QMainWindow):
         lap_str   = f'lap{lap["lap_number"]}'
         time_str  = f'{m}m{s:06.3f}s'
 
-        default_name = f'{date_str}-{user_str}-{track_str}-{lap_str}-{time_str}.json'
+        default_name = f'{date_str}-{user_str}-{track_str}-{lap_str}-{time_str}.json.gz'
 
         path, _ = QFileDialog.getSaveFileName(
-            self, 'Export Lap', default_name, 'Lap JSON (*.json);;All files (*)')
+            self, 'Export Lap', default_name,
+            'Lap JSON (gzipped) (*.json.gz);;All files (*)')
         if not path:
             return
 
@@ -2606,7 +2607,7 @@ class TelemetryApp(QMainWindow):
             'track_name':   TRACKS.get(self._active_track_key or '', {}).get('name', ''),
             'data':         {k: list(v) for k, v in lap['data'].items()},
         }
-        with open(path, 'w') as f:
+        with gzip.open(path, 'wt', encoding='utf-8', compresslevel=6) as f:
             json.dump(payload, f)
         QMessageBox.information(self, 'Export Lap', f'Lap saved to:\n{path}')
 
