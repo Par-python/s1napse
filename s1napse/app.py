@@ -2614,12 +2614,13 @@ class TelemetryApp(QMainWindow):
     def _import_lap_json(self):
         """Import a shared lap JSON file and add it to the comparison dropdowns."""
         path, _ = QFileDialog.getOpenFileName(
-            self, 'Import Lap', '', 'Lap JSON (*.json);;All files (*)')
+            self, 'Import Lap', '',
+            'Lap JSON (gzipped) (*.json.gz);;All files (*)')
         if not path:
             return
 
         try:
-            with open(path) as f:
+            with gzip.open(path, 'rt', encoding='utf-8') as f:
                 payload = json.load(f)
         except Exception as e:
             QMessageBox.warning(self, 'Import Failed', f'Could not read file:\n{e}')
