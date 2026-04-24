@@ -55,7 +55,7 @@ from .coaching.math_engine import MathEngine
 
 
 class TelemetrySampler(threading.Thread):
-    """Background thread: reads shared memory at ~22 Hz, buffers raw dicts."""
+    """Background thread: reads shared memory at ~50 Hz, buffers raw dicts."""
 
     def __init__(self):
         super().__init__(daemon=True)
@@ -80,7 +80,7 @@ class TelemetrySampler(threading.Thread):
                     with self._lock:
                         self._buffer.append(data)
                         self._latest = data
-            time.sleep(0.045)
+            time.sleep(0.020)
 
     def drain(self) -> list[dict]:
         with self._lock:
@@ -180,7 +180,7 @@ class TelemetryApp(QMainWindow):
 
         self._init_ui()
 
-        # Background sampler thread — ~22 Hz shared memory reads
+        # Background sampler thread — ~50 Hz shared memory reads
         self._sampler = TelemetrySampler()
         self._sampler.start()
         self._empty_drain_count = 0
