@@ -3193,11 +3193,12 @@ class TelemetryApp(QMainWindow):
     def _import_replay_lap_json(self):
         """Import a lap JSON directly into the replay tab."""
         path, _ = QFileDialog.getOpenFileName(
-            self, 'Import Lap for Replay', '', 'Lap JSON (*.json);;All files (*)')
+            self, 'Import Lap for Replay', '',
+            'Lap JSON (gzipped) (*.json.gz);;All files (*)')
         if not path:
             return
         try:
-            with open(path) as f:
+            with gzip.open(path, 'rt', encoding='utf-8') as f:
                 payload = json.load(f)
         except Exception as e:
             QMessageBox.warning(self, 'Import Failed', f'Could not read file:\n{e}')
