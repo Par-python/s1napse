@@ -2,6 +2,7 @@
 
 import sys
 import json
+import gzip
 import time
 import math
 import threading
