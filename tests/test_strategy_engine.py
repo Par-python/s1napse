@@ -179,3 +179,31 @@ class TestRivalWatch:
         eng.update({'gap_ahead': 40000, 'gap_behind': 0,
                     '_clock_s': 35.0}, {}, [])
         assert eng.state.rival_ahead_pitted_at == first_at  # unchanged
+
+
+class TestTempWatch:
+    def test_temp_recorded_on_first_sample(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        eng.update({'road_temp': 28.0, 'air_temp': 22.0}, {}, [])
+        assert eng.state.track_temp_c == 28.0
+        assert eng.state.air_temp_c == 22.0
+        assert eng.state.track_temp_at_stint_start_c == 28.0
+
+    def test_stint_start_temp_persists_across_updates(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        eng.update({'road_temp': 28.0, 'air_temp': 22.0}, {}, [])
+        eng.update({'road_temp': 32.0, 'air_temp': 23.0}, {}, [])
+        assert eng.state.track_temp_c == 32.0
+        assert eng.state.track_temp_at_stint_start_c == 28.0
+
+    def test_stint_start_temp_resets_on_pit_exit(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        eng.update({'road_temp': 28.0, 'air_temp': 22.0}, {}, [])
+        eng.update({'road_temp': 32.0, 'air_temp': 23.0}, {}, [])
+        # Caller signals pit-exit by passing _pit_exit=True
+        eng.update({'road_temp': 33.0, 'air_temp': 23.5,
+                    '_pit_exit': True}, {}, [])
+        assert eng.state.track_temp_at_stint_start_c == 33.0

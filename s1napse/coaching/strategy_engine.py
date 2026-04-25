@@ -124,6 +124,7 @@ class StrategyEngine:
         self._recompute_degradation(session_laps)
         self._recompute_pit_window(sample)
         self._recompute_rival_watch(sample)
+        self._recompute_temp_watch(sample)
 
     def _recompute_degradation(self, session_laps: list) -> None:
         """Linear regression over trailing 3-5 lap times.
@@ -226,3 +227,16 @@ class StrategyEngine:
                 last_fired = getattr(s, attr)
                 if last_fired is None or (current_t - last_fired) > self._suppression_s:
                     setattr(s, attr, current_t)
+
+    def _recompute_temp_watch(self, sample: dict) -> None:
+        s = self._state
+        road = sample.get('road_temp', None)
+        air = sample.get('air_temp', None)
+        pit_exit = sample.get('_pit_exit', False)
+
+        if road is not None:
+            s.track_temp_c = float(road)
+            if s.track_temp_at_stint_start_c is None or pit_exit:
+                s.track_temp_at_stint_start_c = float(road)
+        if air is not None:
+            s.air_temp_c = float(air)
