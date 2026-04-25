@@ -129,3 +129,53 @@ class TestPitWindow:
         # Cliff lap = current_lap + (1.5 / slope) = 5 + (1.5 / 0.3) = 10
         assert eng.state.pit_window_close_lap is not None
         assert 8 <= eng.state.pit_window_close_lap <= 12
+
+
+class TestRivalWatch:
+    def test_no_alert_when_gap_stable(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        # Feed steady gaps over 10 ticks (clock advances 1s each)
+        for i in range(10):
+            eng.update({'gap_ahead': 5000, 'gap_behind': 4000,
+                        '_clock_s': float(i)}, {}, [])
+        assert eng.state.rival_ahead_pitted_at is None
+        assert eng.state.rival_behind_pitted_at is None
+
+    def test_alert_fires_when_gap_ahead_jumps(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        # 5 ticks at 5000 ms gap, then jump to 22000 ms (17 s jump)
+        for i in range(5):
+            eng.update({'gap_ahead': 5000, 'gap_behind': 0,
+                        '_clock_s': float(i)}, {}, [])
+        eng.update({'gap_ahead': 22000, 'gap_behind': 0,
+                    '_clock_s': 5.0}, {}, [])
+        assert eng.state.rival_ahead_pitted_at is not None
+        assert abs(eng.state.rival_ahead_pitted_at - 5.0) < 0.1
+
+    def test_small_jump_does_not_fire(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        for i in range(5):
+            eng.update({'gap_ahead': 5000, 'gap_behind': 0,
+                        '_clock_s': float(i)}, {}, [])
+        # Jump of 8 s -- below 15 s threshold
+        eng.update({'gap_ahead': 13000, 'gap_behind': 0,
+                    '_clock_s': 5.0}, {}, [])
+        assert eng.state.rival_ahead_pitted_at is None
+
+    def test_alert_suppressed_for_60s_after_firing(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        for i in range(5):
+            eng.update({'gap_ahead': 5000, 'gap_behind': 0,
+                        '_clock_s': float(i)}, {}, [])
+        # First jump
+        eng.update({'gap_ahead': 22000, 'gap_behind': 0,
+                    '_clock_s': 5.0}, {}, [])
+        first_at = eng.state.rival_ahead_pitted_at
+        # Another jump 30s later -- within suppression window
+        eng.update({'gap_ahead': 40000, 'gap_behind': 0,
+                    '_clock_s': 35.0}, {}, [])
+        assert eng.state.rival_ahead_pitted_at == first_at  # unchanged

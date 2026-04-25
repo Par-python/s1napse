@@ -91,6 +91,11 @@ class StrategyEngine:
         self._state = StrategyState()
         self._fuel_per_lap_history: list[float] = []
         self._tyre_cliff_threshold_s = 1.5
+        self._gap_ahead_buffer: list[tuple[float, int]] = []   # (clock_s, gap_ms)
+        self._gap_behind_buffer: list[tuple[float, int]] = []
+        self._pit_loss_s = 22.0       # default ACC pit loss
+        self._jump_threshold_s = self._pit_loss_s * 0.7   # 15.4 s
+        self._suppression_s = 60.0
 
     @property
     def state(self) -> StrategyState:
@@ -118,6 +123,7 @@ class StrategyEngine:
             (lap.get('lap_number', 0) for lap in session_laps), default=0)
         self._recompute_degradation(session_laps)
         self._recompute_pit_window(sample)
+        self._recompute_rival_watch(sample)
 
     def _recompute_degradation(self, session_laps: list) -> None:
         """Linear regression over trailing 3-5 lap times.
@@ -184,3 +190,39 @@ class StrategyEngine:
             s.pit_window_close_lap = s.current_lap_count + int(cliff_laps_ahead)
         else:
             s.pit_window_close_lap = None
+
+    def _recompute_rival_watch(self, sample: dict) -> None:
+        """Detect rival pit by sudden gap jump (>= pit_loss * 0.7 within ~5 s)."""
+        import time as _time
+        s = self._state
+        clock = sample.get('_clock_s', _time.monotonic())
+        gap_a = sample.get('gap_ahead', 0)
+        gap_b = sample.get('gap_behind', 0)
+        s.last_gap_ahead_ms = gap_a
+        s.last_gap_behind_ms = gap_b
+
+        # Maintain a 30-second rolling buffer of (clock, gap) pairs
+        self._gap_ahead_buffer.append((clock, gap_a))
+        self._gap_behind_buffer.append((clock, gap_b))
+        cutoff = clock - 30.0
+        self._gap_ahead_buffer = [(t, g) for t, g in self._gap_ahead_buffer
+                                   if t >= cutoff]
+        self._gap_behind_buffer = [(t, g) for t, g in self._gap_behind_buffer
+                                    if t >= cutoff]
+
+        for buf, attr in (
+            (self._gap_ahead_buffer, 'rival_ahead_pitted_at'),
+            (self._gap_behind_buffer, 'rival_behind_pitted_at'),
+        ):
+            if len(buf) < 2:
+                continue
+            current_t, current_g = buf[-1]
+            # Compare against a sample ~5s ago (or oldest if buffer is short)
+            past_t, past_g = next(
+                ((t, g) for t, g in buf if current_t - t >= 5.0),
+                buf[0])
+            jump_s = (current_g - past_g) / 1000.0
+            if abs(jump_s) >= self._jump_threshold_s:
+                last_fired = getattr(s, attr)
+                if last_fired is None or (current_t - last_fired) > self._suppression_s:
+                    setattr(s, attr, current_t)
