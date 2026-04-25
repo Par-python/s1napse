@@ -249,6 +249,9 @@ class TelemetryApp(QMainWindow):
         # Instantiate StrategyTab BEFORE _build_race_tab so its labels exist
         # for any references inside _build_race_tab / _update_race_tab.
         self.strategy_tab = StrategyTab()
+        self.strategy_tab._fs_laps_spin.valueChanged.connect(self._update_fuel_save)
+        self.strategy_tab._uco_pit_loss_spin.valueChanged.connect(self._update_undercut)
+        self.strategy_tab._uco_pace_delta_spin.valueChanged.connect(self._update_undercut)
 
         self.tabs.addTab(self._build_dashboard_tab(), 'DASHBOARD')
         self.tabs.addTab(self._build_graphs_tab(), 'TELEMETRY GRAPHS')
@@ -3728,52 +3731,6 @@ class TelemetryApp(QMainWindow):
 
         outer.addWidget(timing_card)
 
-        # ── Pit Strategy card ─────────────────────────────────────────
-        pit_card = _card()
-        pit_vbox = QVBoxLayout(pit_card)
-        pit_vbox.setContentsMargins(18, 12, 18, 12)
-        pit_vbox.setSpacing(8)
-
-        pit_hdr_row = QHBoxLayout()
-        pit_hdr_row.addWidget(_chip_lbl('PIT STRATEGY'))
-        pit_hdr_row.addStretch()
-        self._pit_no_data_lbl = _chip_lbl('Complete a lap to calculate',
-                                           color=TXT2, bold=False)
-        pit_hdr_row.addWidget(self._pit_no_data_lbl)
-        pit_vbox.addLayout(pit_hdr_row)
-
-        pit_stats_row = QHBoxLayout()
-        pit_stats_row.setSpacing(0)
-
-        def _pit_stat(title, attr):
-            col = QVBoxLayout()
-            col.setSpacing(2)
-            col.addWidget(_chip_lbl(title, font_size=7))
-            v = QLabel('—')
-            v.setFont(mono(11, bold=True))
-            v.setStyleSheet(f'color: {TXT};')
-            col.addWidget(v)
-            setattr(self, attr, v)
-            return col
-
-        pit_stats_row.addLayout(_pit_stat('FUEL LAPS LEFT', '_pit_fuel_laps_lbl'))
-        pit_stats_row.addSpacing(28)
-        pit_stats_row.addLayout(_pit_stat('TYRE STINT', '_pit_tyre_stint_lbl'))
-        pit_stats_row.addSpacing(28)
-        pit_stats_row.addLayout(_pit_stat('TYRE CONDITION', '_pit_tyre_cond_lbl'))
-        pit_stats_row.addStretch()
-        pit_vbox.addLayout(pit_stats_row)
-
-        pit_vbox.addWidget(h_line())
-
-        self._pit_rec_lbl = QLabel('—')
-        self._pit_rec_lbl.setFont(sans(11, bold=True))
-        self._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        self._pit_rec_lbl.setWordWrap(True)
-        pit_vbox.addWidget(self._pit_rec_lbl)
-
-        outer.addWidget(pit_card)
-
         # ── Lap trend card ────────────────────────────────────────────────
         trend_card = _card()
         trend_vbox = QVBoxLayout(trend_card)
@@ -3791,79 +3748,6 @@ class TelemetryApp(QMainWindow):
         trend_vbox.addWidget(self._race_pace_chart)
         outer.addWidget(trend_card)
 
-        # ── Fuel save card ────────────────────────────────────────────────
-        fuel_save_card = _card()
-        fs_vbox = QVBoxLayout(fuel_save_card)
-        fs_vbox.setContentsMargins(18, 12, 18, 12)
-        fs_vbox.setSpacing(8)
-        fs_vbox.addWidget(_chip_lbl('FUEL SAVE CALCULATOR'))
-
-        fs_row = QHBoxLayout()
-        fs_row.addWidget(_chip_lbl('LAPS TO GO', font_size=8, bold=False, color=TXT))
-        self._fs_laps_spin = QSpinBox()
-        self._fs_laps_spin.setRange(1, 99)
-        self._fs_laps_spin.setValue(10)
-        self._fs_laps_spin.setStyleSheet(
-            f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 4px 8px;')
-        fs_row.addWidget(self._fs_laps_spin)
-        fs_row.addStretch()
-        fs_vbox.addLayout(fs_row)
-
-        self._fs_result_lbl = QLabel('—')
-        self._fs_result_lbl.setFont(mono(10, bold=True))
-        self._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
-        self._fs_result_lbl.setWordWrap(True)
-        fs_vbox.addWidget(self._fs_result_lbl)
-
-        self._fs_laps_spin.valueChanged.connect(self._update_fuel_save)
-        outer.addWidget(fuel_save_card)
-
-        # ── Undercut / overcut card ───────────────────────────────────────
-        uco_card = _card()
-        uco_vbox = QVBoxLayout(uco_card)
-        uco_vbox.setContentsMargins(18, 12, 18, 12)
-        uco_vbox.setSpacing(8)
-        uco_vbox.addWidget(_chip_lbl('UNDERCUT / OVERCUT'))
-
-        inputs_row = QHBoxLayout()
-        inputs_row.setSpacing(20)
-
-        def _spin_col(label, attr, default, min_val, max_val, step, decimals):
-            col = QVBoxLayout()
-            col.addWidget(_chip_lbl(label, font_size=7))
-            spin = QDoubleSpinBox()
-            spin.setRange(min_val, max_val)
-            spin.setValue(default)
-            spin.setSingleStep(step)
-            spin.setDecimals(decimals)
-            spin.setStyleSheet(
-                f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
-                f' border-radius: 4px; padding: 4px 8px;')
-            spin.setFixedWidth(90)
-            col.addWidget(spin)
-            setattr(self, attr, spin)
-            spin.valueChanged.connect(self._update_undercut)
-            return col
-
-        inputs_row.addLayout(
-            _spin_col('PIT LOSS (s)', '_uco_pit_loss_spin', 22.0, 10.0, 60.0, 0.5, 1))
-        inputs_row.addLayout(
-            _spin_col('PACE DELTA (s/lap)', '_uco_pace_delta_spin', 0.8, 0.0, 5.0, 0.1, 1))
-        inputs_row.addStretch()
-        uco_vbox.addLayout(inputs_row)
-        uco_vbox.addWidget(h_line())
-
-        self._uco_undercut_lbl = QLabel('UNDERCUT: —')
-        self._uco_undercut_lbl.setFont(mono(9, bold=True))
-        self._uco_undercut_lbl.setStyleSheet(f'color: {TXT2};')
-        self._uco_overcut_lbl = QLabel('OVERCUT: —')
-        self._uco_overcut_lbl.setFont(mono(9, bold=True))
-        self._uco_overcut_lbl.setStyleSheet(f'color: {TXT2};')
-        uco_vbox.addWidget(self._uco_undercut_lbl)
-        uco_vbox.addWidget(self._uco_overcut_lbl)
-        outer.addWidget(uco_card)
-
         outer.addStretch()
 
         scroll.setWidget(inner)
@@ -3873,31 +3757,31 @@ class TelemetryApp(QMainWindow):
     def _update_fuel_save(self):
         history = self._fuel_per_lap_history
         if not history:
-            self._fs_result_lbl.setText('Complete a lap first.')
-            self._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
+            self.strategy_tab._fs_result_lbl.setText('Complete a lap first.')
+            self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
             return
         avg = sum(history[-5:]) / len(history[-5:])
         fuel = self._last_known_fuel
-        laps_to_go = self._fs_laps_spin.value()
+        laps_to_go = self.strategy_tab._fs_laps_spin.value()
         needed = avg * laps_to_go
         delta = fuel - needed
         if delta >= 0:
             save_per_lap = delta / laps_to_go
-            self._fs_result_lbl.setText(
+            self.strategy_tab._fs_result_lbl.setText(
                 f'Buffer  +{delta:.1f} L   ({save_per_lap:.2f} L/lap spare)')
-            self._fs_result_lbl.setStyleSheet(f'color: {C_THROTTLE};')
+            self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {C_THROTTLE};')
         else:
             save_per_lap = abs(delta) / laps_to_go
-            self._fs_result_lbl.setText(
+            self.strategy_tab._fs_result_lbl.setText(
                 f'SAVE  {save_per_lap:.2f} L/lap   (need {needed:.1f} L, have {fuel:.1f} L)')
             col = C_RPM if save_per_lap < 0.5 else C_BRAKE
-            self._fs_result_lbl.setStyleSheet(f'color: {col};')
+            self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {col};')
 
     def _update_undercut(self):
         gap_a = abs(self._last_gap_ahead) / 1000.0
         gap_b = abs(self._last_gap_behind) / 1000.0
-        pit_loss = self._uco_pit_loss_spin.value()
-        pace_delta = self._uco_pace_delta_spin.value()
+        pit_loss = self.strategy_tab._uco_pit_loss_spin.value()
+        pace_delta = self.strategy_tab._uco_pace_delta_spin.value()
 
         if pace_delta > 0 and gap_a > 0:
             laps_to_catch = (gap_a + pit_loss) / pace_delta
@@ -3910,8 +3794,8 @@ class TelemetryApp(QMainWindow):
         else:
             uc_text = 'UNDERCUT: no car ahead data'
             uc_col = TXT2
-        self._uco_undercut_lbl.setText(uc_text)
-        self._uco_undercut_lbl.setStyleSheet(f'color: {uc_col};')
+        self.strategy_tab._uco_undercut_lbl.setText(uc_text)
+        self.strategy_tab._uco_undercut_lbl.setStyleSheet(f'color: {uc_col};')
 
         if gap_b > 0:
             margin = pit_loss - gap_b
@@ -3925,8 +3809,8 @@ class TelemetryApp(QMainWindow):
         else:
             oc_text = 'OVERCUT: no car behind data'
             oc_col = TXT2
-        self._uco_overcut_lbl.setText(oc_text)
-        self._uco_overcut_lbl.setStyleSheet(f'color: {oc_col};')
+        self.strategy_tab._uco_overcut_lbl.setText(oc_text)
+        self.strategy_tab._uco_overcut_lbl.setStyleSheet(f'color: {oc_col};')
 
     def _update_race_tab(self, data: dict):
         session = data.get('session_type', '')
@@ -4941,12 +4825,12 @@ class TelemetryApp(QMainWindow):
         self.strategy_tab._pit_no_data_lbl.setVisible(True)
         self._race_consistency_lbl.setText('—')
         self._race_consistency_lbl.setStyleSheet(f'color: {TXT2};')
-        self._fs_result_lbl.setText('—')
-        self._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
-        self._uco_undercut_lbl.setText('UNDERCUT: —')
-        self._uco_undercut_lbl.setStyleSheet(f'color: {TXT2};')
-        self._uco_overcut_lbl.setText('OVERCUT: —')
-        self._uco_overcut_lbl.setStyleSheet(f'color: {TXT2};')
+        self.strategy_tab._fs_result_lbl.setText('—')
+        self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
+        self.strategy_tab._uco_undercut_lbl.setText('UNDERCUT: —')
+        self.strategy_tab._uco_undercut_lbl.setStyleSheet(f'color: {TXT2};')
+        self.strategy_tab._uco_overcut_lbl.setText('OVERCUT: —')
+        self.strategy_tab._uco_overcut_lbl.setStyleSheet(f'color: {TXT2};')
         self._race_pace_chart.refresh([])
         self._reset_analysis_graphs()
         self.track_map.reset()

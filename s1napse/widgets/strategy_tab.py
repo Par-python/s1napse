@@ -61,6 +61,8 @@ class StrategyTab(QWidget):
         body.addWidget(self._build_rival_watch_card())
         body.addWidget(self._build_temp_watch_card())
         body.addWidget(self._build_pit_summary_card())
+        body.addWidget(self._build_fuel_save_calculator_card())
+        body.addWidget(self._build_undercut_overcut_card())
         body.addStretch()
 
         scroll.setWidget(inner)
@@ -178,6 +180,84 @@ class StrategyTab(QWidget):
         self._pit_rec_lbl.setWordWrap(True)
         vbox.addWidget(self._pit_rec_lbl)
 
+        return c
+
+    def _build_fuel_save_calculator_card(self) -> QFrame:
+        from PyQt6.QtWidgets import QSpinBox
+        c = _card()
+        v = QVBoxLayout(c)
+        v.setContentsMargins(18, 12, 18, 12)
+        v.setSpacing(8)
+        v.addWidget(_chip_lbl('FUEL SAVE CALCULATOR'))
+
+        row = QHBoxLayout()
+        row.addWidget(_chip_lbl('LAPS TO GO', font_size=8, bold=False, color=TXT))
+        self._fs_laps_spin = QSpinBox()
+        self._fs_laps_spin.setRange(1, 99)
+        self._fs_laps_spin.setValue(10)
+        self._fs_laps_spin.setStyleSheet(
+            f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
+            f' border-radius: 4px; padding: 4px 8px;')
+        row.addWidget(self._fs_laps_spin)
+        row.addStretch()
+        v.addLayout(row)
+
+        self._fs_result_lbl = QLabel('—')
+        self._fs_result_lbl.setFont(mono(10, bold=True))
+        self._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
+        self._fs_result_lbl.setWordWrap(True)
+        v.addWidget(self._fs_result_lbl)
+        return c
+
+    def _build_undercut_overcut_card(self) -> QFrame:
+        from PyQt6.QtWidgets import QDoubleSpinBox
+        c = _card()
+        v = QVBoxLayout(c)
+        v.setContentsMargins(18, 12, 18, 12)
+        v.setSpacing(8)
+        v.addWidget(_chip_lbl('UNDERCUT / OVERCUT'))
+
+        inputs_row = QHBoxLayout()
+        inputs_row.setSpacing(20)
+
+        def _spin_col(label: str, attr: str, default: float, min_val: float,
+                      max_val: float, step: float, decimals: int) -> QVBoxLayout:
+            col = QVBoxLayout()
+            col.addWidget(_chip_lbl(label, font_size=7))
+            spin = QDoubleSpinBox()
+            spin.setRange(min_val, max_val)
+            spin.setValue(default)
+            spin.setSingleStep(step)
+            spin.setDecimals(decimals)
+            spin.setStyleSheet(
+                f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
+                f' border-radius: 4px; padding: 4px 8px;')
+            spin.setFixedWidth(90)
+            col.addWidget(spin)
+            setattr(self, attr, spin)
+            return col
+
+        inputs_row.addLayout(
+            _spin_col('PIT LOSS (s)', '_uco_pit_loss_spin', 22.0, 10.0, 60.0, 0.5, 1))
+        inputs_row.addLayout(
+            _spin_col('PACE DELTA (s/lap)', '_uco_pace_delta_spin', 0.8, 0.0, 5.0, 0.1, 1))
+        inputs_row.addStretch()
+        v.addLayout(inputs_row)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet(f'color: {BORDER2}; background: {BORDER2};')
+        sep.setFixedHeight(1)
+        v.addWidget(sep)
+
+        self._uco_undercut_lbl = QLabel('UNDERCUT: —')
+        self._uco_undercut_lbl.setFont(mono(9, bold=True))
+        self._uco_undercut_lbl.setStyleSheet(f'color: {TXT2};')
+        self._uco_overcut_lbl = QLabel('OVERCUT: —')
+        self._uco_overcut_lbl.setFont(mono(9, bold=True))
+        self._uco_overcut_lbl.setStyleSheet(f'color: {TXT2};')
+        v.addWidget(self._uco_undercut_lbl)
+        v.addWidget(self._uco_overcut_lbl)
         return c
 
     # --- Public API ---
