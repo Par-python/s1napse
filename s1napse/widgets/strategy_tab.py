@@ -181,3 +181,29 @@ class StrategyTab(QWidget):
             f'Estimated cost: ~{cost:.2f}s/lap per 1 L/lap saved   '
             f'(industry rule of thumb; varies by car/track)'
         )
+
+        # Card 4 — rival watch
+        import time as _time
+        now = _time.monotonic()
+
+        def _rival_str(prefix: str, gap_ms: int, pitted_at: float | None) -> str:
+            gap_s = abs(gap_ms) / 1000.0
+            if pitted_at is not None and (now - pitted_at) <= 30.0:
+                age = int(now - pitted_at)
+                return f'{prefix}: PITTED LIKELY ({age}s ago, gap {gap_s:.1f}s)'
+            return f'{prefix}: stable (gap {gap_s:.1f}s)'
+
+        self._rw_ahead.setText(_rival_str(
+            'Ahead', state.last_gap_ahead_ms, state.rival_ahead_pitted_at))
+        self._rw_behind.setText(_rival_str(
+            'Behind', state.last_gap_behind_ms, state.rival_behind_pitted_at))
+
+        # Color the labels amber when pit alert is active
+        for lbl, pitted_at in (
+            (self._rw_ahead, state.rival_ahead_pitted_at),
+            (self._rw_behind, state.rival_behind_pitted_at),
+        ):
+            if pitted_at is not None and (now - pitted_at) <= 30.0:
+                lbl.setStyleSheet('color: #f5a623;')
+            else:
+                lbl.setStyleSheet(f'color: {TXT};')
