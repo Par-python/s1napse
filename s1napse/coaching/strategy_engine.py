@@ -65,16 +65,39 @@ class StrategyState:
     current_lap_count: int = 0
 
     def headline(self) -> Headline:
-        """Return the highest-priority active headline.
+        """Return the highest-priority active headline."""
+        # P1: rival-pit alert (within last 30 s of detection -- caller's clock)
+        # The caller sets *_pitted_at; treat any non-None as "recent enough"
+        # for the headline. UI may further age it out for the card display.
+        if self.rival_ahead_pitted_at is not None:
+            return Headline('UNDERCUT NOW · CAR AHEAD PITTED', 'red')
+        if self.rival_behind_pitted_at is not None:
+            return Headline('OVERCUT NOW · CAR BEHIND PITTED', 'red')
 
-        Fixed priority order (first active wins):
-          1. Rival-pit alert
-          2. Pit window open
-          3. Fuel critical (<= 2 laps left)
-          4. Tyres approaching cliff (projected >= 1.5 s/lap loss within 2 laps)
-          5. Default
-        """
-        return Headline()  # placeholder for now -- Task 8 fills this in
+        # P2: pit window currently open
+        if (self.pit_window_open_lap is not None
+                and self.pit_window_close_lap is not None
+                and self.pit_window_open_lap <= self.current_lap_count
+                <= self.pit_window_close_lap):
+            return Headline(
+                f'PIT WINDOW OPEN · CLOSES LAP {self.pit_window_close_lap}',
+                'red')
+
+        # P3: fuel critical (<= 2 laps left)
+        if self.fuel_laps_left is not None and self.fuel_laps_left <= 2.0:
+            return Headline(
+                f'FUEL: {self.fuel_laps_left:.1f} LAPS LEFT — SAVE NOW', 'red')
+
+        # P4: tyre cliff approaching (projected >= 1.5 s/lap loss within 2 laps)
+        if (self.deg_slope_s_per_lap is not None
+                and self.deg_slope_s_per_lap > 0
+                and (1.5 / self.deg_slope_s_per_lap) <= 2.0):
+            laps_to_cliff = round(1.5 / self.deg_slope_s_per_lap, 1)
+            return Headline(
+                f'TYRES: {laps_to_cliff} LAPS TO 1.5s/LAP DROP', 'amber')
+
+        # Default
+        return Headline('STRATEGY: STABLE', 'neutral')
 
 
 class StrategyEngine:

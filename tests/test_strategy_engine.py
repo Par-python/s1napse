@@ -207,3 +207,46 @@ class TestTempWatch:
         eng.update({'road_temp': 33.0, 'air_temp': 23.5,
                     '_pit_exit': True}, {}, [])
         assert eng.state.track_temp_at_stint_start_c == 33.0
+
+
+class TestHeadlinePriority:
+    def test_default_is_stable_neutral(self):
+        from s1napse.coaching.strategy_engine import StrategyState
+        h = StrategyState().headline()
+        assert h.text == 'STRATEGY: STABLE'
+        assert h.severity == 'neutral'
+
+    def test_rival_pit_is_priority_1(self):
+        from s1napse.coaching.strategy_engine import StrategyState
+        s = StrategyState()
+        s.rival_ahead_pitted_at = 100.0
+        s.fuel_laps_left = 1.0   # would otherwise fire P3
+        h = s.headline()
+        assert 'UNDERCUT' in h.text or 'PITTED' in h.text
+        assert h.severity == 'red'
+
+    def test_pit_window_is_priority_2_when_no_rival(self):
+        from s1napse.coaching.strategy_engine import StrategyState
+        s = StrategyState()
+        s.current_lap_count = 5
+        s.pit_window_open_lap = 5    # window currently open
+        s.pit_window_close_lap = 8
+        h = s.headline()
+        assert 'PIT WINDOW' in h.text
+        assert h.severity == 'red'
+
+    def test_fuel_critical_is_priority_3(self):
+        from s1napse.coaching.strategy_engine import StrategyState
+        s = StrategyState()
+        s.fuel_laps_left = 1.5
+        h = s.headline()
+        assert 'FUEL' in h.text
+        assert h.severity == 'red'
+
+    def test_tyre_cliff_is_priority_4(self):
+        from s1napse.coaching.strategy_engine import StrategyState
+        s = StrategyState()
+        s.deg_slope_s_per_lap = 0.8   # +0.8 s/lap -> hits 1.5 in <2 laps
+        h = s.headline()
+        assert 'TYRE' in h.text or 'TYRES' in h.text
+        assert h.severity == 'amber'
