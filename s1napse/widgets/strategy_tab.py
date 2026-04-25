@@ -147,5 +147,37 @@ class StrategyTab(QWidget):
         """Re-render all six cards from a StrategyState. Cheap if invisible."""
         if not self.isVisible():
             return
-        # Card content is filled in Tasks 11-13. For now this is a no-op.
-        return
+
+        # Card 1 — degradation
+        if state.deg_slope_s_per_lap is None:
+            self._deg_status.setText('Need 3 laps to project.')
+        else:
+            r2 = state.deg_r_squared or 0.0
+            pips = '●●●' if r2 >= 0.9 else ('●●○' if r2 >= 0.7 else '●○○')
+            self._deg_status.setText(
+                f'Baseline {state.deg_baseline_s:.3f}s   '
+                f'Deg {state.deg_slope_s_per_lap:+.3f}s/lap   '
+                f'EOS {state.deg_projected_end_pace_s:.3f}s   '
+                f'Fit {pips}'
+            )
+
+        # Card 2 — pit window
+        if (state.pit_window_open_lap is None
+                and state.pit_window_close_lap is None):
+            self._pw_status.setText('Complete a lap to estimate.')
+        else:
+            open_str = (str(state.pit_window_open_lap)
+                        if state.pit_window_open_lap is not None else '—')
+            close_str = (str(state.pit_window_close_lap)
+                         if state.pit_window_close_lap is not None else '—')
+            self._pw_status.setText(
+                f'Window opens lap {open_str}   closes lap {close_str}   '
+                f'(currently lap {state.current_lap_count})'
+            )
+
+        # Card 3 — fuel-save cost (estimate per L/lap saved)
+        cost = state.fuel_save_cost_s_per_lap_per_l
+        self._fsc_status.setText(
+            f'Estimated cost: ~{cost:.2f}s/lap per 1 L/lap saved   '
+            f'(industry rule of thumb; varies by car/track)'
+        )
