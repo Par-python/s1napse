@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+import numpy as np
+
 
 Severity = Literal['neutral', 'amber', 'red']
 
@@ -109,5 +111,43 @@ class StrategyEngine:
         session_laps : list
             The list of completed laps (TelemetryApp.session_laps).
         """
-        # No-op for now -- subsequent tasks fill this in.
-        return
+        self._recompute_degradation(session_laps)
+
+    def _recompute_degradation(self, session_laps: list) -> None:
+        """Linear regression over trailing 3-5 lap times.
+
+        Fills deg_baseline_s, deg_slope_s_per_lap, deg_r_squared,
+        deg_projected_end_pace_s, deg_lap_times_s on self._state.
+        Leaves them as None if fewer than 3 laps available.
+        """
+        s = self._state
+        times = [lap.get('total_time_s', 0.0) for lap in session_laps
+                 if lap.get('total_time_s', 0.0) > 0]
+        s.deg_lap_times_s = list(times)
+
+        if len(times) < 3:
+            s.deg_baseline_s = None
+            s.deg_slope_s_per_lap = None
+            s.deg_r_squared = None
+            s.deg_projected_end_pace_s = None
+            return
+
+        # Baseline: average of laps 2 and 3 (the first two settled laps)
+        s.deg_baseline_s = round((times[1] + times[2]) / 2, 3)
+
+        # Fit on the trailing 5 laps (or fewer if we don't have 5)
+        window = times[-5:]
+        x = np.arange(len(window))
+        y = np.array(window)
+        slope, intercept = np.polyfit(x, y, 1)
+        s.deg_slope_s_per_lap = round(float(slope), 4)
+
+        # R-squared for fit confidence
+        y_pred = slope * x + intercept
+        ss_res = float(np.sum((y - y_pred) ** 2))
+        ss_tot = float(np.sum((y - np.mean(y)) ** 2))
+        s.deg_r_squared = (1.0 - ss_res / ss_tot) if ss_tot > 0 else 1.0
+
+        # Projected end-of-stint pace: assume 5 more laps remaining (UI overrides this)
+        s.deg_projected_end_pace_s = round(
+            float(intercept + slope * (len(window) - 1 + 5)), 3)

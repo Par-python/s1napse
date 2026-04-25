@@ -46,3 +46,46 @@ class TestStrategyEngineSkeleton:
         s1 = eng.state
         s2 = eng.state
         assert s1 is s2  # caller can read incrementally without copy
+
+
+class TestDegradationProjector:
+    def _laps(self, times):
+        """Build minimal session_laps with given total_time_s values."""
+        return [{'lap_number': i + 1, 'total_time_s': t,
+                 'data': {'speed': [100]}}
+                for i, t in enumerate(times)]
+
+    def test_no_degradation_with_fewer_than_3_laps(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        eng.update({}, {}, self._laps([90.0, 90.5]))
+        assert eng.state.deg_slope_s_per_lap is None
+        assert eng.state.deg_baseline_s is None
+
+    def test_linear_fit_on_clean_series(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        # 4 laps, each 0.2 s slower than the last
+        eng.update({}, {}, self._laps([90.0, 90.2, 90.4, 90.6]))
+        assert eng.state.deg_slope_s_per_lap is not None
+        assert abs(eng.state.deg_slope_s_per_lap - 0.2) < 0.01
+        assert eng.state.deg_r_squared is not None
+        assert eng.state.deg_r_squared > 0.99  # near-perfect linear data
+
+    def test_baseline_uses_laps_2_and_3(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        # Lap 1 is an outlap (slower), 2 and 3 are baseline, then deg
+        eng.update({}, {}, self._laps([95.0, 90.0, 90.2, 90.4]))
+        # baseline should be average of laps 2 and 3 = 90.1
+        assert abs(eng.state.deg_baseline_s - 90.1) < 0.01
+
+    def test_uses_only_trailing_5_laps(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        # 7 laps; only the last 5 should be in the fit
+        # First two are huge outliers -- if the engine used them, slope would be very negative
+        eng.update({}, {}, self._laps(
+            [200.0, 200.0, 90.0, 90.1, 90.2, 90.3, 90.4]))
+        # Slope should be ~0.1 (from the trailing 5: 90.0 to 90.4)
+        assert abs(eng.state.deg_slope_s_per_lap - 0.1) < 0.05
