@@ -207,3 +207,24 @@ class StrategyTab(QWidget):
                 lbl.setStyleSheet('color: #f5a623;')
             else:
                 lbl.setStyleSheet(f'color: {TXT};')
+
+        # Card 5 — weather/track-temp watch
+        if state.track_temp_c is None:
+            self._tw_status.setText('No track-temp data.')
+        else:
+            air_str = (f' (air {state.air_temp_c:.1f}°C)'
+                       if state.air_temp_c is not None else '')
+            if state.track_temp_at_stint_start_c is None:
+                self._tw_status.setText(
+                    f'Track {state.track_temp_c:.1f}°C{air_str}')
+            else:
+                delta = state.track_temp_c - state.track_temp_at_stint_start_c
+                if abs(delta) <= 5.0:
+                    note = 'stable'
+                elif delta < 0:
+                    note = f'cooling {abs(delta):.0f}°C — expect more tyre life'
+                else:
+                    note = f'heating {delta:.0f}°C — expect more degradation'
+                self._tw_status.setText(
+                    f'Track {state.track_temp_c:.1f}°C{air_str} · {note}'
+                )
