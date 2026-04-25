@@ -53,6 +53,7 @@ from .widgets.coach_tab import CoachTab
 from .widgets.math_channel_panel import MathChannelPanel
 from .coaching.lap_coach import LapCoach
 from .coaching.math_engine import MathEngine
+from .coaching.strategy_engine import StrategyEngine
 
 
 class TelemetrySampler(threading.Thread):
@@ -164,6 +165,9 @@ class TelemetryApp(QMainWindow):
 
         # Math channel engine
         self._math_engine = MathEngine()
+
+        # Strategy engine (live race-strategy state)
+        self._strategy_engine = StrategyEngine()
 
         # Reference lap for delta / sector comparison (last completed lap)
         self._ref_lap_dists: list[float] = []
@@ -4334,7 +4338,8 @@ class TelemetryApp(QMainWindow):
 
         # Outlap detection: pit lane exit during this lap = outlap
         cur_in_pit_lane = data.get('is_in_pit_lane', False)
-        if self._prev_is_in_pit_lane and not cur_in_pit_lane:
+        _pit_exit_this_tick = self._prev_is_in_pit_lane and not cur_in_pit_lane
+        if _pit_exit_this_tick:
             self._current_lap_had_pit_exit = True
             self._tyre_stint_laps = 0
         self._prev_is_in_pit_lane = cur_in_pit_lane
@@ -4347,6 +4352,7 @@ class TelemetryApp(QMainWindow):
             _fuel_now = data.get('fuel', 0.0)
             if self._fuel_at_lap_start is not None and 0 < _fuel_now < self._fuel_at_lap_start:
                 self._fuel_per_lap_history.append(self._fuel_at_lap_start - _fuel_now)
+            self._strategy_engine._fuel_per_lap_history = list(self._fuel_per_lap_history)
             self._fuel_at_lap_start = _fuel_now
             self._math_engine.on_lap_complete()
             self._store_completed_lap()
@@ -4473,6 +4479,14 @@ class TelemetryApp(QMainWindow):
 
         # Cache for the render timer
         self._last_data = data
+
+        # Strategy engine — last call so it sees the freshest state
+        import time as _time
+        sample_with_synth = dict(data)
+        sample_with_synth['_clock_s'] = _time.monotonic()
+        sample_with_synth['_pit_exit'] = _pit_exit_this_tick
+        self._strategy_engine.update(
+            sample_with_synth, self.current_lap_data, self.session_laps)
 
     def _render_telemetry(self):
         """~5 Hz UI render — drain buffered samples, then update widgets."""
