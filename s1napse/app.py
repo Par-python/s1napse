@@ -3604,6 +3604,20 @@ class TelemetryApp(QMainWindow):
             l.setStyleSheet(f'color: {color}; letter-spacing: {letter_spacing};')
             return l
 
+        # Headline strategy banner — driven by StrategyState.headline()
+        self._race_strategy_banner = QLabel('STRATEGY: STABLE')
+        self._race_strategy_banner.setFont(sans(11, bold=True))
+        self._race_strategy_banner.setStyleSheet(
+            f'background: {BG2}; color: {TXT2}; '
+            f'border: 1px solid {BORDER}; border-radius: 6px; '
+            f'padding: 10px 18px; letter-spacing: 1px;')
+        self._race_strategy_banner.setFixedHeight(40)
+        self._race_strategy_banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Click to jump to Strategy tab
+        self._race_strategy_banner.mousePressEvent = (
+            lambda e: self.tabs.setCurrentWidget(self.strategy_tab))
+        outer.addWidget(self._race_strategy_banner)
+
         # ── Session banner ────────────────────────────────────────────
         banner_card = _card()
         banner_row = QHBoxLayout(banner_card)
@@ -4387,6 +4401,29 @@ class TelemetryApp(QMainWindow):
         # Strategy tab — re-render from latest engine snapshot
         try:
             self.strategy_tab.refresh(self._strategy_engine.state)
+        except Exception:
+            pass
+
+        # Race-tab headline banner
+        try:
+            h = self._strategy_engine.state.headline()
+            self._race_strategy_banner.setText(h.text)
+            color_map = {
+                'red':     '#d04444',
+                'amber':   '#f5a623',
+                'neutral': TXT2,
+            }
+            border_map = {
+                'red':     '#a03030',
+                'amber':   '#a07020',
+                'neutral': BORDER,
+            }
+            col = color_map.get(h.severity, TXT2)
+            border = border_map.get(h.severity, BORDER)
+            self._race_strategy_banner.setStyleSheet(
+                f'background: {BG2}; color: {col}; '
+                f'border: 1px solid {border}; border-radius: 6px; '
+                f'padding: 10px 18px; letter-spacing: 1px;')
         except Exception:
             pass
 
