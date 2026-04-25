@@ -46,7 +46,7 @@ from .widgets import (
     TimeDeltaGraph, ComparisonGraph, ComparisonDeltaGraph,
     RacePaceChart, ReplayGraph, ReplayMultiGraph,
     SectorTimesPanel, SectorScrubWidget, LapHistoryPanel,
-    AidBadge,
+    AidBadge, StrategyTab,
 )
 from .widgets.graphs import _style_ax
 from .widgets.coach_tab import CoachTab
@@ -246,10 +246,15 @@ class TelemetryApp(QMainWindow):
         self.tabs = QTabWidget()
         main_layout.addWidget(self.tabs)
 
+        # Instantiate StrategyTab BEFORE _build_race_tab so its labels exist
+        # for any references inside _build_race_tab / _update_race_tab.
+        self.strategy_tab = StrategyTab()
+
         self.tabs.addTab(self._build_dashboard_tab(), 'DASHBOARD')
         self.tabs.addTab(self._build_graphs_tab(), 'TELEMETRY GRAPHS')
         self.tabs.addTab(self._build_analysis_tab(), 'LAP ANALYSIS')
         self.tabs.addTab(self._build_race_tab(), 'RACE')
+        self.tabs.addTab(self.strategy_tab, 'STRATEGY')
         self.tabs.addTab(self._build_tyres_tab(), 'TYRES')
         self.tabs.addTab(self._build_comparison_tab(), 'LAP COMPARISON')
         self.tabs.addTab(self._build_session_tab(), 'SESSION')
@@ -4494,6 +4499,12 @@ class TelemetryApp(QMainWindow):
         samples = self._sampler.drain()
         for s in samples:
             self._process_sample(s)
+
+        # Strategy tab — re-render from latest engine snapshot
+        try:
+            self.strategy_tab.refresh(self._strategy_engine.state)
+        except Exception:
+            pass
 
         # ── Phase 2: Connection hysteresis ──
         if samples:
