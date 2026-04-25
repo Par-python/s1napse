@@ -89,3 +89,43 @@ class TestDegradationProjector:
             [200.0, 200.0, 90.0, 90.1, 90.2, 90.3, 90.4]))
         # Slope should be ~0.1 (from the trailing 5: 90.0 to 90.4)
         assert abs(eng.state.deg_slope_s_per_lap - 0.1) < 0.05
+
+
+class TestPitWindow:
+    def _laps(self, times):
+        return [{'lap_number': i + 1, 'total_time_s': t,
+                 'data': {'speed': [100]}}
+                for i, t in enumerate(times)]
+
+    def test_no_window_without_fuel_history(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        # No completed laps -> no fuel/lap history
+        eng.update({'fuel': 30.0}, {}, [])
+        assert eng.state.pit_window_open_lap is None
+        assert eng.state.pit_window_close_lap is None
+
+    def test_window_open_when_fuel_runs_out_in_n_laps(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        # Three laps logged. Synthesize fuel state via repeated updates.
+        # Lap 1: fuel = 90L start, 87L end -> 3L/lap
+        # Lap 2: fuel = 87L start, 84L end -> 3L/lap
+        # Lap 3: fuel = 84L start, 81L end -> 3L/lap
+        # Current fuel: 30L -> ~10 laps left
+        eng._fuel_per_lap_history = [3.0, 3.0, 3.0]  # internal seeding
+        eng.update({'fuel': 30.0}, {},
+                   self._laps([90.0, 90.0, 90.0]))
+        assert eng.state.fuel_laps_left is not None
+        assert abs(eng.state.fuel_laps_left - 10.0) < 0.5
+
+    def test_window_close_from_tyre_cliff(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        eng._fuel_per_lap_history = [3.0]
+        # Lap times degrading by 0.3s/lap. Baseline ~90.0; cliff at +1.5s = lap_5
+        eng.update({'fuel': 30.0}, {},
+                   self._laps([90.0, 90.0, 90.3, 90.6, 90.9]))
+        # Cliff lap = current_lap + (1.5 / slope) = 5 + (1.5 / 0.3) = 10
+        assert eng.state.pit_window_close_lap is not None
+        assert 8 <= eng.state.pit_window_close_lap <= 12

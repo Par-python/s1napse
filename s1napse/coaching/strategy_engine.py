@@ -89,6 +89,8 @@ class StrategyEngine:
 
     def __init__(self):
         self._state = StrategyState()
+        self._fuel_per_lap_history: list[float] = []
+        self._tyre_cliff_threshold_s = 1.5
 
     @property
     def state(self) -> StrategyState:
@@ -111,7 +113,11 @@ class StrategyEngine:
         session_laps : list
             The list of completed laps (TelemetryApp.session_laps).
         """
+        # Track current lap count for window math
+        self._state.current_lap_count = max(
+            (lap.get('lap_number', 0) for lap in session_laps), default=0)
         self._recompute_degradation(session_laps)
+        self._recompute_pit_window(sample)
 
     def _recompute_degradation(self, session_laps: list) -> None:
         """Linear regression over trailing 3-5 lap times.
@@ -151,3 +157,30 @@ class StrategyEngine:
         # Projected end-of-stint pace: assume 5 more laps remaining (UI overrides this)
         s.deg_projected_end_pace_s = round(
             float(intercept + slope * (len(window) - 1 + 5)), 3)
+
+    def _recompute_pit_window(self, sample: dict) -> None:
+        """Compute pit window open (fuel) and close (tyre cliff) lap numbers."""
+        s = self._state
+        fuel_now = sample.get('fuel', 0.0)
+
+        # Open edge: fuel-driven
+        if self._fuel_per_lap_history and fuel_now > 0:
+            avg_fuel = sum(self._fuel_per_lap_history[-3:]) / len(
+                self._fuel_per_lap_history[-3:])
+            if avg_fuel > 0:
+                laps_left = fuel_now / avg_fuel
+                s.fuel_laps_left = round(laps_left, 1)
+                s.pit_window_open_lap = s.current_lap_count + int(laps_left)
+            else:
+                s.fuel_laps_left = None
+                s.pit_window_open_lap = None
+        else:
+            s.fuel_laps_left = None
+            s.pit_window_open_lap = None
+
+        # Close edge: tyre cliff
+        if s.deg_slope_s_per_lap and s.deg_slope_s_per_lap > 0:
+            cliff_laps_ahead = self._tyre_cliff_threshold_s / s.deg_slope_s_per_lap
+            s.pit_window_close_lap = s.current_lap_count + int(cliff_laps_ahead)
+        else:
+            s.pit_window_close_lap = None
