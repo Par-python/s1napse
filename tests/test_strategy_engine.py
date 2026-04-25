@@ -25,3 +25,24 @@ class TestStrategyStateDefaults:
         state = StrategyState()
         assert state.rival_ahead_pitted_at is None
         assert state.rival_behind_pitted_at is None
+
+
+class TestStrategyEngineSkeleton:
+    def test_engine_can_be_instantiated(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        assert isinstance(eng.state, StrategyState)
+
+    def test_update_accepts_three_args(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        # update(sample, current_lap_data, session_laps)
+        eng.update({'gap_ahead': 0, 'gap_behind': 0}, {}, [])
+        # No assertions on state yet -- just confirms the call doesn't raise.
+
+    def test_state_property_returns_same_object(self):
+        from s1napse.coaching.strategy_engine import StrategyEngine
+        eng = StrategyEngine()
+        s1 = eng.state
+        s2 = eng.state
+        assert s1 is s2  # caller can read incrementally without copy

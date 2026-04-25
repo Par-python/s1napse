@@ -73,3 +73,41 @@ class StrategyState:
           5. Default
         """
         return Headline()  # placeholder for now -- Task 8 fills this in
+
+
+class StrategyEngine:
+    """Live race-strategy engine.
+
+    Instantiate once per session. Call :meth:`update` for every processed
+    raw telemetry sample. Read the latest snapshot via :attr:`state`.
+
+    The engine never raises -- missing inputs simply leave the relevant
+    StrategyState fields as None.
+    """
+
+    def __init__(self):
+        self._state = StrategyState()
+
+    @property
+    def state(self) -> StrategyState:
+        return self._state
+
+    def update(
+        self,
+        sample: dict,
+        current_lap_data: dict,
+        session_laps: list,
+    ) -> None:
+        """Recompute strategy state from the latest sample.
+
+        Parameters
+        ----------
+        sample : dict
+            One raw telemetry sample dict (matches the reader output schema).
+        current_lap_data : dict
+            The in-progress lap's per-channel arrays (TelemetryApp.current_lap_data).
+        session_laps : list
+            The list of completed laps (TelemetryApp.session_laps).
+        """
+        # No-op for now -- subsequent tasks fill this in.
+        return
