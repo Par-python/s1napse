@@ -4001,11 +4001,11 @@ class TelemetryApp(QMainWindow):
         # ── Pit strategy ─────────────────────────────────────────────
         history = self._fuel_per_lap_history
         if not history:
-            self._pit_no_data_lbl.setVisible(True)
-            self._pit_rec_lbl.setText('—')
-            self._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+            self.strategy_tab._pit_no_data_lbl.setVisible(True)
+            self.strategy_tab._pit_rec_lbl.setText('—')
+            self.strategy_tab._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
         else:
-            self._pit_no_data_lbl.setVisible(False)
+            self.strategy_tab._pit_no_data_lbl.setVisible(False)
             avg_fuel = sum(history[-5:]) / len(history[-5:])
             fuel_laps = data.get('fuel', 0) / avg_fuel if avg_fuel > 0 else 0
 
@@ -4032,11 +4032,11 @@ class TelemetryApp(QMainWindow):
 
             fuel_color = (C_THROTTLE if fuel_laps > 5
                           else C_RPM if fuel_laps > 2 else C_BRAKE)
-            self._pit_fuel_laps_lbl.setText(f'{fuel_laps:.1f}')
-            self._pit_fuel_laps_lbl.setStyleSheet(f'color: {fuel_color};')
-            self._pit_tyre_stint_lbl.setText(f'{stint} laps')
-            self._pit_tyre_cond_lbl.setText(tyre_cond)
-            self._pit_tyre_cond_lbl.setStyleSheet(f'color: {tyre_color};')
+            self.strategy_tab._pit_fuel_laps_lbl.setText(f'{fuel_laps:.1f}')
+            self.strategy_tab._pit_fuel_laps_lbl.setStyleSheet(f'color: {fuel_color};')
+            self.strategy_tab._pit_tyre_stint_lbl.setText(f'{stint} laps')
+            self.strategy_tab._pit_tyre_cond_lbl.setText(tyre_cond)
+            self.strategy_tab._pit_tyre_cond_lbl.setStyleSheet(f'color: {tyre_color};')
 
             if tyre_cond == 'CRITICAL' or fuel_laps < 1.5:
                 rec, rec_color = 'PIT THIS LAP', C_BRAKE
@@ -4047,8 +4047,8 @@ class TelemetryApp(QMainWindow):
                 rec, rec_color = f'PREPARE TO PIT  ·  ~{pit_in} laps', C_RPM
             else:
                 rec, rec_color = f'STAY OUT  ·  ~{pit_in} laps to window', C_THROTTLE
-            self._pit_rec_lbl.setText(rec)
-            self._pit_rec_lbl.setStyleSheet(
+            self.strategy_tab._pit_rec_lbl.setText(rec)
+            self.strategy_tab._pit_rec_lbl.setStyleSheet(
                 f'color: {rec_color}; letter-spacing: 1px;')
 
         # ── Consistency label ─────────────────────────────────────────
@@ -4922,12 +4922,12 @@ class TelemetryApp(QMainWindow):
             dot.setStyleSheet(f'color: {BORDER2};')
         for lbl in self._race_tyre_temps:
             lbl.setText('—°')
-        self._pit_rec_lbl.setText('—')
-        self._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        self._pit_fuel_laps_lbl.setText('—')
-        self._pit_tyre_stint_lbl.setText('—')
-        self._pit_tyre_cond_lbl.setText('—')
-        self._pit_no_data_lbl.setVisible(True)
+        self.strategy_tab._pit_rec_lbl.setText('—')
+        self.strategy_tab._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self.strategy_tab._pit_fuel_laps_lbl.setText('—')
+        self.strategy_tab._pit_tyre_stint_lbl.setText('—')
+        self.strategy_tab._pit_tyre_cond_lbl.setText('—')
+        self.strategy_tab._pit_no_data_lbl.setVisible(True)
         self._race_consistency_lbl.setText('—')
         self._race_consistency_lbl.setStyleSheet(f'color: {TXT2};')
         self._fs_result_lbl.setText('—')

@@ -132,13 +132,52 @@ class StrategyTab(QWidget):
 
     def _build_pit_summary_card(self) -> QFrame:
         c = _card()
-        v = QVBoxLayout(c)
-        v.setContentsMargins(18, 12, 18, 12)
-        v.addWidget(_chip_lbl('PIT STRATEGY (relocated)'))
-        self._ps_status = QLabel('Pit-strategy summary will move here in Task 14.')
-        self._ps_status.setFont(mono(10))
-        self._ps_status.setStyleSheet(f'color: {TXT2};')
-        v.addWidget(self._ps_status)
+        vbox = QVBoxLayout(c)
+        vbox.setContentsMargins(18, 12, 18, 12)
+        vbox.setSpacing(8)
+
+        hdr_row = QHBoxLayout()
+        hdr_row.addWidget(_chip_lbl('PIT STRATEGY'))
+        hdr_row.addStretch()
+        self._pit_no_data_lbl = _chip_lbl('Complete a lap to calculate',
+                                           color=TXT2, bold=False)
+        hdr_row.addWidget(self._pit_no_data_lbl)
+        vbox.addLayout(hdr_row)
+
+        stats_row = QHBoxLayout()
+        stats_row.setSpacing(0)
+
+        def _pit_stat(title: str, attr: str) -> QVBoxLayout:
+            col = QVBoxLayout()
+            col.setSpacing(2)
+            col.addWidget(_chip_lbl(title, font_size=7))
+            v = QLabel('—')
+            v.setFont(mono(11, bold=True))
+            v.setStyleSheet(f'color: {TXT};')
+            col.addWidget(v)
+            setattr(self, attr, v)
+            return col
+
+        stats_row.addLayout(_pit_stat('FUEL LAPS LEFT', '_pit_fuel_laps_lbl'))
+        stats_row.addSpacing(28)
+        stats_row.addLayout(_pit_stat('TYRE STINT', '_pit_tyre_stint_lbl'))
+        stats_row.addSpacing(28)
+        stats_row.addLayout(_pit_stat('TYRE CONDITION', '_pit_tyre_cond_lbl'))
+        stats_row.addStretch()
+        vbox.addLayout(stats_row)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet(f'color: {BORDER2}; background: {BORDER2};')
+        sep.setFixedHeight(1)
+        vbox.addWidget(sep)
+
+        self._pit_rec_lbl = QLabel('—')
+        self._pit_rec_lbl.setFont(sans(11, bold=True))
+        self._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self._pit_rec_lbl.setWordWrap(True)
+        vbox.addWidget(self._pit_rec_lbl)
+
         return c
 
     # --- Public API ---
