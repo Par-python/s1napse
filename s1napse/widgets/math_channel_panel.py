@@ -14,7 +14,12 @@ from PyQt6.QtWidgets import (
 )
 
 from ..constants import (
-    BG, BG2, BG3, BORDER, BORDER2, TXT, TXT2, WHITE, C_SPEED, mono, sans,
+    C_SPEED, mono, sans,
+)
+from ..theme import (
+    BG, SURFACE_RAISED as BG2, SURFACE_HOVER as BG3,
+    BORDER_SUBTLE as BORDER, BORDER_STRONG as BORDER2,
+    TEXT_SECONDARY as TXT, TEXT_MUTED as TXT2, TEXT_PRIMARY as WHITE,
 )
 from .math_formula_editor import FormulaEditorWidget
 

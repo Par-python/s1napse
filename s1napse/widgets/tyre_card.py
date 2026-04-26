@@ -5,9 +5,13 @@ from PyQt6.QtCore import Qt, QRectF
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush
 
 from ..constants import (
-    BG2, BG3, BORDER, BORDER2, TXT, TXT2, WHITE,
     C_THROTTLE, C_BRAKE, C_RPM,
     mono, sans,
+)
+from ..theme import (
+    SURFACE_RAISED as BG2, SURFACE_HOVER as BG3,
+    BORDER_SUBTLE as BORDER, BORDER_STRONG as BORDER2,
+    TEXT_SECONDARY as TXT, TEXT_MUTED as TXT2, TEXT_PRIMARY as WHITE,
 )
 
 

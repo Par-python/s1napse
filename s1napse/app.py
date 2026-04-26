@@ -26,11 +26,17 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from .constants import (
-    BG, BG1, BG2, BG3, BORDER, BORDER2, TXT, TXT2, WHITE,
     C_SPEED, C_THROTTLE, C_BRAKE, C_RPM, C_GEAR, C_STEER,
     C_ABS, C_TC, C_DELTA, C_PURPLE, C_PURPLE_BG, C_GREEN_BG, C_REF,
     N_TRACK_SEG, MONZA_LENGTH_M,
-    APP_STYLE, mono, sans,
+    mono, sans,
+)
+from . import theme
+from .theme import (
+    BG, SURFACE, SURFACE_RAISED, SURFACE_HOVER, BORDER_SUBTLE, BORDER_STRONG,
+    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, TEXT_FAINT,
+    ACCENT, GOOD, WARN, BAD, INFO,
+    ui_font, mono_font, label_font,
 )
 from .utils import (
     _safe_list, h_line, _channel_header, _vsep,
@@ -97,6 +103,18 @@ class TelemetrySampler(threading.Thread):
 
     def stop(self):
         self._running = False
+
+
+# Compatibility aliases for files inside s1napse/widgets/ that still import
+# old constant names. Removed once those modules are migrated to `theme`.
+BG1 = SURFACE
+BG2 = SURFACE_RAISED
+BG3 = SURFACE_HOVER
+BORDER = BORDER_SUBTLE
+BORDER2 = BORDER_STRONG
+TXT = TEXT_SECONDARY
+TXT2 = TEXT_MUTED
+WHITE = TEXT_PRIMARY
 
 
 class TelemetryApp(QMainWindow):

@@ -1,7 +1,8 @@
 """Small utility functions shared across the application."""
 
 from PyQt6.QtWidgets import QFrame, QLabel
-from .constants import BORDER2, TXT2, sans
+from .constants import sans
+from .theme import BORDER_STRONG as BORDER2, TEXT_MUTED as TXT2
 
 
 def _safe_list(obj, length: int, default: float = 0.0) -> list:

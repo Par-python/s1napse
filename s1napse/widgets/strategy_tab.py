@@ -10,7 +10,12 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QScrollArea,
 )
 
-from ..constants import BG, BG2, BG3, BORDER, BORDER2, TXT, TXT2, mono, sans
+from ..constants import mono, sans
+from ..theme import (
+    BG, SURFACE_RAISED as BG2, SURFACE_HOVER as BG3,
+    BORDER_SUBTLE as BORDER, BORDER_STRONG as BORDER2,
+    TEXT_SECONDARY as TXT, TEXT_MUTED as TXT2,
+)
 
 
 def _card() -> QFrame:

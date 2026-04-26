@@ -8,8 +8,12 @@ from matplotlib.figure import Figure
 from PyQt6.QtWidgets import QSizePolicy
 
 from ..constants import (
-    BG, BG1, TXT2, WHITE, MONZA_LENGTH_M,
+    MONZA_LENGTH_M,
     C_SPEED, C_THROTTLE, C_BRAKE, C_DELTA, C_PURPLE, C_REF,
+)
+from ..theme import (
+    BG, SURFACE as BG1, TEXT_MUTED as TXT2, TEXT_PRIMARY as WHITE,
+    BORDER_STRONG as BORDER2,
 )
 from ..utils import _interp_time_at_dist
 
@@ -414,10 +418,9 @@ class RacePaceChart(FigureCanvas):
             return
 
         best_t = min(times)
-        from ..constants import BORDER2 as _B2
         colors = [C_PURPLE if abs(t - best_t) < 0.001 else C_SPEED for t in times]
 
-        self.ax.plot(laps, times, color=_B2, linewidth=1.0, zorder=1)
+        self.ax.plot(laps, times, color=BORDER2, linewidth=1.0, zorder=1)
         self.ax.scatter(laps, times, c=colors, s=20, zorder=2)
         self.ax.set_xlim(min(laps) - 0.5, max(laps) + 0.5)
         padding = max(1.0, (max(times) - min(times)) * 0.2)

@@ -8,10 +8,14 @@ from PyQt6.QtCore import Qt, QRectF, pyqtSignal
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont
 
 from ..constants import (
-    BG1, BG2, BG3, BORDER, BORDER2, TXT, TXT2, WHITE,
     C_SPEED, C_THROTTLE, C_BRAKE, C_RPM, C_STEER, C_DELTA,
     C_PURPLE, C_PURPLE_BG, C_GREEN_BG, C_REF,
     mono, sans,
+)
+from ..theme import (
+    SURFACE as BG1, SURFACE_RAISED as BG2, SURFACE_HOVER as BG3,
+    BORDER_SUBTLE as BORDER, BORDER_STRONG as BORDER2,
+    TEXT_SECONDARY as TXT, TEXT_MUTED as TXT2, TEXT_PRIMARY as WHITE,
 )
 from ..utils import h_line
 
