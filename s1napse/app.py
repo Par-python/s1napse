@@ -267,6 +267,8 @@ class TelemetryApp(QMainWindow):
             self.title_bar.addTrailing(w)
 
         self.tabs = QTabWidget()
+        from .widgets.tab_bar import LiveTabBar
+        self.tabs.setTabBar(LiveTabBar(self.tabs))
         main_layout.addWidget(self.tabs)
 
         # Instantiate StrategyTab BEFORE _build_race_tab so its labels exist
@@ -1132,6 +1134,20 @@ class TelemetryApp(QMainWindow):
             stint='',
             last_lap=last_s,
         )
+
+    def _update_tab_indicators(self) -> None:
+        """Paint a live-dot on tabs that have active data."""
+        bar = self.tabs.tabBar()
+        if not hasattr(bar, 'setLive'):
+            return
+        race_live = self.current_reader is not None
+        strategy_alert = bool(getattr(self.strategy_tab, 'has_alert', lambda: False)())
+        for i in range(self.tabs.count()):
+            title = self.tabs.tabText(i).upper()
+            if title == 'RACE':
+                bar.setLive(i, race_live)
+            elif title == 'STRATEGY':
+                bar.setLive(i, strategy_alert)
 
     def _update_real_telemetry(self):
         """Update the real racing dashboard from ELM327Reader data."""
@@ -4569,6 +4585,7 @@ class TelemetryApp(QMainWindow):
     def _render_telemetry(self):
         """~5 Hz UI render — drain buffered samples, then update widgets."""
         self._update_title_bar()
+        self._update_tab_indicators()
         # ── Phase 1: Drain and process all buffered samples ──
         samples = self._sampler.drain()
         for s in samples:

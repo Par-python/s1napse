@@ -267,6 +267,9 @@ class StrategyTab(QWidget):
 
     # --- Public API ---
 
+    def has_alert(self) -> bool:
+        return False
+
     def refresh(self, state) -> None:
         """Re-render all six cards from a StrategyState. Cheap if invisible."""
         if not self.isVisible():
