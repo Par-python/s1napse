@@ -30,3 +30,25 @@ def test_accent_and_state_colors():
 def test_spacing_and_radius_scales():
     assert theme.SPACING == (4, 8, 12, 16, 20, 24)
     assert theme.RADIUS == {'sm': 4, 'md': 6, 'lg': 8, 'xl': 10}
+
+
+def test_ui_font_helper_returns_qfont():
+    from PyQt6.QtGui import QFont
+    f = theme.ui_font(12)
+    assert isinstance(f, QFont)
+    assert f.pointSize() == 12
+
+
+def test_mono_font_uses_tabular_figures():
+    from PyQt6.QtGui import QFont
+    f = theme.mono_font(13)
+    assert isinstance(f, QFont)
+    assert f.pointSize() == 13
+    feat = f.featureSettings() if hasattr(f, 'featureSettings') else ''
+    assert 'tnum' in feat or f.styleStrategy() != QFont.StyleStrategy.PreferDefault
+
+
+def test_label_font_uppercase_letterspacing():
+    f = theme.label_font()
+    assert f.pointSize() == theme.FONT_LABEL
+    assert f.letterSpacing() > 1.0

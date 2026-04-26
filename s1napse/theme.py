@@ -41,3 +41,34 @@ FONT_HEADING     = 14
 FONT_BODY_DENSE  = 11
 FONT_BODY_ROOMY  = 12
 FONT_LABEL       = 10
+
+from PyQt6.QtGui import QFont
+
+
+def ui_font(size: int = FONT_BODY_ROOMY, *, bold: bool = False) -> QFont:
+    """Inter (or system fallback) at the given point size."""
+    f = QFont(FONT_UI_FAMILY, size)
+    f.setStyleHint(QFont.StyleHint.SansSerif)
+    f.setBold(bold)
+    return f
+
+
+def mono_font(size: int = FONT_NUMERIC_MD, *, bold: bool = False) -> QFont:
+    """JetBrains Mono (or system mono fallback) with tabular figures."""
+    f = QFont(FONT_MONO_FAMILY, size)
+    f.setStyleHint(QFont.StyleHint.Monospace)
+    f.setStyleStrategy(QFont.StyleStrategy.PreferMatch)
+    f.setBold(bold)
+    if hasattr(f, 'setFeatureSettings'):
+        f.setFeatureSettings('tnum')  # tabular numerals — digits don't jitter
+    return f
+
+
+def label_font() -> QFont:
+    """10pt uppercase label with positive letter-spacing."""
+    f = QFont(FONT_UI_FAMILY, FONT_LABEL)
+    f.setStyleHint(QFont.StyleHint.SansSerif)
+    f.setWeight(QFont.Weight.Medium)
+    f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.2)
+    f.setCapitalization(QFont.Capitalization.AllUppercase)
+    return f
