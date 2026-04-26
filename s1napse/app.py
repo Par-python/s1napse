@@ -52,7 +52,7 @@ from .widgets import (
     TimeDeltaGraph, ComparisonGraph, ComparisonDeltaGraph,
     RacePaceChart, ReplayGraph, ReplayMultiGraph,
     SectorTimesPanel, SectorScrubWidget, LapHistoryPanel,
-    AidBadge, StrategyTab,
+    AidBadge, StrategyTab, LiveTabBar,
 )
 from .widgets.title_bar import TitleBar
 from .widgets.graphs import _style_ax
@@ -267,7 +267,6 @@ class TelemetryApp(QMainWindow):
             self.title_bar.addTrailing(w)
 
         self.tabs = QTabWidget()
-        from .widgets.tab_bar import LiveTabBar
         self.tabs.setTabBar(LiveTabBar(self.tabs))
         main_layout.addWidget(self.tabs)
 

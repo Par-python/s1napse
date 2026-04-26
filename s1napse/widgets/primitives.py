@@ -9,10 +9,10 @@ from .. import theme
 
 _PILL_TONES = {
     'neutral': (theme.SURFACE_RAISED, theme.BORDER_STRONG, theme.TEXT_SECONDARY),
-    'violet':  ('#1d1631', 'rgba(139,92,246,0.32)', '#b4a0ff'),
-    'good':    ('#102a1c', 'rgba(34,197,94,0.32)',  '#5fe39a'),
-    'warn':    ('#2a200d', 'rgba(245,158,11,0.32)', '#fbbf24'),
-    'bad':     ('#2a1313', 'rgba(239,68,68,0.32)',  '#fca5a5'),
+    'violet':  (theme.ACCENT_BG, theme.ACCENT_BORDER, theme.ACCENT_FG),
+    'good':    (theme.GOOD_BG,   theme.GOOD_BORDER,   theme.GOOD_FG),
+    'warn':    (theme.WARN_BG,   theme.WARN_BORDER,   theme.WARN_FG),
+    'bad':     (theme.BAD_BG,    theme.BAD_BORDER,    theme.BAD_FG),
 }
 
 

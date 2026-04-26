@@ -26,6 +26,31 @@ WARN   = '#F59E0B'
 BAD    = '#EF4444'
 INFO   = '#22D3EE'
 
+# Tints — translucent variants used for pill backgrounds, card accents, etc.
+# Use the same RGB as the parent token; alpha encodes intensity.
+def _rgba(hex_color: str, alpha: float) -> str:
+    """Convert '#RRGGBB' + alpha (0..1) into 'rgba(r,g,b,a)' for Qt stylesheets."""
+    r = int(hex_color[1:3], 16)
+    g = int(hex_color[3:5], 16)
+    b = int(hex_color[5:7], 16)
+    return f'rgba({r},{g},{b},{alpha:.2f})'
+
+ACCENT_BG     = '#1D1631'   # dark violet pill background
+ACCENT_BORDER = _rgba(ACCENT, 0.32)
+ACCENT_FG     = '#B4A0FF'   # readable violet on dark
+
+GOOD_BG       = '#102A1C'
+GOOD_BORDER   = _rgba(GOOD, 0.32)
+GOOD_FG       = '#5FE39A'
+
+WARN_BG       = '#2A200D'
+WARN_BORDER   = _rgba(WARN, 0.32)
+WARN_FG       = '#FBBF24'
+
+BAD_BG        = '#2A1313'
+BAD_BORDER    = _rgba(BAD, 0.32)
+BAD_FG        = '#FCA5A5'
+
 # Layout scales --------------------------------------------------------
 SPACING = (4, 8, 12, 16, 20, 24)
 RADIUS  = {'sm': 4, 'md': 6, 'lg': 8, 'xl': 10}
@@ -80,7 +105,7 @@ def build_app_qss() -> str:
 QMainWindow, QWidget {{
     background-color: {BG};
     color: {TEXT_SECONDARY};
-    font-size: {FONT_BODY_ROOMY}px;
+    font-size: {FONT_BODY_ROOMY}pt;
 }}
 
 QTabWidget::pane {{
@@ -100,7 +125,7 @@ QTabBar::tab {{
     border: none;
     border-bottom: 2px solid transparent;
     margin-bottom: -1px;
-    font-size: {FONT_LABEL}px;
+    font-size: {FONT_LABEL}pt;
     font-weight: 500;
     letter-spacing: 0.6px;
     text-transform: uppercase;
@@ -136,7 +161,7 @@ QPushButton {{
     border: 1px solid {BORDER_STRONG};
     border-radius: {RADIUS['md']}px;
     padding: 6px 14px;
-    font-size: {FONT_LABEL}px;
+    font-size: {FONT_LABEL}pt;
     font-weight: 500;
     letter-spacing: 0.4px;
 }}
@@ -197,7 +222,7 @@ QGroupBox {{
     border-radius: {RADIUS['lg']}px;
     margin-top: 12px;
     color: {TEXT_MUTED};
-    font-size: {FONT_LABEL}px;
+    font-size: {FONT_LABEL}pt;
     letter-spacing: 0.5px;
 }}
 QGroupBox::title {{
