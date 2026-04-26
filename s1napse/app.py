@@ -54,6 +54,7 @@ from .widgets import (
     SectorTimesPanel, SectorScrubWidget, LapHistoryPanel,
     AidBadge, StrategyTab,
 )
+from .widgets.title_bar import TitleBar
 from .widgets.graphs import _style_ax
 from .widgets.coach_tab import CoachTab
 from .widgets.math_channel_panel import MathChannelPanel
@@ -258,8 +259,13 @@ class TelemetryApp(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        main_layout.addWidget(self._build_connection_strip())
-        main_layout.addWidget(h_line())
+        self.title_bar = TitleBar()
+        main_layout.addWidget(self.title_bar)
+
+        # Connection strip is hidden during the revamp — TitleBar replaces its
+        # "live source" function. The reader picker / settings buttons return in Task 13.
+        # main_layout.addWidget(self._build_connection_strip())
+        # main_layout.addWidget(h_line())
 
         self.tabs = QTabWidget()
         main_layout.addWidget(self.tabs)
@@ -1106,6 +1112,27 @@ class TelemetryApp(QMainWindow):
             self.elm_reader = None
         self.current_reader = None
         self._stack.setCurrentIndex(0)
+
+    def _update_title_bar(self) -> None:
+        """Refresh the TitleBar with live source, track, temps, and lap info."""
+        src_name = ''
+        if self.current_reader is self.acc_reader: src_name = 'ACC'
+        elif self.current_reader is self.ac_reader: src_name = 'AC'
+        elif self.current_reader is self.ir_reader: src_name = 'iRacing'
+        elif self.current_reader is self.elm_reader: src_name = 'OBD-II'
+        track = self._last_track_name or ''
+        air = f'{self._last_air_temp:.0f}°C' if self._last_air_temp else ''
+        road = f'{self._last_road_temp:.0f}°C' if self._last_road_temp else ''
+        parts = [p for p in (src_name, track, f'{air} / {road}' if air or road else '') if p]
+        self.title_bar.setSource(' · '.join(parts), live=src_name != '')
+
+        last_ms = int(self.last_lap_time)
+        last_s = f'{last_ms//60000:01d}:{(last_ms//1000)%60:02d}.{last_ms%1000:03d}' if last_ms else '—'
+        self.title_bar.setSession(
+            lap=f'{self.current_lap_count} / —',
+            stint='',
+            last_lap=last_s,
+        )
 
     def _update_real_telemetry(self):
         """Update the real racing dashboard from ELM327Reader data."""
@@ -4411,6 +4438,7 @@ class TelemetryApp(QMainWindow):
 
     def _render_telemetry(self):
         """~5 Hz UI render — drain buffered samples, then update widgets."""
+        self._update_title_bar()
         # ── Phase 1: Drain and process all buffered samples ──
         samples = self._sampler.drain()
         for s in samples:
