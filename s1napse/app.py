@@ -262,10 +262,9 @@ class TelemetryApp(QMainWindow):
         self.title_bar = TitleBar()
         main_layout.addWidget(self.title_bar)
 
-        # Connection strip is hidden during the revamp — TitleBar replaces its
-        # "live source" function. The reader picker / settings buttons return in Task 13.
-        # main_layout.addWidget(self._build_connection_strip())
-        # main_layout.addWidget(h_line())
+        controls = self._build_connection_strip_controls()
+        for w in controls:
+            self.title_bar.addTrailing(w)
 
         self.tabs = QTabWidget()
         main_layout.addWidget(self.tabs)
@@ -1226,6 +1225,137 @@ class TelemetryApp(QMainWindow):
             self._real_speed_canvas.draw_idle()
             self._real_thr_canvas.draw_idle()
             self._real_rpm_canvas.draw_idle()
+
+    def _build_connection_strip_controls(self) -> list:
+        """Return the inner controls of the (now-deprecated) connection strip,
+        without the wrapping frame. Each widget is the same instance the strip
+        used to embed, with all signal wiring preserved."""
+        out: list = []
+
+        # Status indicator
+        self.connection_dot = QLabel('●')
+        self.connection_dot.setFont(sans(10))
+        self.connection_dot.setStyleSheet('color: #444;')
+
+        self.connection_label = QLabel('DISCONNECTED')
+        self.connection_label.setFont(sans(9))
+        self.connection_label.setStyleSheet(f'color: {TXT2}; letter-spacing: 0.5px;')
+
+        out.append(self.connection_dot)
+        out.append(self.connection_label)
+
+        # Game selector
+        game_lbl = QLabel('SOURCE')
+        game_lbl.setFont(sans(8))
+        game_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self.game_combo = QComboBox()
+        self.game_combo.addItems([
+            'Auto-Detect', 'ACC (Shared Memory)', 'AC (UDP)', 'iRacing (SDK)',
+            'ELM327 (OBD-II)',
+        ])
+        self.game_combo.setFixedWidth(170)
+        self.game_combo.currentTextChanged.connect(self._on_game_changed)
+        out.append(game_lbl)
+        out.append(self.game_combo)
+
+        # Track selector
+        track_lbl = QLabel('TRACK')
+        track_lbl.setFont(sans(8))
+        track_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self.track_combo = QComboBox()
+        self.track_combo.addItem('Auto-Detect', userData=None)
+        for key, td in TRACKS.items():
+            self.track_combo.addItem(td['name'], userData=key)
+        self.track_combo.setFixedWidth(155)
+        self.track_combo.currentIndexChanged.connect(self._on_track_changed)
+        out.append(track_lbl)
+        out.append(self.track_combo)
+
+        # UDP settings
+        host_lbl = QLabel('HOST')
+        host_lbl.setFont(sans(8))
+        host_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self.udp_host = QLineEdit('127.0.0.1')
+        self.udp_host.setFixedWidth(110)
+        port_lbl = QLabel('PORT')
+        port_lbl.setFont(sans(8))
+        port_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self.udp_port = QLineEdit('9996')
+        self.udp_port.setFixedWidth(55)
+        out.append(host_lbl)
+        out.append(self.udp_host)
+        out.append(port_lbl)
+        out.append(self.udp_port)
+
+        # Track recorder
+        self.rec_btn = QPushButton('⏺  REC')
+        self.rec_btn.setFixedSize(72, 22)
+        self.rec_btn.setCheckable(True)
+        self.rec_btn.setStyleSheet(
+            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
+            f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
+            f'QPushButton:checked {{ background: #5a0000; color: {C_BRAKE};'
+            f' border-color: {C_BRAKE}; }}'
+        )
+        self.rec_btn.toggled.connect(self._on_rec_toggled)
+        self.rec_label = QLabel('')
+        self.rec_label.setFont(sans(8))
+        self.rec_label.setStyleSheet(f'color: {TXT2};')
+        out.append(self.rec_btn)
+        out.append(self.rec_label)
+
+        # Import track map from JSON
+        self.import_track_btn = QPushButton('⬆  IMPORT MAP')
+        self.import_track_btn.setFixedSize(100, 22)
+        self.import_track_btn.setStyleSheet(
+            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
+            f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
+            f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
+        )
+        self.import_track_btn.clicked.connect(self._import_trackmap)
+        out.append(self.import_track_btn)
+
+        # Manual lap trigger (visible only in real racing mode)
+        self._manual_lap_btn = QPushButton('LAP')
+        self._manual_lap_btn.setFixedSize(55, 22)
+        self._manual_lap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._manual_lap_btn.setStyleSheet(
+            f'QPushButton {{ background: #0a2218; color: {C_THROTTLE};'
+            f' border: 1px solid {C_THROTTLE}; border-radius: 3px;'
+            f' font-size: 10px; font-weight: bold; letter-spacing: 1px; }}'
+            f'QPushButton:hover {{ background: #0f3322; }}'
+            f'QPushButton:pressed {{ background: #061a10; }}'
+        )
+        self._manual_lap_btn.setToolTip('Complete current lap and start next (shortcut: L)')
+        self._manual_lap_btn.clicked.connect(self._on_manual_lap)
+        self._manual_lap_btn.setVisible(False)
+        out.append(self._manual_lap_btn)
+
+        # Keyboard shortcut for lap trigger (not a widget, wired here)
+        self._lap_shortcut = QShortcut(QKeySequence('L'), self)
+        self._lap_shortcut.activated.connect(self._on_manual_lap)
+        self._lap_shortcut.setEnabled(False)
+
+        # Car / Track / Lap info labels
+        self.car_label = QLabel('—')
+        self.car_label.setFont(mono(10))
+        self.car_label.setStyleSheet(f'color: {TXT};')
+        self.car_label.setMaximumWidth(200)
+        self.car_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.track_label = QLabel('—')
+        self.track_label.setFont(mono(10))
+        self.track_label.setStyleSheet(f'color: {TXT};')
+        self.track_label.setMaximumWidth(240)
+        self.track_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.header_lap_label = QLabel('LAP —')
+        self.header_lap_label.setFont(mono(10, bold=True))
+        self.header_lap_label.setStyleSheet(f'color: {C_SPEED};')
+        self.header_lap_label.setMaximumWidth(80)
+        out.append(self.car_label)
+        out.append(self.track_label)
+        out.append(self.header_lap_label)
+
+        return out
 
     def _build_connection_strip(self) -> QWidget:
         strip = QWidget()

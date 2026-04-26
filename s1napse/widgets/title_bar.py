@@ -87,6 +87,11 @@ class TitleBar(QFrame):
 
         row.addStretch(1)
 
+        self._trailing = QHBoxLayout()
+        self._trailing.setContentsMargins(0, 0, 0, 0)
+        self._trailing.setSpacing(8)
+        row.addLayout(self._trailing)
+
         # Session context
         self._lap = QLabel('')
         self._stint = QLabel('')
@@ -99,6 +104,10 @@ class TitleBar(QFrame):
             lbl.setFont(theme.mono_font(11))
             lbl.setStyleSheet(f'color:{color}; background:transparent; border:none;')
             row.addWidget(lbl)
+
+    def addTrailing(self, w) -> None:
+        """Insert a widget into the right-side toolbar slot."""
+        self._trailing.addWidget(w)
 
     def brand(self) -> str:
         return self._brand_lbl.text()
