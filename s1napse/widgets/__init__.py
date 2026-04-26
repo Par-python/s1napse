@@ -15,6 +15,7 @@ from .coach_tab import CoachTab
 from .math_formula_editor import FormulaEditorWidget
 from .math_channel_panel import MathChannelPanel
 from .strategy_tab import StrategyTab
+from .primitives import Card, Pill, Stat, Sparkline, GapBar
 
 __all__ = [
     'RevBar', 'PedalBar', 'ValueDisplay', 'SteeringWidget', 'SteeringBar',
@@ -28,4 +29,5 @@ __all__ = [
     'AidBadge', 'CoachTab',
     'FormulaEditorWidget', 'MathChannelPanel',
     'StrategyTab',
+    'Card', 'Pill', 'Stat', 'Sparkline', 'GapBar',
 ]
