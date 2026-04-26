@@ -193,3 +193,79 @@ class Stat(QWidget):
 
     def deltaLabel(self) -> QLabel | None:
         return self._delta
+
+
+class Sparkline(QWidget):
+    """Minimal trend line. Optional dashed reference line (e.g. PB)."""
+
+    def __init__(self, *, points: list[float] | None = None,
+                 ref_value: float | None = None,
+                 accent: str | None = None, parent=None):
+        super().__init__(parent)
+        self._pts = list(points or [])
+        self._ref = ref_value
+        self._accent = accent or theme.ACCENT
+        self.setMinimumHeight(28)
+        self.setFixedHeight(36)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    def points(self) -> list[float]:
+        return list(self._pts)
+
+    def refValue(self) -> float | None:
+        return self._ref
+
+    def setPoints(self, pts: list[float], ref_value: float | None = None) -> None:
+        self._pts = list(pts)
+        if ref_value is not None:
+            self._ref = ref_value
+        self.update()
+
+    def paintEvent(self, _ev):
+        if not self._pts:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        w, h = self.width(), self.height()
+        pad_x, pad_y = 2.0, 4.0
+        ys = self._pts
+        lo = min(ys)
+        hi = max(ys)
+        if self._ref is not None:
+            lo = min(lo, self._ref)
+            hi = max(hi, self._ref)
+        if hi == lo:
+            hi = lo + 1.0
+        sx = (w - 2 * pad_x) / max(1, len(ys) - 1)
+
+        def y_to_px(v):
+            return pad_y + (1.0 - (v - lo) / (hi - lo)) * (h - 2 * pad_y)
+
+        # Reference line
+        if self._ref is not None:
+            pen = QPen(QColor(theme.ACCENT))
+            pen.setWidthF(1.0)
+            pen.setStyle(Qt.PenStyle.DashLine)
+            p.setPen(pen)
+            ry = y_to_px(self._ref)
+            p.drawLine(int(pad_x), int(ry), int(w - pad_x), int(ry))
+
+        # Trend line
+        pen = QPen(QColor(self._accent))
+        pen.setWidthF(1.6)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        prev = None
+        for i, v in enumerate(ys):
+            x = pad_x + i * sx
+            y = y_to_px(v)
+            if prev is not None:
+                p.drawLine(int(prev[0]), int(prev[1]), int(x), int(y))
+            prev = (x, y)
+
+        # End-cap dot
+        if prev is not None:
+            p.setBrush(QBrush(QColor(self._accent)))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(int(prev[0]) - 2, int(prev[1]) - 2, 4, 4)
+        p.end()

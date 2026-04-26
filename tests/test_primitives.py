@@ -85,3 +85,23 @@ def test_stat_no_delta(app):
 def test_stat_invalid_delta_state_raises(app):
     with pytest.raises(ValueError):
         Stat(value='1', delta='+0', delta_state='maybe')
+
+
+from s1napse.widgets.primitives import Sparkline
+
+
+def test_sparkline_accepts_points(app):
+    s = Sparkline(points=[1.0, 1.2, 0.9, 1.1])
+    assert s.points() == [1.0, 1.2, 0.9, 1.1]
+
+
+def test_sparkline_ref_value_optional(app):
+    s = Sparkline(points=[1.0, 1.1], ref_value=1.05)
+    assert s.refValue() == 1.05
+
+
+def test_sparkline_paint_does_not_raise_on_empty(app):
+    from PyQt6.QtCore import QSize
+    s = Sparkline(points=[])
+    s.resize(QSize(120, 36))
+    s.repaint()
