@@ -118,3 +118,78 @@ class Card(QFrame):
     def body(self) -> QVBoxLayout:
         """Public layout for adding widgets/sub-layouts inside the card."""
         return self._body
+
+
+_DELTA_STATES = {
+    'good':    theme.GOOD,
+    'bad':     theme.BAD,
+    'warn':    theme.WARN,
+    'neutral': theme.TEXT_MUTED,
+}
+
+
+class Stat(QWidget):
+    """Number-forward display: big value (mono), optional unit, optional delta, optional sub.
+
+    Use *inside* a Card.body() — Stat doesn't paint a border itself.
+    """
+
+    def __init__(self, *, value: str, unit: str | None = None,
+                 delta: str | None = None, delta_state: str = 'neutral',
+                 sub: str | None = None,
+                 size: str = 'lg',  # 'lg' | 'xl'
+                 parent=None):
+        if delta is not None and delta_state not in _DELTA_STATES:
+            raise ValueError(f'invalid delta_state {delta_state!r}')
+        super().__init__(parent)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(2)
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+
+        size_pt = theme.FONT_DISPLAY if size == 'xl' else theme.FONT_NUMERIC_LG
+        v = QLabel(value)
+        v.setFont(theme.mono_font(size_pt))
+        v.setStyleSheet(f'color:{theme.TEXT_PRIMARY}; background:transparent; border:none;')
+        row.addWidget(v, 0, Qt.AlignmentFlag.AlignBaseline)
+        self._value = v
+
+        self._unit: QLabel | None = None
+        if unit:
+            u = QLabel(unit)
+            u.setFont(theme.ui_font(theme.FONT_BODY_ROOMY))
+            u.setStyleSheet(f'color:{theme.TEXT_MUTED}; background:transparent; border:none;')
+            row.addWidget(u, 0, Qt.AlignmentFlag.AlignBaseline)
+            self._unit = u
+
+        self._delta: QLabel | None = None
+        if delta is not None:
+            d = QLabel(delta)
+            d.setFont(theme.mono_font(theme.FONT_NUMERIC_MD))
+            d.setStyleSheet(
+                f'color:{_DELTA_STATES[delta_state]}; background:transparent; border:none;'
+            )
+            row.addWidget(d, 0, Qt.AlignmentFlag.AlignBaseline)
+            self._delta = d
+
+        row.addStretch(1)
+        outer.addLayout(row)
+
+        if sub:
+            s = QLabel(sub)
+            s.setFont(theme.mono_font(theme.FONT_BODY_DENSE))
+            s.setStyleSheet(f'color:{theme.TEXT_MUTED}; background:transparent; border:none;')
+            outer.addWidget(s)
+
+    def valueLabel(self) -> QLabel:
+        return self._value
+
+    def unitLabel(self) -> QLabel | None:
+        return self._unit
+
+    def deltaLabel(self) -> QLabel | None:
+        return self._delta

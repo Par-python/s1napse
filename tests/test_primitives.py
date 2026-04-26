@@ -58,3 +58,30 @@ def test_card_pill_attaches_to_header(app):
     # A header with a label and a pill should be visible
     assert c.headerLabel().text() == 'Last lap'
     assert c.headerPill() is not None
+
+
+from s1napse.widgets.primitives import Stat
+
+
+def test_stat_renders_value_and_unit(app):
+    s = Stat(value='12.4', unit='L')
+    assert s.valueLabel().text() == '12.4'
+    assert s.unitLabel() is not None
+    assert s.unitLabel().text() == 'L'
+
+
+def test_stat_delta_state_good(app):
+    s = Stat(value='1:29.871', delta='-0.41', delta_state='good')
+    style = s.deltaLabel().styleSheet()
+    assert 'color:' in style.lower()
+    assert theme.GOOD.lower() in style.lower()
+
+
+def test_stat_no_delta(app):
+    s = Stat(value='P4')
+    assert s.deltaLabel() is None
+
+
+def test_stat_invalid_delta_state_raises(app):
+    with pytest.raises(ValueError):
+        Stat(value='1', delta='+0', delta_state='maybe')
