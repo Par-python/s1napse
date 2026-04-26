@@ -59,12 +59,54 @@
 //  [184-187] int32  tyre_compound_id (0=DHF, 1=DM, 2=DS, 3=WET)
 
 const dgram = require('dgram');
+const fs    = require('fs');
+const path  = require('path');
 
 const PORT    = 9996;
 const HOST    = '127.0.0.1';
 const HZ      = 20;       // 20 Hz = 50ms interval
 const LAP_SEC = 90;       // simulated lap duration in seconds
 const PI      = Math.PI;
+
+// ── Monza raceline (TUMFTM/racetrack-database, CC-BY-4.0) ───────────────────
+const RACELINE_CSV = path.join(__dirname, 's1napse', 'racelines', 'Monza.csv');
+
+function loadRaceline(csvPath) {
+  const raw = fs.readFileSync(csvPath, 'utf8');
+  const pts = [];
+  for (const line of raw.split('\n')) {
+    const s = line.trim();
+    if (!s || s.startsWith('#')) continue;
+    const parts = s.split(',');
+    if (parts.length < 2) continue;
+    pts.push({ x: parseFloat(parts[0]), y: parseFloat(parts[1]) });
+  }
+  const cum = [0];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    cum.push(cum[cum.length - 1] + Math.hypot(b.x - a.x, b.y - a.y));
+  }
+  return { pts, cum, total: cum[cum.length - 1] };
+}
+
+const RACELINE = loadRaceline(RACELINE_CSV);
+console.log(`Loaded Monza raceline: ${RACELINE.pts.length} pts, ${RACELINE.total.toFixed(0)}m`);
+
+function racelinePos(p) {
+  const target = ((p % 1) + 1) % 1 * RACELINE.total;
+  let lo = 0, hi = RACELINE.cum.length - 1;
+  while (lo + 1 < hi) {
+    const mid = (lo + hi) >> 1;
+    if (RACELINE.cum[mid] <= target) lo = mid;
+    else hi = mid;
+  }
+  const seg = RACELINE.cum[lo + 1] - RACELINE.cum[lo];
+  const t   = seg === 0 ? 0 : (target - RACELINE.cum[lo]) / seg;
+  const a   = RACELINE.pts[lo % RACELINE.pts.length];
+  const b   = RACELINE.pts[(lo + 1) % RACELINE.pts.length];
+  return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+}
 
 // ── Session constants ────────────────────────────────────────────────────────
 const SESSION_TYPE  = 2;    // RACE
@@ -186,9 +228,10 @@ function lapPhysics(p) {
                       : brake > 60 ? clamp(20 + (brake - 60) * 1.8 + noise(8, 10), 0, 100) : 0;
   const tc        = (!inZone && throttle > 75) ? clamp(10 + 20 * Math.max(0, Math.sin(t * 4)) * Math.max(0, Math.sin(t * 0.3)), 0, 100) : 0;
 
-  // Monza-ish oval world position
-  const wx = 300 * Math.cos(p * 2 * PI) + 80 * Math.cos(p * 4 * PI);
-  const wz = 250 * Math.sin(p * 2 * PI) + 40 * Math.sin(p * 4 * PI);
+  // Real Monza raceline from racelines/Monza.csv (TUMFTM database).
+  const rp = racelinePos(p);
+  const wx = rp.x;
+  const wz = rp.y;
 
   return { speed, rpm, gear, throttle, brake, steer, abs, tc, wx, wz };
 }

@@ -1,0 +1,92 @@
+[
+  {
+    "corner_id": 1,
+    "direction": "RIGHT",
+    "entry_distance": 19.7,
+    "turn_in_distance": 19.7,
+    "apex_distance": 334.3,
+    "exit_distance": 882.0,
+    "braking_start_distance": 19.7
+  },
+  {
+    "corner_id": 2,
+    "direction": "LEFT",
+    "entry_distance": 924.7,
+    "turn_in_distance": 924.7,
+    "apex_distance": 1492.1,
+    "exit_distance": 2057.0,
+    "braking_start_distance": 924.7
+  },
+  {
+    "corner_id": 3,
+    "direction": "RIGHT",
+    "entry_distance": 1827.0,
+    "turn_in_distance": 1827.0,
+    "apex_distance": 2053.7,
+    "exit_distance": 2057.0,
+    "braking_start_distance": 1827.0
+  },
+  {
+    "corner_id": 4,
+    "direction": "RIGHT",
+    "entry_distance": 2211.4,
+    "turn_in_distance": 2211.4,
+    "apex_distance": 2352.5,
+    "exit_distance": 3058.0,
+    "braking_start_distance": 2211.4
+  },
+  {
+    "corner_id": 5,
+    "direction": "LEFT",
+    "entry_distance": 2651.0,
+    "turn_in_distance": 2749.6,
+    "apex_distance": 2838.3,
+    "exit_distance": 3058.0,
+    "braking_start_distance": 2651.0
+  },
+  {
+    "corner_id": 6,
+    "direction": "RIGHT",
+    "entry_distance": 2651.0,
+    "turn_in_distance": 2956.5,
+    "apex_distance": 2956.5,
+    "exit_distance": 3058.0,
+    "braking_start_distance": 2651.0
+  },
+  {
+    "corner_id": 7,
+    "direction": "LEFT",
+    "entry_distance": 3117.3,
+    "turn_in_distance": 3117.3,
+    "apex_distance": 3117.3,
+    "exit_distance": 3596.0,
+    "braking_start_distance": 3117.3
+  },
+  {
+    "corner_id": 8,
+    "direction": "LEFT",
+    "entry_distance": 3737.3,
+    "turn_in_distance": 3737.3,
+    "apex_distance": 3963.8,
+    "exit_distance": 3963.8,
+    "braking_start_distance": 3737.3
+  },
+  {
+    "corner_id": 9,
+    "direction": "RIGHT",
+    "entry_distance": 3983.4,
+    "turn_in_distance": 4016.1,
+    "apex_distance": 4186.5,
+    "exit_distance": 4876.0,
+    "braking_start_distance": 3983.4
+  },
+  {
+    "corner_id": 10,
+    "direction": "LEFT",
+    "entry_distance": 4915.4,
+    "turn_in_distance": 4915.4,
+    "apex_distance": 5342.3,
+    "exit_distance": 5775.3,
+    "braking_start_distance": 4915.4
+  }
+]

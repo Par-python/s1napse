@@ -2,6 +2,7 @@
 
 import sys
 import json
+import gzip
 import time
 import math
 import threading
@@ -13,7 +14,7 @@ from PyQt6.QtWidgets import (
     QLabel, QComboBox, QPushButton, QLineEdit, QSlider,
     QTabWidget, QFileDialog, QMessageBox, QSplitter, QScrollArea,
     QFrame, QGridLayout, QSizePolicy, QSpinBox, QDoubleSpinBox,
-    QStackedWidget, QButtonGroup, QRadioButton,
+    QStackedWidget, QButtonGroup, QRadioButton, QCheckBox,
 )
 from PyQt6.QtCore import QTimer, Qt, QRectF, QPointF
 from PyQt6.QtGui import (QFont, QPainter, QColor, QPen, QBrush, QFontMetrics,
@@ -45,13 +46,57 @@ from .widgets import (
     TimeDeltaGraph, ComparisonGraph, ComparisonDeltaGraph,
     RacePaceChart, ReplayGraph, ReplayMultiGraph,
     SectorTimesPanel, SectorScrubWidget, LapHistoryPanel,
-    AidBadge,
+    AidBadge, StrategyTab,
 )
 from .widgets.graphs import _style_ax
 from .widgets.coach_tab import CoachTab
 from .widgets.math_channel_panel import MathChannelPanel
 from .coaching.lap_coach import LapCoach
 from .coaching.math_engine import MathEngine
+from .coaching.strategy_engine import StrategyEngine
+
+
+class TelemetrySampler(threading.Thread):
+    """Background thread: reads shared memory at ~50 Hz, buffers raw dicts."""
+
+    def __init__(self):
+        super().__init__(daemon=True)
+        self._lock = threading.Lock()
+        self._buffer: list[dict] = []
+        self._latest: dict | None = None
+        self._reader = None
+        self._running = True
+
+    def set_reader(self, reader):
+        self._reader = reader
+
+    def run(self):
+        while self._running:
+            reader = self._reader
+            if reader is not None:
+                try:
+                    data = reader.read()
+                except Exception:
+                    data = None
+                if data is not None:
+                    with self._lock:
+                        self._buffer.append(data)
+                        self._latest = data
+            time.sleep(0.020)
+
+    def drain(self) -> list[dict]:
+        with self._lock:
+            buf = self._buffer
+            self._buffer = []
+            return buf
+
+    @property
+    def latest(self) -> dict | None:
+        with self._lock:
+            return self._latest
+
+    def stop(self):
+        self._running = False
 
 
 class TelemetryApp(QMainWindow):
@@ -109,6 +154,9 @@ class TelemetryApp(QMainWindow):
         self._last_air_temp: float = 0.0
         self._last_road_temp: float = 0.0
 
+        # Cached telemetry data — written by fast sampler, read by render timer
+        self._last_data: dict | None = None
+
         # Track recorder
         self.recorder = TrackRecorder()
 
@@ -117,6 +165,9 @@ class TelemetryApp(QMainWindow):
 
         # Math channel engine
         self._math_engine = MathEngine()
+
+        # Strategy engine (live race-strategy state)
+        self._strategy_engine = StrategyEngine()
 
         # Reference lap for delta / sector comparison (last completed lap)
         self._ref_lap_dists: list[float] = []
@@ -134,18 +185,30 @@ class TelemetryApp(QMainWindow):
 
         self._init_ui()
 
-        self.timer = QTimer()
-        self.timer.timeout.connect(self._update_telemetry)
-        self.timer.start(50)
+        # Background sampler thread — ~50 Hz shared memory reads
+        self._sampler = TelemetrySampler()
+        self._sampler.start()
+        self._empty_drain_count = 0
 
-        # 60 fps animation timer — smooth car dot lerp (does NOT read telemetry)
+        # Attempt initial detection immediately
+        if self.auto_detect:
+            detected = self._detect_game()
+            if detected:
+                self.current_reader = detected
+                self._sampler.set_reader(detected)
+
+        # UI render timer — ~5 Hz (200 ms), all widget updates
+        self._render_timer = QTimer()
+        self._render_timer.timeout.connect(self._render_telemetry)
+        self._render_timer.start(200)
+
+        # 60 fps animation timer — smooth lerp for car dot + steering
         self._anim_timer = QTimer()
-        self._anim_timer.timeout.connect(self.track_map.tick_lerp)
+        self._anim_timer.timeout.connect(self._anim_tick)
         self._anim_timer.start(16)
 
-        # Replay playback timer (100 ms ticks, scaled by replay speed)
-        self._replay_timer = QTimer()
-        self._replay_timer.timeout.connect(self._replay_tick)
+        # Replay uses wall-clock deltas via _anim_tick (no separate timer)
+        self._replay_last_mono: float = 0.0
 
         # Real racing update timer (started when OBD connects)
         self._real_timer = QTimer()
@@ -183,10 +246,18 @@ class TelemetryApp(QMainWindow):
         self.tabs = QTabWidget()
         main_layout.addWidget(self.tabs)
 
+        # Instantiate StrategyTab BEFORE _build_race_tab so its labels exist
+        # for any references inside _build_race_tab / _update_race_tab.
+        self.strategy_tab = StrategyTab()
+        self.strategy_tab._fs_laps_spin.valueChanged.connect(self._update_fuel_save)
+        self.strategy_tab._uco_pit_loss_spin.valueChanged.connect(self._update_undercut)
+        self.strategy_tab._uco_pace_delta_spin.valueChanged.connect(self._update_undercut)
+
         self.tabs.addTab(self._build_dashboard_tab(), 'DASHBOARD')
         self.tabs.addTab(self._build_graphs_tab(), 'TELEMETRY GRAPHS')
         self.tabs.addTab(self._build_analysis_tab(), 'LAP ANALYSIS')
         self.tabs.addTab(self._build_race_tab(), 'RACE')
+        self.tabs.addTab(self.strategy_tab, 'STRATEGY')
         self.tabs.addTab(self._build_tyres_tab(), 'TYRES')
         self.tabs.addTab(self._build_comparison_tab(), 'LAP COMPARISON')
         self.tabs.addTab(self._build_session_tab(), 'SESSION')
@@ -1704,6 +1775,10 @@ class TelemetryApp(QMainWindow):
         self.track_map = TrackMapWidget()
         self.track_map.setMinimumWidth(300)
         map_vbox.addWidget(self.track_map, stretch=1)
+        ctrl_row = QHBoxLayout()
+        ctrl_row.setContentsMargins(0, 0, 0, 0)
+        ctrl_row.setSpacing(8)
+
         self._track_lock_btn = QPushButton('LOCK SHAPE')
         self._track_lock_btn.setFont(mono(9, bold=True))
         self._track_lock_btn.setCheckable(True)
@@ -1713,7 +1788,21 @@ class TelemetryApp(QMainWindow):
             f'QPushButton:checked {{background:#b45309;color:#fff;border-color:#d97706;}}'
         )
         self._track_lock_btn.toggled.connect(self._on_track_lock_toggled)
-        map_vbox.addWidget(self._track_lock_btn)
+        ctrl_row.addWidget(self._track_lock_btn)
+
+        self._raceline_chk = QCheckBox('Raceline')
+        self._raceline_chk.setFont(mono(9, bold=True))
+        self._raceline_chk.setChecked(True)
+        self._raceline_chk.setStyleSheet(
+            f'QCheckBox {{color:{TXT};spacing:6px;}}'
+            f'QCheckBox::indicator {{width:14px;height:14px;border:1px solid {BORDER};'
+            f'border-radius:3px;background:{BG3};}}'
+            f'QCheckBox::indicator:checked {{background:{C_THROTTLE};border-color:{C_THROTTLE};}}'
+        )
+        self._raceline_chk.toggled.connect(self._on_raceline_toggled)
+        ctrl_row.addWidget(self._raceline_chk)
+        ctrl_row.addStretch(1)
+        map_vbox.addLayout(ctrl_row)
         splitter.addWidget(map_container)
 
         # Right: analysis telemetry graphs in a scroll area
@@ -1820,12 +1909,16 @@ class TelemetryApp(QMainWindow):
         }
         self._current_deltas = []
 
+    _MIN_LAP_TIME_S = 45  # ignore false laps from pause/resume glitches
+
     def _store_completed_lap(self):
         if self._current_lap_had_pit_exit:
             return  # outlap — car exited pit lane this lap, don't record
         if self.current_lap_data.get('speed'):
             dists = self.current_lap_data.get('dist_m', [])
             times = self.current_lap_data.get('time_ms', [])
+            if times and times[-1] / 1000.0 < self._MIN_LAP_TIME_S:
+                return  # too short — likely a pause/resume glitch
 
             total_time_s = (times[-1] / 1000.0) if times else 0.0
 
@@ -2310,10 +2403,11 @@ class TelemetryApp(QMainWindow):
         lap_str  = f'lap{lap["lap_number"]}'
         time_str = f'{m}m{s:06.3f}s'
 
-        default_name = f'{date_str}-{user_str}-{track_str}-{lap_str}-{time_str}.json'
+        default_name = f'{date_str}-{user_str}-{track_str}-{lap_str}-{time_str}.json.gz'
 
         path, _ = QFileDialog.getSaveFileName(
-            self, 'Export Lap JSON', default_name, 'Lap JSON (*.json);;All files (*)')
+            self, 'Export Lap JSON', default_name,
+            'Lap JSON (gzipped) (*.json.gz);;All files (*)')
         if not path:
             return
 
@@ -2324,54 +2418,27 @@ class TelemetryApp(QMainWindow):
             'track_name':   TRACKS.get(self._active_track_key or '', {}).get('name', ''),
             'data':         {k: list(v) for k, v in lap['data'].items()},
         }
-        with open(path, 'w') as f:
+        with gzip.open(path, 'wt', encoding='utf-8', compresslevel=6) as f:
             json.dump(payload, f)
         QMessageBox.information(self, 'Export JSON', f'Lap saved to:\n{path}')
 
-    def _export_full_lap_json(self):
-        """Export the last completed lap as a comprehensive JSON with all telemetry,
-        tyre data, fuel, track map, session metadata, and summary stats."""
-        import os, re as _re, datetime
+    def _build_lap_json_payload(self, lap: dict) -> dict:
+        """Build a full JSON payload dict for any stored lap."""
+        import datetime
 
-        if not self.session_laps:
-            QMessageBox.information(self, 'Export Full JSON',
-                                    'No completed laps to export yet.')
-            return
-
-        lap = self.session_laps[-1]
-        t   = lap.get('total_time_s', 0)
+        d    = lap['data']
+        meta = lap.get('meta', {})
+        t    = lap.get('total_time_s', 0)
         m, s = int(t // 60), t % 60
 
-        def _slug(text: str) -> str:
-            return _re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')
-
-        date_str  = datetime.date.today().strftime('%Y-%m-%d')
-        try:
-            user_str = _slug(os.getlogin())
-        except Exception:
-            user_str = 'user'
-        meta      = lap.get('meta', {})
-        track_str = _slug(meta.get('track_name', '') or self.track_label.text() or 'unknown-track')
-        lap_str   = f'lap{lap["lap_number"]}'
-        time_str  = f'{m}m{s:06.3f}s'
-
-        default_name = f'{date_str}-{user_str}-{track_str}-{lap_str}-{time_str}-full.json'
-        path, _ = QFileDialog.getSaveFileName(
-            self, 'Export Full Lap JSON', default_name, 'Lap JSON (*.json);;All files (*)')
-        if not path:
-            return
-
-        d = lap['data']
-
-        # ── Summary stats ────────────────────────────────────────────────
-        speeds  = d.get('speed', [])
-        rpms    = d.get('rpm', [])
-        throttles = d.get('throttle', [])
-        brakes  = d.get('brake', [])
-        fuels   = d.get('fuel_l', [])
         def _safe_avg(lst): return round(sum(lst) / len(lst), 2) if lst else 0.0
         def _safe_max(lst): return round(max(lst), 2) if lst else 0.0
 
+        speeds    = d.get('speed', [])
+        rpms      = d.get('rpm', [])
+        throttles = d.get('throttle', [])
+        brakes    = d.get('brake', [])
+        fuels     = d.get('fuel_l', [])
         fuel_used = round(fuels[0] - fuels[-1], 3) if len(fuels) >= 2 else 0.0
 
         sectors_raw = lap.get('sectors', [None, None, None])
@@ -2381,20 +2448,16 @@ class TelemetryApp(QMainWindow):
             sm, ss = int(s_val // 60), s_val % 60
             return f'{sm}:{ss:06.3f}' if sm else f'{ss:.3f}'
 
-        # ── Track map points ─────────────────────────────────────────────
         track_key = meta.get('track_key', '') or self._active_track_key or ''
         track_pts = TRACKS.get(track_key, {}).get('pts', [])
-        # Fall back to live map norm if saved track has no pts
         if not track_pts and self.track_map._norm:
             track_pts = [[round(x, 5), round(y, 5)] for x, y in self.track_map._norm]
 
-        # ── Build payload ────────────────────────────────────────────────
-        payload = {
+        return {
             'schema_version': '2.0',
             'export_timestamp': datetime.datetime.now().isoformat(timespec='seconds'),
-
             'session': {
-                'date':          date_str,
+                'date':          datetime.date.today().strftime('%Y-%m-%d'),
                 'car':           meta.get('car_name', ''),
                 'track':         meta.get('track_name', ''),
                 'track_key':     track_key,
@@ -2404,22 +2467,20 @@ class TelemetryApp(QMainWindow):
                 'air_temp_c':    meta.get('air_temp_c', 0.0),
                 'road_temp_c':   meta.get('road_temp_c', 0.0),
             },
-
             'lap': {
-                'lap_number':   lap['lap_number'],
-                'total_time_s': lap.get('total_time_s', 0),
+                'lap_number':    lap['lap_number'],
+                'total_time_s':  t,
                 'total_time_fmt': f'{m}:{s:06.3f}',
-                'sectors_s':    sectors_raw,
-                'sectors_fmt':  [_fmt_sector(sv) for sv in sectors_raw],
+                'sectors_s':     sectors_raw,
+                'sectors_fmt':   [_fmt_sector(sv) for sv in sectors_raw],
             },
-
             'summary': {
                 'max_speed_kph':    _safe_max(speeds),
                 'avg_speed_kph':    _safe_avg(speeds),
                 'max_rpm':          _safe_max(rpms),
                 'avg_rpm':          _safe_avg(rpms),
-                'avg_throttle_pct': round(_safe_avg(throttles) * 100, 1),
-                'avg_brake_pct':    round(_safe_avg(brakes) * 100, 1),
+                'avg_throttle_pct': round(_safe_avg(throttles), 1),
+                'avg_brake_pct':    round(_safe_avg(brakes), 1),
                 'fuel_used_l':      fuel_used,
                 'tyre_wear_pct': {
                     'fl': round(_safe_max(d.get('tyre_wear_fl', [])) * 100, 2),
@@ -2440,59 +2501,79 @@ class TelemetryApp(QMainWindow):
                     'rr': _safe_max(d.get('brake_temp_rr', [])),
                 },
             },
-
             'telemetry': {
-                'time_ms':          d.get('time_ms', []),
-                'dist_m':           d.get('dist_m', []),
-                'speed_kph':        d.get('speed', []),
-                'throttle':         d.get('throttle', []),
-                'brake':            d.get('brake', []),
-                'steer_deg':        d.get('steer_deg', []),
-                'rpm':              d.get('rpm', []),
-                'gear':             d.get('gear', []),
-                'abs':              d.get('abs', []),
-                'tc':               d.get('tc', []),
-                'fuel_l':           d.get('fuel_l', []),
-                'brake_bias_pct':   d.get('brake_bias_pct', []),
-                'world_x':          d.get('world_x', []),
-                'world_z':          d.get('world_z', []),
-                'air_temp_c':       d.get('air_temp', []),
-                'road_temp_c':      d.get('road_temp', []),
-                'tyre_temp': {
-                    'fl': d.get('tyre_temp_fl', []),
-                    'fr': d.get('tyre_temp_fr', []),
-                    'rl': d.get('tyre_temp_rl', []),
-                    'rr': d.get('tyre_temp_rr', []),
-                },
-                'tyre_pressure': {
-                    'fl': d.get('tyre_pressure_fl', []),
-                    'fr': d.get('tyre_pressure_fr', []),
-                    'rl': d.get('tyre_pressure_rl', []),
-                    'rr': d.get('tyre_pressure_rr', []),
-                },
-                'brake_temp': {
-                    'fl': d.get('brake_temp_fl', []),
-                    'fr': d.get('brake_temp_fr', []),
-                    'rl': d.get('brake_temp_rl', []),
-                    'rr': d.get('brake_temp_rr', []),
-                },
-                'tyre_wear': {
-                    'fl': d.get('tyre_wear_fl', []),
-                    'fr': d.get('tyre_wear_fr', []),
-                    'rl': d.get('tyre_wear_rl', []),
-                    'rr': d.get('tyre_wear_rr', []),
-                },
+                'time_ms':        d.get('time_ms', []),
+                'dist_m':         d.get('dist_m', []),
+                'speed_kph':      d.get('speed', []),
+                'throttle':       d.get('throttle', []),
+                'brake':          d.get('brake', []),
+                'steer_deg':      d.get('steer_deg', []),
+                'rpm':            d.get('rpm', []),
+                'gear':           d.get('gear', []),
+                'abs':            d.get('abs', []),
+                'tc':             d.get('tc', []),
+                'fuel_l':         d.get('fuel_l', []),
+                'brake_bias_pct': d.get('brake_bias_pct', []),
+                'world_x':        d.get('world_x', []),
+                'world_z':        d.get('world_z', []),
+                'air_temp_c':     d.get('air_temp', []),
+                'road_temp_c':    d.get('road_temp', []),
+                'tyre_temp':     {'fl': d.get('tyre_temp_fl', []),     'fr': d.get('tyre_temp_fr', []),
+                                  'rl': d.get('tyre_temp_rl', []),     'rr': d.get('tyre_temp_rr', [])},
+                'tyre_pressure': {'fl': d.get('tyre_pressure_fl', []), 'fr': d.get('tyre_pressure_fr', []),
+                                  'rl': d.get('tyre_pressure_rl', []), 'rr': d.get('tyre_pressure_rr', [])},
+                'brake_temp':    {'fl': d.get('brake_temp_fl', []),    'fr': d.get('brake_temp_fr', []),
+                                  'rl': d.get('brake_temp_rl', []),    'rr': d.get('brake_temp_rr', [])},
+                'tyre_wear':     {'fl': d.get('tyre_wear_fl', []),     'fr': d.get('tyre_wear_fr', []),
+                                  'rl': d.get('tyre_wear_rl', []),     'rr': d.get('tyre_wear_rr', [])},
             },
-
             'track_map': {
                 'pts':      track_pts,
                 'length_m': meta.get('track_length_m', 0),
             },
         }
 
-        with open(path, 'w') as f:
+    def _export_lap_to_json(self, lap: dict):
+        """Export any stored lap as a full JSON file (save dialog)."""
+        import os, re as _re, datetime
+
+        t   = lap.get('total_time_s', 0)
+        m, s = int(t // 60), t % 60
+
+        def _slug(text: str) -> str:
+            return _re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')
+
+        date_str  = datetime.date.today().strftime('%Y-%m-%d')
+        try:
+            user_str = _slug(os.getlogin())
+        except Exception:
+            user_str = 'user'
+        meta      = lap.get('meta', {})
+        track_str = _slug(meta.get('track_name', '') or self.track_label.text() or 'unknown-track')
+        lap_str   = f'lap{lap["lap_number"]}'
+        time_str  = f'{m}m{s:06.3f}s'
+
+        default_name = f'{date_str}-{user_str}-{track_str}-{lap_str}-{time_str}-full.json.gz'
+        path, _ = QFileDialog.getSaveFileName(
+            self, 'Export Lap JSON', default_name,
+            'Lap JSON (gzipped) (*.json.gz);;All files (*)')
+        if not path:
+            return
+
+        payload = self._build_lap_json_payload(lap)
+        with gzip.open(path, 'wt', encoding='utf-8', compresslevel=6) as f:
             json.dump(payload, f)
-        QMessageBox.information(self, 'Export Full JSON', f'Full lap saved to:\n{path}')
+        QMessageBox.information(self, 'Export JSON',
+                                f'Lap {lap["lap_number"]} saved to:\n{path}')
+
+    def _export_full_lap_json(self):
+        """Export the last completed lap as a comprehensive JSON with all telemetry,
+        tyre data, fuel, track map, session metadata, and summary stats."""
+        if not self.session_laps:
+            QMessageBox.information(self, 'Export Full JSON',
+                                    'No completed laps to export yet.')
+            return
+        self._export_lap_to_json(self.session_laps[-1])
 
     def _export_lap_json(self):
         """Export the lap currently selected in Combo A as a shareable JSON file."""
@@ -2523,10 +2604,11 @@ class TelemetryApp(QMainWindow):
         lap_str   = f'lap{lap["lap_number"]}'
         time_str  = f'{m}m{s:06.3f}s'
 
-        default_name = f'{date_str}-{user_str}-{track_str}-{lap_str}-{time_str}.json'
+        default_name = f'{date_str}-{user_str}-{track_str}-{lap_str}-{time_str}.json.gz'
 
         path, _ = QFileDialog.getSaveFileName(
-            self, 'Export Lap', default_name, 'Lap JSON (*.json);;All files (*)')
+            self, 'Export Lap', default_name,
+            'Lap JSON (gzipped) (*.json.gz);;All files (*)')
         if not path:
             return
 
@@ -2537,19 +2619,20 @@ class TelemetryApp(QMainWindow):
             'track_name':   TRACKS.get(self._active_track_key or '', {}).get('name', ''),
             'data':         {k: list(v) for k, v in lap['data'].items()},
         }
-        with open(path, 'w') as f:
+        with gzip.open(path, 'wt', encoding='utf-8', compresslevel=6) as f:
             json.dump(payload, f)
         QMessageBox.information(self, 'Export Lap', f'Lap saved to:\n{path}')
 
     def _import_lap_json(self):
         """Import a shared lap JSON file and add it to the comparison dropdowns."""
         path, _ = QFileDialog.getOpenFileName(
-            self, 'Import Lap', '', 'Lap JSON (*.json);;All files (*)')
+            self, 'Import Lap', '',
+            'Lap JSON (gzipped) (*.json.gz);;All files (*)')
         if not path:
             return
 
         try:
-            with open(path) as f:
+            with gzip.open(path, 'rt', encoding='utf-8') as f:
                 payload = json.load(f)
         except Exception as e:
             QMessageBox.warning(self, 'Import Failed', f'Could not read file:\n{e}')
@@ -2921,7 +3004,7 @@ class TelemetryApp(QMainWindow):
 
         # Stop any running playback
         self._replay_playing = False
-        self._replay_timer.stop()
+        self._replay_last_mono = 0.0
         self._replay_play_btn.setText('PLAY')
 
         self._replay_data = data
@@ -3002,7 +3085,7 @@ class TelemetryApp(QMainWindow):
         if not times:
             return
 
-        # Binary-search for closest index
+        # Binary-search for insertion point
         lo, hi = 0, len(times) - 1
         while lo < hi:
             mid = (lo + hi) // 2
@@ -3012,15 +3095,40 @@ class TelemetryApp(QMainWindow):
                 hi = mid
         idx = lo
 
-        speed    = self._replay_data.get('speed',    [0])[idx]
-        rpm      = self._replay_data.get('rpm',      [0])[idx]
-        gear     = self._replay_data.get('gear',     [1])[idx]
-        throttle = self._replay_data.get('throttle', [0])[idx]
-        brake    = self._replay_data.get('brake',    [0])[idx]
-        steer_d  = self._replay_data.get('steer_deg',[0])[idx]
-        abs_v    = self._replay_data.get('abs',      [0])[idx]
-        tc_v     = self._replay_data.get('tc',       [0])[idx]
-        dist_m   = self._replay_data.get('dist_m',   [0])[idx]
+        # Interpolate between surrounding samples for smooth playback
+        if idx > 0 and idx < len(times):
+            t0, t1 = times[idx - 1], times[idx]
+            span = t1 - t0
+            t = (self._replay_pos_ms - t0) / span if span > 0 else 0.0
+            t = max(0.0, min(1.0, t))
+            i0, i1 = idx - 1, idx
+        else:
+            t = 0.0
+            i0 = i1 = idx
+
+        def _lerp(key, default=0):
+            vals = self._replay_data.get(key, [default])
+            v0 = vals[i0] if i0 < len(vals) else default
+            v1 = vals[i1] if i1 < len(vals) else default
+            return v0 + t * (v1 - v0)
+
+        def _nearest(key, default=0):
+            vals = self._replay_data.get(key, [default])
+            pick = i1 if t >= 0.5 else i0
+            return vals[pick] if pick < len(vals) else default
+
+        # Continuous channels → lerp for smooth transitions
+        speed    = _lerp('speed')
+        rpm      = _lerp('rpm')
+        throttle = _lerp('throttle')
+        brake    = _lerp('brake')
+        steer_d  = _lerp('steer_deg')
+        dist_m   = _lerp('dist_m')
+
+        # Discrete channels → snap to nearest sample
+        gear  = _nearest('gear', 1)
+        abs_v = _nearest('abs')
+        tc_v  = _nearest('tc')
 
         # Dashboard widgets
         self._rpl_speed_lbl.setText(f'{int(speed)}')
@@ -3056,8 +3164,6 @@ class TelemetryApp(QMainWindow):
         # Track map car position
         lap_prog = (dist_m / track_len) if track_len > 0 else 0
         self._rpl_map.car_progress = max(0.0, min(1.0, lap_prog))
-        self._rpl_map._car_smooth = self._rpl_map.car_progress
-        self._rpl_map.update()
 
         # Time display
         cur_m  = int(self._replay_pos_ms // 60000)
@@ -3085,23 +3191,10 @@ class TelemetryApp(QMainWindow):
             if self._replay_pos_ms >= self._replay_total_ms:
                 self._replay_seek(0)
             self._replay_play_btn.setText('PAUSE')
-            self._replay_timer.start(100)
+            self._replay_last_mono = time.monotonic()
         else:
             self._replay_play_btn.setText('PLAY')
-            self._replay_timer.stop()
-
-    def _replay_tick(self):
-        """Advance playback by speed * 100 ms."""
-        if not self._replay_playing or not self._replay_data:
-            return
-        advance_ms = int(self._replay_speed * 100)
-        new_pos = self._replay_pos_ms + advance_ms
-        if new_pos >= self._replay_total_ms:
-            new_pos = self._replay_total_ms
-            self._replay_playing = False
-            self._replay_play_btn.setText('PLAY')
-            self._replay_timer.stop()
-        self._replay_seek(new_pos)
+            self._replay_last_mono = 0.0
 
     def _on_replay_speed_changed(self, text: str):
         try:
@@ -3112,11 +3205,12 @@ class TelemetryApp(QMainWindow):
     def _import_replay_lap_json(self):
         """Import a lap JSON directly into the replay tab."""
         path, _ = QFileDialog.getOpenFileName(
-            self, 'Import Lap for Replay', '', 'Lap JSON (*.json);;All files (*)')
+            self, 'Import Lap for Replay', '',
+            'Lap JSON (gzipped) (*.json.gz);;All files (*)')
         if not path:
             return
         try:
-            with open(path) as f:
+            with gzip.open(path, 'rt', encoding='utf-8') as f:
                 payload = json.load(f)
         except Exception as e:
             QMessageBox.warning(self, 'Import Failed', f'Could not read file:\n{e}')
@@ -3223,6 +3317,7 @@ class TelemetryApp(QMainWindow):
             ('S3',       1, Qt.AlignmentFlag.AlignCenter),
             ('SAMPLES',  1, Qt.AlignmentFlag.AlignCenter),
             ('VALID',    0, Qt.AlignmentFlag.AlignCenter),
+            ('',         0, Qt.AlignmentFlag.AlignCenter),
         ]:
             l = QLabel(txt)
             l.setFont(sans(7, bold=True))
@@ -3354,6 +3449,19 @@ class TelemetryApp(QMainWindow):
             valid_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             valid_lbl.setMinimumWidth(40)
             rl.addWidget(valid_lbl)
+
+            export_btn = QPushButton('⬇')
+            export_btn.setFont(sans(9))
+            export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            export_btn.setFixedSize(32, 24)
+            export_btn.setToolTip('Export this lap as JSON')
+            export_btn.setStyleSheet(
+                f'QPushButton {{ background: transparent; color: {TXT2}; border: 1px solid {BORDER2};'
+                f' border-radius: 3px; }}'
+                f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}')
+            _lap_ref = lap  # capture for lambda
+            export_btn.clicked.connect(lambda _, lr=_lap_ref: self._export_lap_to_json(lr))
+            rl.addWidget(export_btn)
 
             self._sess_rows_layout.insertWidget(0, row)
 
@@ -3496,6 +3604,20 @@ class TelemetryApp(QMainWindow):
             l.setStyleSheet(f'color: {color}; letter-spacing: {letter_spacing};')
             return l
 
+        # Headline strategy banner — driven by StrategyState.headline()
+        self._race_strategy_banner = QLabel('STRATEGY: STABLE')
+        self._race_strategy_banner.setFont(sans(11, bold=True))
+        self._race_strategy_banner.setStyleSheet(
+            f'background: {BG2}; color: {TXT2}; '
+            f'border: 1px solid {BORDER}; border-radius: 6px; '
+            f'padding: 10px 18px; letter-spacing: 1px;')
+        self._race_strategy_banner.setFixedHeight(40)
+        self._race_strategy_banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Click to jump to Strategy tab
+        self._race_strategy_banner.mousePressEvent = (
+            lambda e: self.tabs.setCurrentWidget(self.strategy_tab))
+        outer.addWidget(self._race_strategy_banner)
+
         # ── Session banner ────────────────────────────────────────────
         banner_card = _card()
         banner_row = QHBoxLayout(banner_card)
@@ -3623,52 +3745,6 @@ class TelemetryApp(QMainWindow):
 
         outer.addWidget(timing_card)
 
-        # ── Pit Strategy card ─────────────────────────────────────────
-        pit_card = _card()
-        pit_vbox = QVBoxLayout(pit_card)
-        pit_vbox.setContentsMargins(18, 12, 18, 12)
-        pit_vbox.setSpacing(8)
-
-        pit_hdr_row = QHBoxLayout()
-        pit_hdr_row.addWidget(_chip_lbl('PIT STRATEGY'))
-        pit_hdr_row.addStretch()
-        self._pit_no_data_lbl = _chip_lbl('Complete a lap to calculate',
-                                           color=TXT2, bold=False)
-        pit_hdr_row.addWidget(self._pit_no_data_lbl)
-        pit_vbox.addLayout(pit_hdr_row)
-
-        pit_stats_row = QHBoxLayout()
-        pit_stats_row.setSpacing(0)
-
-        def _pit_stat(title, attr):
-            col = QVBoxLayout()
-            col.setSpacing(2)
-            col.addWidget(_chip_lbl(title, font_size=7))
-            v = QLabel('—')
-            v.setFont(mono(11, bold=True))
-            v.setStyleSheet(f'color: {TXT};')
-            col.addWidget(v)
-            setattr(self, attr, v)
-            return col
-
-        pit_stats_row.addLayout(_pit_stat('FUEL LAPS LEFT', '_pit_fuel_laps_lbl'))
-        pit_stats_row.addSpacing(28)
-        pit_stats_row.addLayout(_pit_stat('TYRE STINT', '_pit_tyre_stint_lbl'))
-        pit_stats_row.addSpacing(28)
-        pit_stats_row.addLayout(_pit_stat('TYRE CONDITION', '_pit_tyre_cond_lbl'))
-        pit_stats_row.addStretch()
-        pit_vbox.addLayout(pit_stats_row)
-
-        pit_vbox.addWidget(h_line())
-
-        self._pit_rec_lbl = QLabel('—')
-        self._pit_rec_lbl.setFont(sans(11, bold=True))
-        self._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        self._pit_rec_lbl.setWordWrap(True)
-        pit_vbox.addWidget(self._pit_rec_lbl)
-
-        outer.addWidget(pit_card)
-
         # ── Lap trend card ────────────────────────────────────────────────
         trend_card = _card()
         trend_vbox = QVBoxLayout(trend_card)
@@ -3686,79 +3762,6 @@ class TelemetryApp(QMainWindow):
         trend_vbox.addWidget(self._race_pace_chart)
         outer.addWidget(trend_card)
 
-        # ── Fuel save card ────────────────────────────────────────────────
-        fuel_save_card = _card()
-        fs_vbox = QVBoxLayout(fuel_save_card)
-        fs_vbox.setContentsMargins(18, 12, 18, 12)
-        fs_vbox.setSpacing(8)
-        fs_vbox.addWidget(_chip_lbl('FUEL SAVE CALCULATOR'))
-
-        fs_row = QHBoxLayout()
-        fs_row.addWidget(_chip_lbl('LAPS TO GO', font_size=8, bold=False, color=TXT))
-        self._fs_laps_spin = QSpinBox()
-        self._fs_laps_spin.setRange(1, 99)
-        self._fs_laps_spin.setValue(10)
-        self._fs_laps_spin.setStyleSheet(
-            f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 4px 8px;')
-        fs_row.addWidget(self._fs_laps_spin)
-        fs_row.addStretch()
-        fs_vbox.addLayout(fs_row)
-
-        self._fs_result_lbl = QLabel('—')
-        self._fs_result_lbl.setFont(mono(10, bold=True))
-        self._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
-        self._fs_result_lbl.setWordWrap(True)
-        fs_vbox.addWidget(self._fs_result_lbl)
-
-        self._fs_laps_spin.valueChanged.connect(self._update_fuel_save)
-        outer.addWidget(fuel_save_card)
-
-        # ── Undercut / overcut card ───────────────────────────────────────
-        uco_card = _card()
-        uco_vbox = QVBoxLayout(uco_card)
-        uco_vbox.setContentsMargins(18, 12, 18, 12)
-        uco_vbox.setSpacing(8)
-        uco_vbox.addWidget(_chip_lbl('UNDERCUT / OVERCUT'))
-
-        inputs_row = QHBoxLayout()
-        inputs_row.setSpacing(20)
-
-        def _spin_col(label, attr, default, min_val, max_val, step, decimals):
-            col = QVBoxLayout()
-            col.addWidget(_chip_lbl(label, font_size=7))
-            spin = QDoubleSpinBox()
-            spin.setRange(min_val, max_val)
-            spin.setValue(default)
-            spin.setSingleStep(step)
-            spin.setDecimals(decimals)
-            spin.setStyleSheet(
-                f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
-                f' border-radius: 4px; padding: 4px 8px;')
-            spin.setFixedWidth(90)
-            col.addWidget(spin)
-            setattr(self, attr, spin)
-            spin.valueChanged.connect(self._update_undercut)
-            return col
-
-        inputs_row.addLayout(
-            _spin_col('PIT LOSS (s)', '_uco_pit_loss_spin', 22.0, 10.0, 60.0, 0.5, 1))
-        inputs_row.addLayout(
-            _spin_col('PACE DELTA (s/lap)', '_uco_pace_delta_spin', 0.8, 0.0, 5.0, 0.1, 1))
-        inputs_row.addStretch()
-        uco_vbox.addLayout(inputs_row)
-        uco_vbox.addWidget(h_line())
-
-        self._uco_undercut_lbl = QLabel('UNDERCUT: —')
-        self._uco_undercut_lbl.setFont(mono(9, bold=True))
-        self._uco_undercut_lbl.setStyleSheet(f'color: {TXT2};')
-        self._uco_overcut_lbl = QLabel('OVERCUT: —')
-        self._uco_overcut_lbl.setFont(mono(9, bold=True))
-        self._uco_overcut_lbl.setStyleSheet(f'color: {TXT2};')
-        uco_vbox.addWidget(self._uco_undercut_lbl)
-        uco_vbox.addWidget(self._uco_overcut_lbl)
-        outer.addWidget(uco_card)
-
         outer.addStretch()
 
         scroll.setWidget(inner)
@@ -3768,31 +3771,31 @@ class TelemetryApp(QMainWindow):
     def _update_fuel_save(self):
         history = self._fuel_per_lap_history
         if not history:
-            self._fs_result_lbl.setText('Complete a lap first.')
-            self._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
+            self.strategy_tab._fs_result_lbl.setText('Complete a lap first.')
+            self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
             return
         avg = sum(history[-5:]) / len(history[-5:])
         fuel = self._last_known_fuel
-        laps_to_go = self._fs_laps_spin.value()
+        laps_to_go = self.strategy_tab._fs_laps_spin.value()
         needed = avg * laps_to_go
         delta = fuel - needed
         if delta >= 0:
             save_per_lap = delta / laps_to_go
-            self._fs_result_lbl.setText(
+            self.strategy_tab._fs_result_lbl.setText(
                 f'Buffer  +{delta:.1f} L   ({save_per_lap:.2f} L/lap spare)')
-            self._fs_result_lbl.setStyleSheet(f'color: {C_THROTTLE};')
+            self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {C_THROTTLE};')
         else:
             save_per_lap = abs(delta) / laps_to_go
-            self._fs_result_lbl.setText(
+            self.strategy_tab._fs_result_lbl.setText(
                 f'SAVE  {save_per_lap:.2f} L/lap   (need {needed:.1f} L, have {fuel:.1f} L)')
             col = C_RPM if save_per_lap < 0.5 else C_BRAKE
-            self._fs_result_lbl.setStyleSheet(f'color: {col};')
+            self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {col};')
 
     def _update_undercut(self):
         gap_a = abs(self._last_gap_ahead) / 1000.0
         gap_b = abs(self._last_gap_behind) / 1000.0
-        pit_loss = self._uco_pit_loss_spin.value()
-        pace_delta = self._uco_pace_delta_spin.value()
+        pit_loss = self.strategy_tab._uco_pit_loss_spin.value()
+        pace_delta = self.strategy_tab._uco_pace_delta_spin.value()
 
         if pace_delta > 0 and gap_a > 0:
             laps_to_catch = (gap_a + pit_loss) / pace_delta
@@ -3805,8 +3808,8 @@ class TelemetryApp(QMainWindow):
         else:
             uc_text = 'UNDERCUT: no car ahead data'
             uc_col = TXT2
-        self._uco_undercut_lbl.setText(uc_text)
-        self._uco_undercut_lbl.setStyleSheet(f'color: {uc_col};')
+        self.strategy_tab._uco_undercut_lbl.setText(uc_text)
+        self.strategy_tab._uco_undercut_lbl.setStyleSheet(f'color: {uc_col};')
 
         if gap_b > 0:
             margin = pit_loss - gap_b
@@ -3820,8 +3823,8 @@ class TelemetryApp(QMainWindow):
         else:
             oc_text = 'OVERCUT: no car behind data'
             oc_col = TXT2
-        self._uco_overcut_lbl.setText(oc_text)
-        self._uco_overcut_lbl.setStyleSheet(f'color: {oc_col};')
+        self.strategy_tab._uco_overcut_lbl.setText(oc_text)
+        self.strategy_tab._uco_overcut_lbl.setStyleSheet(f'color: {oc_col};')
 
     def _update_race_tab(self, data: dict):
         session = data.get('session_type', '')
@@ -3901,11 +3904,11 @@ class TelemetryApp(QMainWindow):
         # ── Pit strategy ─────────────────────────────────────────────
         history = self._fuel_per_lap_history
         if not history:
-            self._pit_no_data_lbl.setVisible(True)
-            self._pit_rec_lbl.setText('—')
-            self._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+            self.strategy_tab._pit_no_data_lbl.setVisible(True)
+            self.strategy_tab._pit_rec_lbl.setText('—')
+            self.strategy_tab._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
         else:
-            self._pit_no_data_lbl.setVisible(False)
+            self.strategy_tab._pit_no_data_lbl.setVisible(False)
             avg_fuel = sum(history[-5:]) / len(history[-5:])
             fuel_laps = data.get('fuel', 0) / avg_fuel if avg_fuel > 0 else 0
 
@@ -3932,11 +3935,11 @@ class TelemetryApp(QMainWindow):
 
             fuel_color = (C_THROTTLE if fuel_laps > 5
                           else C_RPM if fuel_laps > 2 else C_BRAKE)
-            self._pit_fuel_laps_lbl.setText(f'{fuel_laps:.1f}')
-            self._pit_fuel_laps_lbl.setStyleSheet(f'color: {fuel_color};')
-            self._pit_tyre_stint_lbl.setText(f'{stint} laps')
-            self._pit_tyre_cond_lbl.setText(tyre_cond)
-            self._pit_tyre_cond_lbl.setStyleSheet(f'color: {tyre_color};')
+            self.strategy_tab._pit_fuel_laps_lbl.setText(f'{fuel_laps:.1f}')
+            self.strategy_tab._pit_fuel_laps_lbl.setStyleSheet(f'color: {fuel_color};')
+            self.strategy_tab._pit_tyre_stint_lbl.setText(f'{stint} laps')
+            self.strategy_tab._pit_tyre_cond_lbl.setText(tyre_cond)
+            self.strategy_tab._pit_tyre_cond_lbl.setStyleSheet(f'color: {tyre_color};')
 
             if tyre_cond == 'CRITICAL' or fuel_laps < 1.5:
                 rec, rec_color = 'PIT THIS LAP', C_BRAKE
@@ -3947,8 +3950,8 @@ class TelemetryApp(QMainWindow):
                 rec, rec_color = f'PREPARE TO PIT  ·  ~{pit_in} laps', C_RPM
             else:
                 rec, rec_color = f'STAY OUT  ·  ~{pit_in} laps to window', C_THROTTLE
-            self._pit_rec_lbl.setText(rec)
-            self._pit_rec_lbl.setStyleSheet(
+            self.strategy_tab._pit_rec_lbl.setText(rec)
+            self.strategy_tab._pit_rec_lbl.setStyleSheet(
                 f'color: {rec_color}; letter-spacing: 1px;')
 
         # ── Consistency label ─────────────────────────────────────────
@@ -3986,6 +3989,8 @@ class TelemetryApp(QMainWindow):
                 self.ac_reader.disconnect()
             self.ac_reader = ACUDPReader(self.udp_host.text(), int(self.udp_port.text()))
             self.current_reader = self.ac_reader
+        self._sampler.set_reader(self.current_reader)
+        self._empty_drain_count = 0
 
     def _detect_game(self):
         """Priority: ELM327 (real mode) → ACC → iRacing → AC UDP."""
@@ -4023,6 +4028,26 @@ class TelemetryApp(QMainWindow):
             # New unknown track – reset to live-build mode
             display = key.replace('_', ' ').title()
             self.track_map.reset_track(display_name=display)
+        self._update_track_edit_buttons()
+
+    def _update_track_edit_buttons(self):
+        """Disable REC / LOCK SHAPE when the active track is already saved."""
+        already_saved = bool(self._active_track_key and self._active_track_key in TRACKS)
+        tip = 'Track already saved — delete the JSON to re-record.' if already_saved else ''
+        rec = getattr(self, 'rec_btn', None)
+        if rec is not None:
+            if already_saved and rec.isChecked():
+                rec.setChecked(False)
+            rec.setEnabled(not already_saved)
+            rec.setToolTip(tip)
+        lock = getattr(self, '_track_lock_btn', None)
+        if lock is not None:
+            lock.blockSignals(True)
+            lock.setChecked(already_saved)
+            lock.blockSignals(False)
+            lock.setText('UNLOCK SHAPE' if already_saved else 'LOCK SHAPE')
+            lock.setEnabled(not already_saved)
+            lock.setToolTip(tip)
 
     def _auto_detect_track(self, track_name: str):
         if not self._auto_track:
@@ -4048,6 +4073,11 @@ class TelemetryApp(QMainWindow):
         self.track_map._shape_locked = checked
         self._track_lock_btn.setText('UNLOCK SHAPE' if checked else 'LOCK SHAPE')
 
+    def _on_raceline_toggled(self, checked: bool):
+        self.track_map.set_show_raceline(checked)
+        if hasattr(self, '_rpl_map'):
+            self._rpl_map.set_show_raceline(checked)
+
     def _on_rec_toggled(self, checked: bool):
         if checked:
             self.recorder.start()
@@ -4058,7 +4088,7 @@ class TelemetryApp(QMainWindow):
             self._finish_recording()
 
     def _finish_recording(self):
-        data = self.current_reader.read() if self.current_reader else None
+        data = self._sampler.latest
         track_name = data['track_name'] if data else 'Unknown Track'
         length_m = TRACKS.get(self._active_track_key or '', {}).get('length_m', MONZA_LENGTH_M)
 
@@ -4066,6 +4096,7 @@ class TelemetryApp(QMainWindow):
         if path:
             load_saved_tracks()
             self._reload_track_combo()
+            self._update_track_edit_buttons()
             self.rec_label.setText(f'Saved: {Path(path).stem}')
             self.rec_label.setStyleSheet(f'color: {C_THROTTLE};')
         else:
@@ -4177,24 +4208,28 @@ class TelemetryApp(QMainWindow):
     # TELEMETRY UPDATE LOOP
     # ------------------------------------------------------------------
 
-    def _update_telemetry(self):
-        if self.auto_detect:
-            self.current_reader = self._detect_game()
+    def _anim_tick(self):
+        """60 fps animation tick — smooth lerp for car dot, steering, and replay."""
+        self.track_map.tick_lerp()
+        self._rpl_map.tick_lerp()
+        self.steering_widget.tick_lerp()
+        self._rpl_steer.tick_lerp()
 
-        if self.current_reader is None:
-            self.connection_dot.setStyleSheet('color: #444;')
-            self.connection_label.setText('DISCONNECTED')
-            self.connection_label.setStyleSheet(f'color: {TXT2}; letter-spacing: 0.5px;')
-            self._reset_display()
-            return
+        # Replay: advance using wall-clock delta for smooth playback
+        if self._replay_playing and self._replay_data:
+            now = time.monotonic()
+            if self._replay_last_mono > 0:
+                dt_ms = (now - self._replay_last_mono) * 1000.0 * self._replay_speed
+                new_pos = self._replay_pos_ms + dt_ms
+                if new_pos >= self._replay_total_ms:
+                    new_pos = self._replay_total_ms
+                    self._replay_playing = False
+                    self._replay_play_btn.setText('PLAY')
+                self._replay_seek(int(new_pos))
+            self._replay_last_mono = now
 
-        data = self.current_reader.read()
-        if data is None:
-            self.connection_dot.setStyleSheet('color: #8a4a00;')
-            self.connection_label.setText('CONNECTION LOST')
-            self.connection_label.setStyleSheet(f'color: {C_ABS}; letter-spacing: 0.5px;')
-            return
-
+    def _process_sample(self, data: dict):
+        """Process a single raw telemetry sample on the main thread."""
         # Lap change detection
         current_lap = data.get('lap_count', 0)
         current_time = data.get('current_time', 0)
@@ -4206,7 +4241,8 @@ class TelemetryApp(QMainWindow):
 
         # Outlap detection: pit lane exit during this lap = outlap
         cur_in_pit_lane = data.get('is_in_pit_lane', False)
-        if self._prev_is_in_pit_lane and not cur_in_pit_lane:
+        _pit_exit_this_tick = self._prev_is_in_pit_lane and not cur_in_pit_lane
+        if _pit_exit_this_tick:
             self._current_lap_had_pit_exit = True
             self._tyre_stint_laps = 0
         self._prev_is_in_pit_lane = cur_in_pit_lane
@@ -4219,16 +4255,16 @@ class TelemetryApp(QMainWindow):
             _fuel_now = data.get('fuel', 0.0)
             if self._fuel_at_lap_start is not None and 0 < _fuel_now < self._fuel_at_lap_start:
                 self._fuel_per_lap_history.append(self._fuel_at_lap_start - _fuel_now)
+            self._strategy_engine._fuel_per_lap_history = list(self._fuel_per_lap_history)
             self._fuel_at_lap_start = _fuel_now
             self._math_engine.on_lap_complete()
             self._store_completed_lap()
-            self._current_lap_had_pit_exit = False  # reset for new lap
-            self._current_lap_valid = True           # reset validity for new lap
+            self._current_lap_had_pit_exit = False
+            self._current_lap_valid = True
             self._tyre_stint_laps += 1
             self._reset_graphs()
             self._reset_analysis_graphs()
             self._reset_current_lap_data()
-            # Snapshot math engine lap start values
             try:
                 self._math_engine.on_lap_start({
                     'speed': data['speed'], 'throttle': data['throttle'],
@@ -4238,12 +4274,181 @@ class TelemetryApp(QMainWindow):
                 pass
             display_lap = current_lap if current_lap > 0 else 1
             self.header_lap_label.setText(f'LAP {display_lap}')
-            # Auto-save recording on lap completion
             if self.recorder.recording and self.recorder.sample_count >= TrackRecorder.MIN_SAMPLES:
-                self.rec_btn.setChecked(False)  # triggers _on_rec_toggled → _finish_recording
+                self.rec_btn.setChecked(False)
 
         self.current_lap_count = current_lap
         self.last_lap_time = current_time
+
+        # ── Compute lap progress & distance (needed for data recording) ──
+        lap_dur_ms = 90000
+        if 'lap_dist_pct' in data and data['lap_dist_pct'] > 0:
+            lap_progress = float(data['lap_dist_pct'])
+        else:
+            lap_progress = min(1.0, current_time / lap_dur_ms) if lap_dur_ms > 0 else 0
+        _track_length_m = TRACKS.get(self._active_track_key or '', {}).get('length_m', MONZA_LENGTH_M)
+        distance_m = lap_progress * _track_length_m
+
+        # ── Track map (lightweight — no Qt paint, just data) ─────────────
+        self.track_map.update_telemetry(lap_progress, data['throttle'], data['brake'])
+        if self.current_lap_count >= 1 and self._current_lap_valid:
+            self.track_map.feed_world_pos(
+                lap_progress,
+                data.get('world_x', 0.0),
+                data.get('world_z', 0.0),
+            )
+
+        # Feed recorder
+        if self.recorder.recording:
+            self.recorder.feed(
+                lap_progress,
+                data.get('world_x', 0.0),
+                data.get('world_z', 0.0),
+            )
+
+        # Seed fuel-at-lap-start on first telemetry tick
+        fuel = data.get('fuel', 0.0)
+        if self._fuel_at_lap_start is None and fuel > 0:
+            self._fuel_at_lap_start = fuel
+
+        # ── Store raw lap data ───────────────────────────────────────────
+        gear = data['gear']
+        gear_int = gear if isinstance(gear, int) else 0
+        steer_deg = math.degrees(data['steer_angle'])
+        rpm = data['rpm']
+
+        self.current_lap_data['time_ms'].append(current_time)
+        self.current_lap_data['dist_m'].append(distance_m)
+        self.current_lap_data['speed'].append(data['speed'])
+        self.current_lap_data['throttle'].append(data['throttle'])
+        self.current_lap_data['brake'].append(data['brake'])
+        self.current_lap_data['steer_deg'].append(steer_deg)
+        self.current_lap_data['rpm'].append(rpm)
+        self.current_lap_data['gear'].append(gear_int)
+        self.current_lap_data['abs'].append(data['abs'])
+        self.current_lap_data['tc'].append(data['tc'])
+        _raw_bias = data.get('brake_bias', 0.0)
+        if 0.0 < _raw_bias <= 1.0:
+            _bias_pct = round(_raw_bias * 100, 2)
+        elif 50.0 <= _raw_bias <= 80.0:
+            _bias_pct = round(_raw_bias, 2)
+        else:
+            _bias_pct = 0.0
+        self.current_lap_data['fuel_l'].append(round(fuel, 3))
+        self.current_lap_data['brake_bias_pct'].append(_bias_pct)
+        self.current_lap_data['world_x'].append(round(data.get('world_x', 0.0), 2))
+        self.current_lap_data['world_z'].append(round(data.get('world_z', 0.0), 2))
+        self.current_lap_data['air_temp'].append(round(data.get('air_temp', 0.0), 1))
+        self.current_lap_data['road_temp'].append(round(data.get('road_temp', 0.0), 1))
+        _tt = data.get('tyre_temp', [0.0, 0.0, 0.0, 0.0])
+        self.current_lap_data['tyre_temp_fl'].append(round(_tt[0], 1))
+        self.current_lap_data['tyre_temp_fr'].append(round(_tt[1], 1))
+        self.current_lap_data['tyre_temp_rl'].append(round(_tt[2], 1))
+        self.current_lap_data['tyre_temp_rr'].append(round(_tt[3], 1))
+        _tp = data.get('tyre_pressure', [0.0, 0.0, 0.0, 0.0])
+        self.current_lap_data['tyre_pressure_fl'].append(round(_tp[0], 2))
+        self.current_lap_data['tyre_pressure_fr'].append(round(_tp[1], 2))
+        self.current_lap_data['tyre_pressure_rl'].append(round(_tp[2], 2))
+        self.current_lap_data['tyre_pressure_rr'].append(round(_tp[3], 2))
+        _bt = data.get('brake_temp', [0.0, 0.0, 0.0, 0.0])
+        self.current_lap_data['brake_temp_fl'].append(round(_bt[0], 1))
+        self.current_lap_data['brake_temp_fr'].append(round(_bt[1], 1))
+        self.current_lap_data['brake_temp_rl'].append(round(_bt[2], 1))
+        self.current_lap_data['brake_temp_rr'].append(round(_bt[3], 1))
+        _tw = data.get('tyre_wear', [0.0, 0.0, 0.0, 0.0])
+        self.current_lap_data['tyre_wear_fl'].append(round(_tw[0], 4))
+        self.current_lap_data['tyre_wear_fr'].append(round(_tw[1], 4))
+        self.current_lap_data['tyre_wear_rl'].append(round(_tw[2], 4))
+        self.current_lap_data['tyre_wear_rr'].append(round(_tw[3], 4))
+
+        # ── Delta vs reference lap (data part only) ──────────────────────
+        if self._ref_lap_dists:
+            ref_t = _interp_time_at_dist(self._ref_lap_dists, self._ref_lap_times,
+                                         distance_m)
+            if ref_t is not None:
+                self._current_deltas.append((current_time - ref_t) / 1000.0)
+
+        # Cache session-level metadata for lap storage
+        self._last_car_name     = data.get('car_name', self._last_car_name).split('\x00')[0]
+        self._last_track_name   = data.get('track_name', self._last_track_name).split('\x00')[0]
+        self._last_session_type = data.get('session_type', self._last_session_type)
+        self._last_tyre_compound = data.get('tyre_compound', self._last_tyre_compound).split('\x00')[0]
+        self._last_air_temp     = data.get('air_temp', self._last_air_temp)
+        self._last_road_temp    = data.get('road_temp', self._last_road_temp)
+
+        self._last_known_fuel = fuel
+        self._last_gap_ahead  = data.get('gap_ahead', 0)
+        self._last_gap_behind = data.get('gap_behind', 0)
+
+        # Cache for the render timer
+        self._last_data = data
+
+        # Strategy engine — last call so it sees the freshest state
+        import time as _time
+        sample_with_synth = dict(data)
+        sample_with_synth['_clock_s'] = _time.monotonic()
+        sample_with_synth['_pit_exit'] = _pit_exit_this_tick
+        self._strategy_engine.update(
+            sample_with_synth, self.current_lap_data, self.session_laps)
+
+    def _render_telemetry(self):
+        """~5 Hz UI render — drain buffered samples, then update widgets."""
+        # ── Phase 1: Drain and process all buffered samples ──
+        samples = self._sampler.drain()
+        for s in samples:
+            self._process_sample(s)
+
+        # Strategy tab — re-render from latest engine snapshot
+        try:
+            self.strategy_tab.refresh(self._strategy_engine.state)
+        except Exception:
+            pass
+
+        # Race-tab headline banner
+        try:
+            h = self._strategy_engine.state.headline()
+            self._race_strategy_banner.setText(h.text)
+            color_map = {
+                'red':     '#d04444',
+                'amber':   '#f5a623',
+                'neutral': TXT2,
+            }
+            border_map = {
+                'red':     '#a03030',
+                'amber':   '#a07020',
+                'neutral': BORDER,
+            }
+            col = color_map.get(h.severity, TXT2)
+            border = border_map.get(h.severity, BORDER)
+            self._race_strategy_banner.setStyleSheet(
+                f'background: {BG2}; color: {col}; '
+                f'border: 1px solid {border}; border-radius: 6px; '
+                f'padding: 10px 18px; letter-spacing: 1px;')
+        except Exception:
+            pass
+
+        # ── Phase 2: Connection hysteresis ──
+        if samples:
+            self._empty_drain_count = 0
+        else:
+            self._empty_drain_count += 1
+
+        if self._empty_drain_count > 5:          # >1s with no data
+            if self.auto_detect:
+                detected = self._detect_game()
+                self._sampler.set_reader(detected)
+                self.current_reader = detected
+            if self.current_reader is None:
+                self.connection_dot.setStyleSheet('color: #444;')
+                self.connection_label.setText('DISCONNECTED')
+                self.connection_label.setStyleSheet(f'color: {TXT2}; letter-spacing: 0.5px;')
+                self._reset_display()
+                return
+
+        # ── Phase 3: Render UI from cached data ──
+        data = self._last_data
+        if data is None:
+            return
 
         if isinstance(self.current_reader, ELM327Reader):
             game_type = 'OBD-II'
@@ -4308,12 +4513,8 @@ class TelemetryApp(QMainWindow):
         self._road_temp_lbl.setText(f'{road_t:.1f}°C' if road_t else '—')
         self._update_tyre_insights(t_temps, t_pres, road_t)
 
-        fuel = data['fuel']
+        fuel = data.get('fuel', 0.0)
         self._fuel_lbl.setText(f"{fuel:.1f}")
-
-        # Seed fuel-at-lap-start on first telemetry tick
-        if self._fuel_at_lap_start is None and fuel > 0:
-            self._fuel_at_lap_start = fuel
 
         # Fuel strategy sub-labels
         if self._fuel_per_lap_history:
@@ -4353,23 +4554,27 @@ class TelemetryApp(QMainWindow):
             s = lt % 60
             self._laptime_lbl.setText(f'{m}:{s:06.3f}')
 
-        self._last_known_fuel = data.get('fuel', 0.0)
-        self._last_gap_ahead  = data.get('gap_ahead', 0)
-        self._last_gap_behind = data.get('gap_behind', 0)
         self._update_race_tab(data)
 
-        # ── Graph updates ────────────────────────────────────────────────
-        steer_deg = math.degrees(data['steer_angle'])
-        self.speed_graph.update_data(data['speed'])
-        self.pedals_graph.update_data(data['throttle'], data['brake'])
-        self.steering_graph.update_data(steer_deg)
-        self.rpm_graph.update_data(rpm)
-        gear_int = gear if isinstance(gear, int) else 0
-        self.gear_graph.update_data(gear_int)
-        self.aids_graph.update_data(data['abs'], data['tc'])
+        # Recorder label
+        if self.recorder.recording:
+            self.rec_label.setText(f'{self.recorder.sample_count} pts')
 
-        # ── Lap Analysis updates ─────────────────────────────────────────
-        # iRacing provides exact lap fraction; other sims estimate from time.
+        # ── Graph updates (only render when visible) ──────────────────────
+        steer_deg = math.degrees(data['steer_angle'])
+        gear_int = gear if isinstance(gear, int) else 0
+        _current_tab = self.tabs.currentIndex()
+
+        if _current_tab == 1:  # TELEMETRY GRAPHS
+            self.speed_graph.update_data(data['speed'])
+            self.pedals_graph.update_data(data['throttle'], data['brake'])
+            self.steering_graph.update_data(steer_deg)
+            self.rpm_graph.update_data(rpm)
+            self.gear_graph.update_data(gear_int)
+            self.aids_graph.update_data(data['abs'], data['tc'])
+
+        # ── Lap Analysis graphs ──────────────────────────────────────────
+        current_time = data.get('current_time', 0)
         lap_dur_ms = 90000
         if 'lap_dist_pct' in data and data['lap_dist_pct'] > 0:
             lap_progress = float(data['lap_dist_pct'])
@@ -4377,45 +4582,19 @@ class TelemetryApp(QMainWindow):
             lap_progress = min(1.0, current_time / lap_dur_ms) if lap_dur_ms > 0 else 0
         _track_length_m = TRACKS.get(self._active_track_key or '', {}).get('length_m', MONZA_LENGTH_M)
         distance_m = lap_progress * _track_length_m
-        self.track_map.update_telemetry(lap_progress, data['throttle'], data['brake'])
-        # Only accumulate track shape after the outlap and during valid laps.
-        # current_lap_count >= 1 skips the outlap from pits.
-        # _current_lap_valid latches to False the moment ACC marks the lap
-        # invalid (off-track / track limits) and stays False until next lap.
-        if self.current_lap_count >= 1 and self._current_lap_valid:
-            self.track_map.feed_world_pos(
-                lap_progress,
-                data.get('world_x', 0.0),
-                data.get('world_z', 0.0),
-            )
 
-        # Feed recorder
-        if self.recorder.recording:
-            self.recorder.feed(
-                lap_progress,
-                data.get('world_x', 0.0),
-                data.get('world_z', 0.0),
-            )
-            self.rec_label.setText(f'{self.recorder.sample_count} pts')
+        if _current_tab == 2:  # LAP ANALYSIS
+            self.ana_speed.update_data(distance_m, data['speed'])
+            self.ana_throttle_brake.update_data(distance_m, data['throttle'], data['brake'])
+            self.ana_gear.update_data(distance_m, gear_int)
+            self.ana_rpm.update_data(distance_m, rpm)
+            self.ana_steer.update_data(distance_m, steer_deg)
 
-        self.ana_speed.update_data(distance_m, data['speed'])
-        self.ana_throttle_brake.update_data(distance_m, data['throttle'], data['brake'])
-        self.ana_gear.update_data(distance_m, gear_int)
-        self.ana_rpm.update_data(distance_m, rpm)
-        self.ana_steer.update_data(distance_m, steer_deg)
-
-        # ── Store raw lap data ───────────────────────────────────────────
-        self.current_lap_data['time_ms'].append(current_time)
-        self.current_lap_data['dist_m'].append(distance_m)
-        self.current_lap_data['speed'].append(data['speed'])
-        self.current_lap_data['throttle'].append(data['throttle'])
-        self.current_lap_data['brake'].append(data['brake'])
-        self.current_lap_data['steer_deg'].append(steer_deg)
-        self.current_lap_data['rpm'].append(rpm)
-        self.current_lap_data['gear'].append(gear_int)
-        self.current_lap_data['abs'].append(data['abs'])
-        self.current_lap_data['tc'].append(data['tc'])
-        # Extended fields
+        # ── Math channel evaluation ────────────────────────────────────────
+        _tt = data.get('tyre_temp', [0.0, 0.0, 0.0, 0.0])
+        _tp = data.get('tyre_pressure', [0.0, 0.0, 0.0, 0.0])
+        _bt = data.get('brake_temp', [0.0, 0.0, 0.0, 0.0])
+        _tw = data.get('tyre_wear', [0.0, 0.0, 0.0, 0.0])
         _raw_bias = data.get('brake_bias', 0.0)
         if 0.0 < _raw_bias <= 1.0:
             _bias_pct = round(_raw_bias * 100, 2)
@@ -4423,34 +4602,6 @@ class TelemetryApp(QMainWindow):
             _bias_pct = round(_raw_bias, 2)
         else:
             _bias_pct = 0.0
-        self.current_lap_data['fuel_l'].append(round(data.get('fuel', 0.0), 3))
-        self.current_lap_data['brake_bias_pct'].append(_bias_pct)
-        self.current_lap_data['world_x'].append(round(data.get('world_x', 0.0), 2))
-        self.current_lap_data['world_z'].append(round(data.get('world_z', 0.0), 2))
-        self.current_lap_data['air_temp'].append(round(data.get('air_temp', 0.0), 1))
-        self.current_lap_data['road_temp'].append(round(data.get('road_temp', 0.0), 1))
-        _tt = data.get('tyre_temp', [0.0, 0.0, 0.0, 0.0])
-        self.current_lap_data['tyre_temp_fl'].append(round(_tt[0], 1))
-        self.current_lap_data['tyre_temp_fr'].append(round(_tt[1], 1))
-        self.current_lap_data['tyre_temp_rl'].append(round(_tt[2], 1))
-        self.current_lap_data['tyre_temp_rr'].append(round(_tt[3], 1))
-        _tp = data.get('tyre_pressure', [0.0, 0.0, 0.0, 0.0])
-        self.current_lap_data['tyre_pressure_fl'].append(round(_tp[0], 2))
-        self.current_lap_data['tyre_pressure_fr'].append(round(_tp[1], 2))
-        self.current_lap_data['tyre_pressure_rl'].append(round(_tp[2], 2))
-        self.current_lap_data['tyre_pressure_rr'].append(round(_tp[3], 2))
-        _bt = data.get('brake_temp', [0.0, 0.0, 0.0, 0.0])
-        self.current_lap_data['brake_temp_fl'].append(round(_bt[0], 1))
-        self.current_lap_data['brake_temp_fr'].append(round(_bt[1], 1))
-        self.current_lap_data['brake_temp_rl'].append(round(_bt[2], 1))
-        self.current_lap_data['brake_temp_rr'].append(round(_bt[3], 1))
-        _tw = data.get('tyre_wear', [0.0, 0.0, 0.0, 0.0])
-        self.current_lap_data['tyre_wear_fl'].append(round(_tw[0], 4))
-        self.current_lap_data['tyre_wear_fr'].append(round(_tw[1], 4))
-        self.current_lap_data['tyre_wear_rl'].append(round(_tw[2], 4))
-        self.current_lap_data['tyre_wear_rr'].append(round(_tw[3], 4))
-
-        # ── Math channel evaluation ────────────────────────────────────────
         _math_raw = {
             'speed': data['speed'], 'throttle': data['throttle'],
             'brake': data['brake'], 'steer_deg': steer_deg,
@@ -4471,30 +4622,20 @@ class TelemetryApp(QMainWindow):
         self._math_engine.set_raw_channels(set(_math_raw.keys()))
         try:
             _math_vals = self._math_engine.evaluate(_math_raw, time.monotonic())
-            self._update_math_graphs(_math_vals)
+            if _current_tab == 1:  # TELEMETRY GRAPHS
+                self._update_math_graphs(_math_vals)
         except Exception:
             pass  # never crash the tick loop for math channels
 
-        # Cache session-level metadata for lap storage
-        self._last_car_name     = data.get('car_name', self._last_car_name)
-        self._last_track_name   = data.get('track_name', self._last_track_name)
-        self._last_session_type = data.get('session_type', self._last_session_type)
-        self._last_tyre_compound = data.get('tyre_compound', self._last_tyre_compound)
-        self._last_air_temp     = data.get('air_temp', self._last_air_temp)
-        self._last_road_temp    = data.get('road_temp', self._last_road_temp)
-
-        # ── Delta vs reference lap ────────────────────────────────────────
+        # ── Delta graph render ───────────────────────────────────────────
         if self._ref_lap_dists:
-            ref_t = _interp_time_at_dist(self._ref_lap_dists, self._ref_lap_times,
-                                         distance_m)
-            if ref_t is not None:
-                self._current_deltas.append((current_time - ref_t) / 1000.0)
-            n_d = min(len(self.current_lap_data['dist_m']), len(self._current_deltas))
-            self.time_delta_graph.update_data(
-                self.current_lap_data['dist_m'][:n_d],
-                self._current_deltas[:n_d],
-                distance_m)
-        else:
+            if _current_tab == 2:  # LAP ANALYSIS
+                n_d = min(len(self.current_lap_data['dist_m']), len(self._current_deltas))
+                self.time_delta_graph.update_data(
+                    self.current_lap_data['dist_m'][:n_d],
+                    self._current_deltas[:n_d],
+                    distance_m)
+        elif _current_tab == 2:
             self.time_delta_graph.update_data([], [], distance_m)
 
         # ── Sector panel ─────────────────────────────────────────────────
@@ -4658,6 +4799,11 @@ class TelemetryApp(QMainWindow):
         export_fig.savefig(file_path, dpi=150, facecolor=BG)
         QMessageBox.information(self, 'Export', f'Graphs saved to:\n{file_path}')
 
+    def closeEvent(self, event):
+        self._sampler.stop()
+        self._sampler.join(timeout=1.0)
+        super().closeEvent(event)
+
     def export_last_lap_graphs(self):
         self._export_graphs(self._get_last_lap_data(), 'Save Last Lap Graphs', 'last_lap.png')
 
@@ -4708,20 +4854,20 @@ class TelemetryApp(QMainWindow):
             dot.setStyleSheet(f'color: {BORDER2};')
         for lbl in self._race_tyre_temps:
             lbl.setText('—°')
-        self._pit_rec_lbl.setText('—')
-        self._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        self._pit_fuel_laps_lbl.setText('—')
-        self._pit_tyre_stint_lbl.setText('—')
-        self._pit_tyre_cond_lbl.setText('—')
-        self._pit_no_data_lbl.setVisible(True)
+        self.strategy_tab._pit_rec_lbl.setText('—')
+        self.strategy_tab._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self.strategy_tab._pit_fuel_laps_lbl.setText('—')
+        self.strategy_tab._pit_tyre_stint_lbl.setText('—')
+        self.strategy_tab._pit_tyre_cond_lbl.setText('—')
+        self.strategy_tab._pit_no_data_lbl.setVisible(True)
         self._race_consistency_lbl.setText('—')
         self._race_consistency_lbl.setStyleSheet(f'color: {TXT2};')
-        self._fs_result_lbl.setText('—')
-        self._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
-        self._uco_undercut_lbl.setText('UNDERCUT: —')
-        self._uco_undercut_lbl.setStyleSheet(f'color: {TXT2};')
-        self._uco_overcut_lbl.setText('OVERCUT: —')
-        self._uco_overcut_lbl.setStyleSheet(f'color: {TXT2};')
+        self.strategy_tab._fs_result_lbl.setText('—')
+        self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
+        self.strategy_tab._uco_undercut_lbl.setText('UNDERCUT: —')
+        self.strategy_tab._uco_undercut_lbl.setStyleSheet(f'color: {TXT2};')
+        self.strategy_tab._uco_overcut_lbl.setText('OVERCUT: —')
+        self.strategy_tab._uco_overcut_lbl.setStyleSheet(f'color: {TXT2};')
         self._race_pace_chart.refresh([])
         self._reset_analysis_graphs()
         self.track_map.reset()

@@ -14,6 +14,7 @@ from .badges import AidBadge
 from .coach_tab import CoachTab
 from .math_formula_editor import FormulaEditorWidget
 from .math_channel_panel import MathChannelPanel
+from .strategy_tab import StrategyTab
 
 __all__ = [
     'RevBar', 'PedalBar', 'ValueDisplay', 'SteeringWidget', 'SteeringBar',
@@ -26,4 +27,5 @@ __all__ = [
     'SectorTimesPanel', 'SectorScrubWidget', 'LapHistoryPanel',
     'AidBadge', 'CoachTab',
     'FormulaEditorWidget', 'MathChannelPanel',
+    'StrategyTab',
 ]
