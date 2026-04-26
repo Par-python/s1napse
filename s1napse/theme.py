@@ -1,4 +1,4 @@
-"""Design tokens and QSS builder for the S1napse UI.
+"""Design tokens for the S1napse UI.
 
 Single source of truth for all colors/typography/spacing in the app chrome.
 Channel colors (C_SPEED, C_THROTTLE, etc.) live in constants.py — they

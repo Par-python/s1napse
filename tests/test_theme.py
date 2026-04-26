@@ -1,4 +1,4 @@
-"""Token constants and QSS builder sanity checks."""
+"""Token constant sanity checks."""
 
 from s1napse import theme
 
