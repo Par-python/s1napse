@@ -269,3 +269,67 @@ class Sparkline(QWidget):
             p.setPen(Qt.PenStyle.NoPen)
             p.drawEllipse(int(prev[0]) - 2, int(prev[1]) - 2, 4, 4)
         p.end()
+
+
+class GapBar(QWidget):
+    """±range_s axis with markers for ahead/behind rivals and the user.
+
+    gap_ahead is negative (rival ahead), gap_behind is positive.
+    """
+
+    def __init__(self, *, gap_ahead: float = 0.0, gap_behind: float = 0.0,
+                 range_s: float = 3.0, parent=None):
+        super().__init__(parent)
+        self._range = range_s
+        self._ga = max(-range_s, min(range_s, gap_ahead))
+        self._gb = max(-range_s, min(range_s, gap_behind))
+        self.setFixedHeight(22)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    def range_s(self) -> float:
+        return self._range
+
+    def gap_ahead(self) -> float:
+        return self._ga
+
+    def gap_behind(self) -> float:
+        return self._gb
+
+    def setGaps(self, gap_ahead: float, gap_behind: float) -> None:
+        self._ga = max(-self._range, min(self._range, gap_ahead))
+        self._gb = max(-self._range, min(self._range, gap_behind))
+        self.update()
+
+    def paintEvent(self, _ev):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        w, h = self.width(), self.height()
+        cy = h // 2
+
+        # Track line
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(QColor(theme.BORDER_SUBTLE)))
+        p.drawRoundedRect(0, cy - 1, w, 2, 1, 1)
+
+        def t_to_x(t: float) -> int:
+            # -range -> 0, +range -> w, 0 -> w/2
+            return int((t + self._range) / (2 * self._range) * w)
+
+        # Self marker (violet bar)
+        sx = w // 2
+        p.setBrush(QBrush(QColor(theme.ACCENT)))
+        p.drawRoundedRect(sx - 5, cy - 7, 10, 14, 2, 2)
+
+        # Ahead marker
+        if self._ga != 0.0:
+            ax = t_to_x(self._ga)
+            p.setBrush(QBrush(QColor(theme.TEXT_FAINT)))
+            p.drawRoundedRect(ax - 3, cy - 4, 6, 8, 1, 1)
+
+        # Behind marker
+        if self._gb != 0.0:
+            bx = t_to_x(self._gb)
+            p.setBrush(QBrush(QColor(theme.TEXT_FAINT)))
+            p.drawRoundedRect(bx - 3, cy - 4, 6, 8, 1, 1)
+
+        p.end()

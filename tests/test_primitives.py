@@ -105,3 +105,24 @@ def test_sparkline_paint_does_not_raise_on_empty(app):
     s = Sparkline(points=[])
     s.resize(QSize(120, 36))
     s.repaint()
+
+
+from s1napse.widgets.primitives import GapBar
+
+
+def test_gapbar_default_range(app):
+    g = GapBar()
+    assert g.range_s() == 3.0
+
+
+def test_gapbar_clamps_outside_range(app):
+    g = GapBar(gap_ahead=-10.0, gap_behind=10.0, range_s=3.0)
+    assert g.gap_ahead() == -3.0  # clamped to -range
+    assert g.gap_behind() == 3.0
+
+
+def test_gapbar_updates_in_place(app):
+    g = GapBar()
+    g.setGaps(-1.5, 2.4)
+    assert g.gap_ahead() == -1.5
+    assert g.gap_behind() == 2.4
