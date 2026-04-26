@@ -52,3 +52,28 @@ def test_label_font_uppercase_letterspacing():
     f = theme.label_font()
     assert f.pointSize() == theme.FONT_LABEL
     assert f.letterSpacing() > 1.0
+
+
+def test_build_app_qss_returns_string_with_tokens():
+    qss = theme.build_app_qss()
+    assert isinstance(qss, str)
+    # Surface tokens flow through
+    assert theme.BG in qss
+    assert theme.SURFACE in qss
+    assert theme.BORDER_SUBTLE in qss
+    # Accent applied to active tab underline
+    assert theme.ACCENT in qss
+    # Text tokens applied
+    assert theme.TEXT_PRIMARY in qss
+    # Tabs styled
+    assert 'QTabBar::tab' in qss
+    # Buttons styled
+    assert 'QPushButton' in qss
+
+
+def test_build_app_qss_no_legacy_colors():
+    qss = theme.build_app_qss()
+    # Old muddled hexes from constants.py must not appear
+    for legacy in ('#0b0b0b', '#111111', '#181818', '#222222',
+                   '#2a2a2a', '#383838', '#c8c8c8', '#6a6a6a', '#f2f2f2'):
+        assert legacy.lower() not in qss.lower(), f'legacy color {legacy} leaked into theme QSS'

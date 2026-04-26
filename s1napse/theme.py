@@ -72,3 +72,149 @@ def label_font() -> QFont:
     f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.2)
     f.setCapitalization(QFont.Capitalization.AllUppercase)
     return f
+
+
+def build_app_qss() -> str:
+    """Return the application-wide QSS stylesheet built from tokens."""
+    return f"""
+QMainWindow, QWidget {{
+    background-color: {BG};
+    color: {TEXT_SECONDARY};
+    font-size: {FONT_BODY_ROOMY}px;
+}}
+
+QTabWidget::pane {{
+    border: none;
+    background: {BG};
+}}
+
+QTabBar {{
+    background: {BG};
+    border-bottom: 1px solid {BORDER_SUBTLE};
+}}
+
+QTabBar::tab {{
+    background: transparent;
+    color: {TEXT_MUTED};
+    padding: 12px 14px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    font-size: {FONT_LABEL}px;
+    font-weight: 500;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+}}
+
+QTabBar::tab:selected {{
+    color: {TEXT_PRIMARY};
+    border-bottom-color: {ACCENT};
+}}
+
+QTabBar::tab:hover:!selected {{
+    color: {TEXT_SECONDARY};
+}}
+
+QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {{
+    background: {SURFACE_RAISED};
+    color: {TEXT_PRIMARY};
+    border: 1px solid {BORDER_STRONG};
+    border-radius: {RADIUS['md']}px;
+    padding: 5px 9px;
+    selection-background-color: {ACCENT};
+    selection-color: {TEXT_PRIMARY};
+}}
+
+QComboBox::drop-down {{
+    border: none;
+    padding-right: 4px;
+}}
+
+QPushButton {{
+    background: {SURFACE_RAISED};
+    color: {TEXT_SECONDARY};
+    border: 1px solid {BORDER_STRONG};
+    border-radius: {RADIUS['md']}px;
+    padding: 6px 14px;
+    font-size: {FONT_LABEL}px;
+    font-weight: 500;
+    letter-spacing: 0.4px;
+}}
+
+QPushButton:hover {{
+    background: {SURFACE_HOVER};
+    border-color: {ACCENT};
+    color: {TEXT_PRIMARY};
+}}
+
+QPushButton:pressed {{
+    background: {SURFACE};
+}}
+
+QScrollBar:vertical {{
+    background: transparent;
+    width: 6px;
+    border: none;
+    margin: 3px 1px;
+}}
+
+QScrollBar::handle:vertical {{
+    background: {BORDER_STRONG};
+    border-radius: 3px;
+    min-height: 28px;
+}}
+
+QScrollBar::handle:vertical:hover  {{ background: {TEXT_MUTED}; }}
+QScrollBar::handle:vertical:pressed{{ background: {ACCENT}; }}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+    height: 0; background: none;
+}}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
+
+QScrollBar:horizontal {{
+    background: transparent;
+    height: 6px;
+    border: none;
+    margin: 1px 3px;
+}}
+QScrollBar::handle:horizontal {{
+    background: {BORDER_STRONG};
+    border-radius: 3px;
+    min-width: 28px;
+}}
+QScrollBar::handle:horizontal:hover  {{ background: {TEXT_MUTED}; }}
+QScrollBar::handle:horizontal:pressed{{ background: {ACCENT}; }}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+    width: 0; background: none;
+}}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: none; }}
+
+QScrollArea {{ background: transparent; border: none; }}
+
+QGroupBox {{
+    border: 1px solid {BORDER_SUBTLE};
+    border-radius: {RADIUS['lg']}px;
+    margin-top: 12px;
+    color: {TEXT_MUTED};
+    font-size: {FONT_LABEL}px;
+    letter-spacing: 0.5px;
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 4px;
+}}
+
+QLabel {{ background: transparent; color: {TEXT_SECONDARY}; }}
+
+QSplitter::handle {{ background: {BORDER_SUBTLE}; }}
+
+QToolTip {{
+    background: {SURFACE_RAISED};
+    color: {TEXT_PRIMARY};
+    border: 1px solid {BORDER_STRONG};
+    padding: 4px 6px;
+    border-radius: {RADIUS['sm']}px;
+}}
+"""
