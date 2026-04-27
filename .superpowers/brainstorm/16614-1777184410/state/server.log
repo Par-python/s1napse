@@ -1,0 +1,7 @@
+{"type":"server-started","port":54054,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:54054","screen_dir":"/Users/jjpardo/Documents/acc-telemetry/.superpowers/brainstorm/16614-1777184410/content","state_dir":"/Users/jjpardo/Documents/acc-telemetry/.superpowers/brainstorm/16614-1777184410/state"}
+{"type":"screen-added","file":"/Users/jjpardo/Documents/acc-telemetry/.superpowers/brainstorm/16614-1777184410/content/tokens-v1.html"}
+{"source":"user-event","type":"click","text":"C\n    \n      Amber — motorsport-warm\n      Reads \"pit board\", \"lap timing\". Pro: warm, distinct from the cool data channels, very on-theme for racing. Con: warm accents on a cold UI is a strong opinion — has to be applied with restraint or it goes garish fast.","choice":"amber","id":null,"timestamp":1777184779509}
+{"source":"user-event","type":"click","text":"B\n    \n      Violet — premium / Linear-adjacent\n      Reads \"modern dashboard\", \"software product\". Doesn't collide with any data channel color. Pro: looks the most \"not AI slop\" out of the gate. Con: less \"racing\", more \"SaaS\".","choice":"violet","id":null,"timestamp":1777184793393}
+{"type":"screen-added","file":"/Users/jjpardo/Documents/acc-telemetry/.superpowers/brainstorm/16614-1777184410/content/chrome-v1.html"}
+{"type":"screen-added","file":"/Users/jjpardo/Documents/acc-telemetry/.superpowers/brainstorm/16614-1777184410/content/race-tab-v1.html"}
+{"type":"server-stopped","reason":"idle timeout"}
