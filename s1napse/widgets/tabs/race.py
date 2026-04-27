@@ -214,8 +214,14 @@ class RaceTab(QWidget):
         if total:
             self._pos_of.setText(f'/ {int(total)}')
 
-        st = getattr(app, '_strategy_engine', None)
-        headline = st.headline() if (st is not None and hasattr(st, 'headline')) else None
+        engine = getattr(app, '_strategy_engine', None)
+        st_state = None
+        if engine is not None and hasattr(engine, 'state'):
+            try:
+                st_state = engine.state()
+            except Exception:
+                st_state = None
+        headline = st_state.headline() if st_state is not None else None
         if headline is not None:
             self._banner_label.setText(f'► {headline.severity.upper()}')
             self._banner_msg.setText(headline.text)
@@ -235,9 +241,60 @@ class RaceTab(QWidget):
         pb = min(pts) if pts else None
         self._last_lap_spark.setPoints(pts, ref_value=pb)
 
-        ga = (data or {}).get('gap_ahead', 0) / 1000.0
-        gb = (data or {}).get('gap_behind', 0) / 1000.0
+        # Sectors — last completed lap
+        if laps:
+            last_lap = laps[-1]
+            sectors = last_lap.get('sectors') or []
+            for i, sector_lbl in enumerate(self._sector_rows):
+                s = sectors[i] if i < len(sectors) else None
+                if s is None or s <= 0:
+                    sector_lbl.setText('—')
+                else:
+                    s_total = s / 1000.0
+                    mm = int(s_total // 60)
+                    rest = s_total - mm * 60
+                    sector_lbl.setText(f'{mm}:{rest:06.3f}' if mm else f'{rest:.3f}')
+
+            # Stint rows — Lap N, stint avg, best stint
+            self._stint_rows['Lap'].setText(str(len(laps)))
+            valid_pts = [t for t in pts if t > 0]
+            if valid_pts:
+                avg_s = sum(valid_pts) / len(valid_pts)
+                best_s = min(valid_pts)
+                def _fmt(t):
+                    mm = int(t // 60); rest = t - mm * 60
+                    return f'{mm}:{rest:06.3f}' if mm else f'{rest:.3f}'
+                self._stint_rows['Stint avg'].setText(_fmt(avg_s))
+                self._stint_rows['Best stint'].setText(_fmt(best_s))
+
+        ga_ms = (data or {}).get('gap_ahead', 0) or 0
+        gb_ms = (data or {}).get('gap_behind', 0) or 0
+        ga = ga_ms / 1000.0
+        gb = gb_ms / 1000.0
         self._gap_bar.setGaps(-abs(ga), +abs(gb))
+
+        if ga_ms:
+            self._gap_ahead_lbl.setText(f'-{abs(ga):.2f}s')
+        else:
+            self._gap_ahead_lbl.setText('—')
+        if gb_ms:
+            self._gap_behind_lbl.setText(f'+{abs(gb):.2f}s')
+        else:
+            self._gap_behind_lbl.setText('—')
+
+        # Gap trend per lap — compare to gap at start of current lap
+        cur_lap = int(getattr(app, 'current_lap_count', 0) or 0)
+        prev_lap = getattr(self, '_gt_lap', None)
+        if prev_lap != cur_lap:
+            self._gt_lap = cur_lap
+            self._gt_ga_at_lap_start = ga_ms
+            self._gt_gb_at_lap_start = gb_ms
+        ga_delta = (ga_ms - getattr(self, '_gt_ga_at_lap_start', ga_ms)) / 1000.0
+        if abs(ga_delta) >= 0.05:
+            verb = 'closing' if ga_delta > 0 else 'opening'
+            self._gap_trend.setText(f'{verb} {abs(ga_delta):+.2f}s this lap')
+        else:
+            self._gap_trend.setText('stable')
 
         temps = (data or {}).get('tyre_temp') or [None, None, None, None]
         for i, tyre_pos in enumerate(('FL', 'FR', 'RL', 'RR')):
@@ -259,3 +316,39 @@ class RaceTab(QWidget):
 
         fuel_l = (data or {}).get('fuel', 0.0)
         self._fuel_stat.valueLabel().setText(f'{fuel_l:.1f}')
+
+        # Tyres-on-set label — driven by app._tyre_stint_laps (resets on pit exit)
+        stint_laps = int(getattr(app, '_tyre_stint_laps', 0) or 0)
+        if self._tyre_card.headerLabel() is not None:
+            stint_word = 'lap' if stint_laps == 1 else 'laps'
+            self._tyre_card.headerLabel().setText(f'TYRES · {stint_laps} {stint_word} on set')
+
+        # Pit window + degradation — pulled from StrategyEngine state.
+        # ACC has no live "tyre degradation" telemetry; the engine infers it
+        # via linear regression over recent lap times. Needs >=3 laps.
+        if st_state is not None:
+            open_lap = getattr(st_state, 'pit_window_open_lap', None)
+            close_lap = getattr(st_state, 'pit_window_close_lap', None)
+            current = getattr(st_state, 'current_lap_count', 0) or 0
+            if open_lap is not None and close_lap is not None:
+                self._pit_window_lbl.setText(f'L {open_lap}–{close_lap}  · now L{current}')
+            elif open_lap is not None:
+                self._pit_window_lbl.setText(f'L {open_lap}+ · now L{current}')
+            else:
+                self._pit_window_lbl.setText('—')
+
+            slope = getattr(st_state, 'deg_slope_s_per_lap', None)
+            if slope is None:
+                self._tyre_deg_lbl.setText('Deg —  ·  fit needs ≥3 laps')
+            else:
+                # Estimate remaining life: laps until +1.5s lost (cliff heuristic)
+                if slope > 0:
+                    life = max(0, int(1.5 / slope) - stint_laps)
+                    self._tyre_deg_lbl.setText(
+                        f'Deg {slope:+.3f} s/lap  ·  life ~{life} laps'
+                    )
+                else:
+                    self._tyre_deg_lbl.setText(f'Deg {slope:+.3f} s/lap  ·  stable')
+        else:
+            self._pit_window_lbl.setText('—')
+            self._tyre_deg_lbl.setText('Deg —  ·  fit needs ≥3 laps')
