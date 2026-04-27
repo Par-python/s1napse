@@ -10,5 +10,6 @@
 # refactor minimal.
 
 from .race import RaceTab
+from .tyres import TyresTab
 
-__all__ = ['RaceTab']
+__all__ = ['RaceTab', 'TyresTab']

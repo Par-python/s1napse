@@ -58,7 +58,7 @@ from .widgets.title_bar import TitleBar
 from .widgets.graphs import _style_ax
 from .widgets.coach_tab import CoachTab
 from .widgets.math_channel_panel import MathChannelPanel
-from .widgets.tabs import RaceTab
+from .widgets.tabs import RaceTab, TyresTab
 from .coaching.lap_coach import LapCoach
 from .coaching.math_engine import MathEngine
 from .coaching.strategy_engine import StrategyEngine
@@ -283,7 +283,8 @@ class TelemetryApp(QMainWindow):
         self.race_tab = RaceTab(self)
         self.tabs.addTab(self.race_tab, 'RACE')
         self.tabs.addTab(self.strategy_tab, 'STRATEGY')
-        self.tabs.addTab(self._build_tyres_tab(), 'TYRES')
+        self.tyres_tab = TyresTab(self)
+        self.tabs.addTab(self.tyres_tab, 'TYRES')
         self.tabs.addTab(self._build_comparison_tab(), 'LAP COMPARISON')
         self.tabs.addTab(self._build_session_tab(), 'SESSION')
         self.tabs.addTab(self._build_replay_tab(), 'REPLAY')
@@ -2165,162 +2166,6 @@ class TelemetryApp(QMainWindow):
         # Lap info is shown in the connection strip header label.
         # Graph channel headers stay clean (no per-lap suffix in the label text).
         _ = suffix  # acknowledged, intentionally unused here
-
-    # ------------------------------------------------------------------
-    # TYRES TAB
-    # ------------------------------------------------------------------
-
-    def _build_tyres_tab(self) -> QWidget:
-        tab = QWidget()
-        outer = QVBoxLayout(tab)
-        outer.setContentsMargins(10, 10, 10, 10)
-        outer.setSpacing(8)
-
-        # ── Info strip ────────────────────────────────────────────────
-        info_card = QFrame()
-        info_card.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
-        info_row = QHBoxLayout(info_card)
-        info_row.setContentsMargins(16, 8, 16, 8)
-        info_row.setSpacing(0)
-
-        def _stat_chip(title, attr, max_w=130):
-            col = QHBoxLayout()
-            col.setSpacing(8)
-            lbl = QLabel(title)
-            lbl.setFont(sans(7))
-            lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-            val = QLabel('—')
-            val.setFont(mono(10, bold=True))
-            val.setStyleSheet(f'color: {WHITE};')
-            val.setMaximumWidth(max_w)
-            val.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-            setattr(self, attr, val)
-            col.addWidget(lbl)
-            col.addWidget(val)
-            return col
-
-        info_row.addLayout(_stat_chip('COMPOUND', '_tyre_compound_lbl'))
-        info_row.addSpacing(28)
-        info_row.addLayout(_stat_chip('AIR', '_air_temp_lbl'))
-        info_row.addSpacing(28)
-        info_row.addLayout(_stat_chip('TRACK', '_road_temp_lbl'))
-        info_row.addStretch()
-
-        # Right side: ACC-only note when not on ACC
-        note = QLabel('Full tyre data available on ACC only')
-        note.setFont(sans(7))
-        note.setStyleSheet(f'color: {TXT2};')
-        info_row.addWidget(note)
-
-        outer.addWidget(info_card)
-
-        # ── 2×2 tyre grid ─────────────────────────────────────────────
-        grid_widget = QWidget()
-        grid = QGridLayout(grid_widget)
-        grid.setSpacing(8)
-        grid.setContentsMargins(0, 0, 0, 0)
-
-        self._tyre_cards: list[TyreCard] = []
-        for pos, row, col in [('FL', 0, 0), ('FR', 0, 1),
-                               ('RL', 1, 0), ('RR', 1, 1)]:
-            card = TyreCard(pos)
-            grid.addWidget(card, row, col)
-            self._tyre_cards.append(card)
-
-        outer.addWidget(grid_widget, stretch=1)
-
-        # ── Insights panel ────────────────────────────────────────────
-        insights_card = QFrame()
-        insights_card.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
-        ins_layout = QHBoxLayout(insights_card)
-        ins_layout.setContentsMargins(16, 10, 16, 10)
-
-        ins_icon = QLabel('◈')
-        ins_icon.setFont(sans(10))
-        ins_icon.setStyleSheet(f'color: {TXT2};')
-        ins_layout.addWidget(ins_icon)
-        ins_layout.addSpacing(8)
-
-        self._insights_lbl = QLabel('Connect to a game to see tyre insights.')
-        self._insights_lbl.setFont(sans(9))
-        self._insights_lbl.setStyleSheet(f'color: {TXT2};')
-        self._insights_lbl.setWordWrap(True)
-        ins_layout.addWidget(self._insights_lbl, stretch=1)
-
-        outer.addWidget(insights_card)
-
-        return tab
-
-    def _update_tyre_insights(self, temps: list, pressures: list,
-                              road_temp: float):
-        """Analyse the current tyre state and write a one-line insights string."""
-        if not any(t > 0.5 for t in temps):
-            self._insights_lbl.setText('Waiting for data…')
-            self._insights_lbl.setStyleSheet(f'color: {TXT2};')
-            return
-
-        fl, fr, rl, rr = temps
-        parts: list[str] = []
-        warn = False
-
-        # Left-right imbalance
-        front_diff = fl - fr
-        rear_diff  = rl - rr
-        if abs(front_diff) > 6:
-            side = 'FL' if front_diff > 0 else 'FR'
-            parts.append(f'Front imbalance {abs(front_diff):.0f}°C ({side} hotter)')
-            warn = True
-        if abs(rear_diff) > 6:
-            side = 'RL' if rear_diff > 0 else 'RR'
-            parts.append(f'Rear imbalance {abs(rear_diff):.0f}°C ({side} hotter)')
-            warn = True
-
-        # Front-rear bias
-        front_avg = (fl + fr) / 2
-        rear_avg  = (rl + rr) / 2
-        fr_bias   = front_avg - rear_avg
-        if abs(fr_bias) > 10:
-            parts.append(
-                f'{"Front" if fr_bias > 0 else "Rear"} tyres '
-                f'{abs(fr_bias):.0f}°C hotter than '
-                f'{"rear" if fr_bias > 0 else "front"}')
-
-        # Per-tyre status summary
-        statuses = [TyreCard.status_for(t)[0] for t in temps]
-        labels   = ['FL', 'FR', 'RL', 'RR']
-        cold_tyres = [labels[i] for i, s in enumerate(statuses)
-                      if s in ('COLD', 'FROZEN', 'BUILDING')]
-        hot_tyres  = [labels[i] for i, s in enumerate(statuses)
-                      if s in ('HOT', 'OVERHEAT')]
-
-        if cold_tyres:
-            parts.append(f'{", ".join(cold_tyres)} still building heat')
-        if hot_tyres:
-            parts.append(f'{", ".join(hot_tyres)} above optimal — risk of graining')
-            warn = True
-
-        # Pressure imbalance
-        if all(p > 5 for p in pressures):
-            lo, hi = min(pressures), max(pressures)
-            if hi - lo > 1.5:
-                parts.append(f'Pressure spread {lo:.1f}–{hi:.1f} PSI')
-
-        # Road-temp context
-        if road_temp > 45:
-            parts.append(f'High track temp ({road_temp:.0f}°C) — tyres heat faster')
-        elif road_temp > 0 and road_temp < 20:
-            parts.append(f'Cold track ({road_temp:.0f}°C) — allow longer warm-up')
-
-        if not parts:
-            text = 'All tyres within optimal temperature window.'
-        else:
-            text = '  ·  '.join(parts)
-
-        color = C_BRAKE if warn else C_THROTTLE
-        self._insights_lbl.setText(text)
-        self._insights_lbl.setStyleSheet(f'color: {color};')
 
     # ------------------------------------------------------------------
     # LAP COMPARISON TAB
@@ -4327,23 +4172,6 @@ class TelemetryApp(QMainWindow):
                 data['track_name'], Qt.TextElideMode.ElideRight, 236))
         self._auto_detect_track(data['track_name'])
 
-        # ── Tyres tab ─────────────────────────────────────────────────────
-        t_temps  = data.get('tyre_temp',     [0.0, 0.0, 0.0, 0.0])
-        t_pres   = data.get('tyre_pressure', [0.0, 0.0, 0.0, 0.0])
-        t_brake  = data.get('brake_temp',    [0.0, 0.0, 0.0, 0.0])
-        t_wear   = data.get('tyre_wear',     [0.0, 0.0, 0.0, 0.0])
-        air_t    = data.get('air_temp',  0.0)
-        road_t   = data.get('road_temp', 0.0)
-        compound = data.get('tyre_compound', '')
-
-        for i, card in enumerate(self._tyre_cards):
-            card.update_data(t_temps[i], t_pres[i], t_brake[i], t_wear[i])
-
-        self._tyre_compound_lbl.setText(compound or '—')
-        self._air_temp_lbl.setText(f'{air_t:.1f}°C' if air_t else '—')
-        self._road_temp_lbl.setText(f'{road_t:.1f}°C' if road_t else '—')
-        self._update_tyre_insights(t_temps, t_pres, road_t)
-
         fuel = data.get('fuel', 0.0)
         self._fuel_lbl.setText(f"{fuel:.1f}")
 
@@ -4386,6 +4214,7 @@ class TelemetryApp(QMainWindow):
             self._laptime_lbl.setText(f'{m}:{s:06.3f}')
 
         self.race_tab.update_tick(self._last_data)
+        self.tyres_tab.update_tick(self._last_data)
         self._update_fuel_save()
         self._update_undercut()
 
@@ -4667,14 +4496,8 @@ class TelemetryApp(QMainWindow):
         self._bias_front_fill.setFixedWidth(0)
         self._position_lbl.setText('—')
         self._laptime_lbl.setText('—')
-        for card in self._tyre_cards:
-            card.update_data(0.0, 0.0, 0.0)
-        self._tyre_compound_lbl.setText('—')
-        self._air_temp_lbl.setText('—')
-        self._road_temp_lbl.setText('—')
-        self._insights_lbl.setText('Connect to a game to see tyre insights.')
-        self._insights_lbl.setStyleSheet(f'color: {TXT2};')
         self.race_tab.update_tick(None)
+        self.tyres_tab.update_tick(None)
         self.strategy_tab._pit_rec_lbl.setText('—')
         self.strategy_tab._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
         self.strategy_tab._pit_fuel_laps_lbl.setText('—')
