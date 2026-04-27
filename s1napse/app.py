@@ -58,7 +58,7 @@ from .widgets.title_bar import TitleBar
 from .widgets.graphs import _style_ax
 from .widgets.coach_tab import CoachTab
 from .widgets.math_channel_panel import MathChannelPanel
-from .widgets.tabs import RaceTab, TyresTab
+from .widgets.tabs import RaceTab, TyresTab, DashboardTab
 from .coaching.lap_coach import LapCoach
 from .coaching.math_engine import MathEngine
 from .coaching.strategy_engine import StrategyEngine
@@ -277,7 +277,8 @@ class TelemetryApp(QMainWindow):
         self.strategy_tab._uco_pit_loss_spin.valueChanged.connect(self._update_undercut)
         self.strategy_tab._uco_pace_delta_spin.valueChanged.connect(self._update_undercut)
 
-        self.tabs.addTab(self._build_dashboard_tab(), 'DASHBOARD')
+        self.dashboard_tab = DashboardTab(self)
+        self.tabs.addTab(self.dashboard_tab, 'DASHBOARD')
         self.tabs.addTab(self._build_graphs_tab(), 'TELEMETRY GRAPHS')
         self.tabs.addTab(self._build_analysis_tab(), 'LAP ANALYSIS')
         self.race_tab = RaceTab(self)
@@ -4213,6 +4214,7 @@ class TelemetryApp(QMainWindow):
             s = lt % 60
             self._laptime_lbl.setText(f'{m}:{s:06.3f}')
 
+        self.dashboard_tab.update_tick(self._last_data)
         self.race_tab.update_tick(self._last_data)
         self.tyres_tab.update_tick(self._last_data)
         self._update_fuel_save()
@@ -4496,6 +4498,7 @@ class TelemetryApp(QMainWindow):
         self._bias_front_fill.setFixedWidth(0)
         self._position_lbl.setText('—')
         self._laptime_lbl.setText('—')
+        self.dashboard_tab.update_tick(None)
         self.race_tab.update_tick(None)
         self.tyres_tab.update_tick(None)
         self.strategy_tab._pit_rec_lbl.setText('—')
