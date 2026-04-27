@@ -5,9 +5,8 @@ See docs/superpowers/specs/2026-04-25-strategy-tab-v1-design.md.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QScrollArea,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
 )
 
 from .. import theme
@@ -37,31 +36,73 @@ class StrategyTab(QWidget):
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setContentsMargins(12, 12, 12, 12)
+        outer.setSpacing(12)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }')
+        outer.addWidget(self._build_headline_strip())
 
-        inner = QWidget()
-        inner.setStyleSheet(f'background: {theme.BG};')
-        body = QVBoxLayout(inner)
-        body.setContentsMargins(14, 14, 14, 14)
-        body.setSpacing(10)
+        body = QHBoxLayout()
+        body.setSpacing(12)
+        outer.addLayout(body, 1)
 
-        body.addWidget(self._build_degradation_card())
-        body.addWidget(self._build_pit_window_card())
-        body.addWidget(self._build_fuel_save_cost_card())
-        body.addWidget(self._build_rival_watch_card())
-        body.addWidget(self._build_temp_watch_card())
-        body.addWidget(self._build_pit_summary_card())
-        body.addWidget(self._build_fuel_save_calculator_card())
-        body.addWidget(self._build_undercut_overcut_card())
-        body.addStretch()
+        # Column 1 — "Now" (live race state)
+        col_now = QVBoxLayout()
+        col_now.setSpacing(12)
+        col_now.addWidget(self._build_pit_window_card())
+        col_now.addWidget(self._build_fuel_save_cost_card())
+        col_now.addWidget(self._build_rival_watch_card())
+        col_now.addWidget(self._build_temp_watch_card())
+        col_now.addStretch(1)
+        body.addLayout(col_now, 1)
 
-        scroll.setWidget(inner)
-        outer.addWidget(scroll)
+        # Column 2 — "Plan" (calculators + projections)
+        col_plan = QVBoxLayout()
+        col_plan.setSpacing(12)
+        col_plan.addWidget(self._build_degradation_card())
+        col_plan.addWidget(self._build_pit_summary_card())
+        col_plan.addWidget(self._build_fuel_save_calculator_card())
+        col_plan.addWidget(self._build_undercut_overcut_card())
+        col_plan.addStretch(1)
+        body.addLayout(col_plan, 1)
+
+    def _build_headline_strip(self) -> QFrame:
+        """Top strip — STRATEGY label + live headline message."""
+        f = QFrame()
+        f.setStyleSheet(
+            f'background: {theme.SURFACE}; border: 1px solid {theme.BORDER_SUBTLE}; '
+            f'border-radius: {theme.RADIUS["lg"]}px;'
+        )
+        row = QHBoxLayout(f)
+        row.setContentsMargins(18, 14, 18, 14)
+        row.setSpacing(20)
+
+        title = QLabel('STRATEGY')
+        title.setFont(theme.ui_font(20, bold=True))
+        title.setStyleSheet(f'color: {theme.TEXT_PRIMARY}; background: transparent; border: none;')
+        row.addWidget(title, 0)
+
+        div = QFrame()
+        div.setFixedWidth(1)
+        div.setStyleSheet(f'background: {theme.BORDER_SUBTLE}; border: none;')
+        row.addWidget(div)
+
+        banner = QVBoxLayout()
+        banner.setSpacing(2)
+        self._headline_label = QLabel('► COLUMNS')
+        self._headline_label.setFont(theme.label_font())
+        self._headline_label.setStyleSheet(
+            f'color: {theme.ACCENT_FG}; background: transparent; border: none; letter-spacing: 0.7px;'
+        )
+        banner.addWidget(self._headline_label)
+        self._headline_msg = QLabel('Live → on the left  ·  Plan → on the right')
+        self._headline_msg.setFont(theme.ui_font(13, bold=True))
+        self._headline_msg.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; background: transparent; border: none;'
+        )
+        self._headline_msg.setWordWrap(True)
+        banner.addWidget(self._headline_msg)
+        row.addLayout(banner, 1)
+        return f
 
     # --- Card builders (placeholders for now; filled in Tasks 11-13) ---
 
@@ -234,9 +275,19 @@ class StrategyTab(QWidget):
         return False
 
     def refresh(self, state) -> None:
-        """Re-render all six cards from a StrategyState. Cheap if invisible."""
+        """Re-render all cards from a StrategyState. Cheap if invisible."""
         if not self.isVisible():
             return
+
+        # Update headline strip from state
+        headline = state.headline()
+        if headline is not None:
+            # Headline.text carries the full callout string; severity drives colour.
+            self._headline_label.setText(f'► {headline.severity.upper()}')
+            self._headline_msg.setText(headline.text)
+        else:
+            self._headline_label.setText('► COLUMNS')
+            self._headline_msg.setText('Live → on the left  ·  Plan → on the right')
 
         # Card 1 — degradation
         if state.deg_slope_s_per_lap is None:
