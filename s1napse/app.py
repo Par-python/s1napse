@@ -277,6 +277,16 @@ class TelemetryApp(QMainWindow):
         self.strategy_tab._uco_pit_loss_spin.valueChanged.connect(self._update_undercut)
         self.strategy_tab._uco_pace_delta_spin.valueChanged.connect(self._update_undercut)
 
+        # Legacy dashboard widgets are still referenced by _render_telemetry,
+        # _anim_tick, and _reset_display. Construct them but don't register the
+        # legacy tab — DashboardTab below replaces it visually. Task 27 cleans up.
+        # NOTE: We do NOT deleteLater() the returned widget because _build_dashboard_tab
+        # assigns self.<name> child widgets; deleting the parent would destroy those
+        # children and leave dangling C++ references. The orphan widget tree is kept
+        # alive (hidden) so all cross-cutting self.* references remain valid.
+        self._legacy_dashboard_widget = self._build_dashboard_tab()
+        self._legacy_dashboard_widget.setVisible(False)
+
         self.dashboard_tab = DashboardTab(self)
         self.tabs.addTab(self.dashboard_tab, 'DASHBOARD')
         self.tabs.addTab(self._build_graphs_tab(), 'TELEMETRY GRAPHS')

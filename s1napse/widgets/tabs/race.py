@@ -217,8 +217,8 @@ class RaceTab(QWidget):
         st = getattr(app, '_strategy_engine', None)
         headline = st.headline() if (st is not None and hasattr(st, 'headline')) else None
         if headline is not None:
-            self._banner_label.setText(f'► {headline.label.upper()}')
-            self._banner_msg.setText(headline.message)
+            self._banner_label.setText(f'► {headline.severity.upper()}')
+            self._banner_msg.setText(headline.text)
         else:
             self._banner_label.setText('► STRATEGY')
             self._banner_msg.setText('Holding pace.')
@@ -235,14 +235,14 @@ class RaceTab(QWidget):
         pb = min(pts) if pts else None
         self._last_lap_spark.setPoints(pts, ref_value=pb)
 
-        ga = (data or {}).get('gap_ahead_ms', 0) / 1000.0
-        gb = (data or {}).get('gap_behind_ms', 0) / 1000.0
+        ga = (data or {}).get('gap_ahead', 0) / 1000.0
+        gb = (data or {}).get('gap_behind', 0) / 1000.0
         self._gap_bar.setGaps(-abs(ga), +abs(gb))
 
-        temps = (data or {}).get('tyre_temps', {}) or {}
-        for tyre_pos in ('FL', 'FR', 'RL', 'RR'):
+        temps = (data or {}).get('tyre_temp') or [None, None, None, None]
+        for i, tyre_pos in enumerate(('FL', 'FR', 'RL', 'RR')):
             cell, v = self._tyre_labels[tyre_pos]
-            t = temps.get(tyre_pos)
+            t = temps[i] if i < len(temps) else None
             if t is None:
                 v.setText('—')
                 continue
