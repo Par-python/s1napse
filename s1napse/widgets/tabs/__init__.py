@@ -8,3 +8,7 @@
 # The `app` reference gives the tab access to engines and shared state. Long-term
 # we'll replace this with explicit signals; for v1 the direct ref keeps the
 # refactor minimal.
+
+from .race import RaceTab
+
+__all__ = ['RaceTab']
