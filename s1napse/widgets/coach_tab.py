@@ -6,13 +6,17 @@ from PyQt6.QtCore import Qt, QRectF
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea,
-    QFrame, QComboBox, QSizePolicy, QSplitter,
+    QFrame, QComboBox, QSplitter,
 )
 
-from ..constants import (
-    BG, BG1, BG2, BG3, BORDER, BORDER2, TXT, TXT2, WHITE,
-    C_SPEED, C_THROTTLE, C_BRAKE, mono, sans,
+from ..constants import C_SPEED
+from .. import theme
+from ..theme import (
+    BG, SURFACE as BG1,
+    BORDER_STRONG as BORDER2,
+    TEXT_SECONDARY as TXT, TEXT_MUTED as TXT2, TEXT_PRIMARY as WHITE,
 )
+from .primitives import Card
 from ..coaching.models import (
     LapReport, CornerPerformance, BrakingAnalysis,
     TrailBrakeAnalysis, TyreLapSummary, SessionProgress,
@@ -114,51 +118,67 @@ class CoachTab(QWidget):
 
         # Lap summary header
         self._summary_label = QLabel("Waiting for first lap...")
-        self._summary_label.setFont(mono(13, bold=True))
+        self._summary_label.setFont(theme.mono_font(13, bold=True))
         self._summary_label.setStyleSheet(f'color: {WHITE};')
         self._summary_label.setWordWrap(True)
         left_lay.addWidget(self._summary_label)
 
         # Corner grade counts
         self._grade_label = QLabel("")
-        self._grade_label.setFont(mono(10))
+        self._grade_label.setFont(theme.mono_font(10))
         self._grade_label.setStyleSheet(f'color: {TXT2};')
         left_lay.addWidget(self._grade_label)
 
         # Trail braking summary line
         self._trail_label = QLabel("")
-        self._trail_label.setFont(mono(10))
+        self._trail_label.setFont(theme.mono_font(10))
         self._trail_label.setStyleSheet(f'color: {TXT2};')
         left_lay.addWidget(self._trail_label)
 
         # Tyre summary line
         self._tyre_label = QLabel("")
-        self._tyre_label.setFont(mono(10))
+        self._tyre_label.setFont(theme.mono_font(10))
         self._tyre_label.setStyleSheet(f'color: {TXT2};')
         left_lay.addWidget(self._tyre_label)
 
         # Braking consistency
         self._consistency_label = QLabel("")
-        self._consistency_label.setFont(mono(10))
+        self._consistency_label.setFont(theme.mono_font(10))
         self._consistency_label.setStyleSheet(f'color: {TXT2};')
         left_lay.addWidget(self._consistency_label)
 
-        # Quick Win card
-        self._quick_win = _Card("QUICK WIN", _C_YELLOW)
-        left_lay.addWidget(self._quick_win)
+        # ── Live tips: Quick Win card (top, no stretch) ──────────────
+        self._live_tips_card = Card(label='QUICK WIN', dense=True)
+        self._quick_win_body = QLabel("")
+        self._quick_win_body.setFont(theme.ui_font(10))
+        self._quick_win_body.setStyleSheet(f'color: {TXT};')
+        self._quick_win_body.setWordWrap(True)
+        self._live_tips_card.body().addWidget(self._quick_win_body)
+        left_lay.addWidget(self._live_tips_card, 0)
 
-        # Tyre detail card
-        self._tyre_card = _Card("TYRES", C_SPEED)
-        left_lay.addWidget(self._tyre_card)
+        # Tyre detail card (top, no stretch)
+        self._tyre_card = Card(label='TYRES', dense=True)
+        self._tyre_body = QLabel("")
+        self._tyre_body.setFont(theme.ui_font(10))
+        self._tyre_body.setStyleSheet(f'color: {TXT};')
+        self._tyre_body.setWordWrap(True)
+        self._tyre_card.body().addWidget(self._tyre_body)
+        left_lay.addWidget(self._tyre_card, 0)
 
-        # Session progress card
-        self._progress_card = _Card("SESSION PROGRESS", '#a855f7')
-        left_lay.addWidget(self._progress_card)
+        # ── History: Session progress card (bottom, stretch=1) ───────
+        self._history_card = Card(label='SESSION PROGRESS', dense=True)
+        self._progress_body = QLabel("")
+        self._progress_body.setFont(theme.ui_font(10))
+        self._progress_body.setStyleSheet(f'color: {TXT};')
+        self._progress_body.setWordWrap(True)
+        self._history_card.body().addWidget(self._progress_body)
 
-        # Lap time sparkline
+        # Lap time sparkline inside history card
         self._sparkline = _Sparkline()
         self._sparkline.setFixedHeight(60)
-        left_lay.addWidget(self._sparkline)
+        self._history_card.body().addWidget(self._sparkline)
+
+        left_lay.addWidget(self._history_card, 1)
 
         left_lay.addStretch()
 
@@ -226,34 +246,34 @@ class CoachTab(QWidget):
         self._consistency_label.setText(
             f"Braking consistency: {r.braking_consistency_pct:.0f}%")
 
-        # Quick win card
+        # Quick win card (live tips)
         if r.quick_win_message:
-            self._quick_win.set_text(r.quick_win_message)
-            self._quick_win.show()
+            self._quick_win_body.setText(r.quick_win_message)
+            self._live_tips_card.show()
         else:
-            self._quick_win.hide()
+            self._live_tips_card.hide()
 
         # Tyre detail card
         ts = r.tyre_summary
         if ts and ts.balance != "unknown":
-            self._tyre_card.set_text(ts.message)
+            self._tyre_body.setText(ts.message)
             self._tyre_card.show()
         else:
             self._tyre_card.hide()
 
-        # Session progress card
+        # Session progress card (history)
         sp = r.session_progress
         if sp:
             txt = session_progress_text(sp)
             if txt:
-                self._progress_card.set_text(txt)
-                self._progress_card.show()
+                self._progress_body.setText(txt)
+                self._history_card.show()
             else:
-                self._progress_card.hide()
+                self._history_card.hide()
             self._sparkline.set_data(sp.lap_times, sp.best_lap_number)
             self._sparkline.show()
         else:
-            self._progress_card.hide()
+            self._history_card.hide()
             self._sparkline.hide()
 
         # Rebuild corner cards
@@ -291,34 +311,6 @@ class CoachTab(QWidget):
 # ======================================================================
 # Helper widgets
 # ======================================================================
-
-class _Card(QFrame):
-    """Rounded card with a coloured left accent."""
-
-    def __init__(self, title: str, accent: str, parent=None):
-        super().__init__(parent)
-        self._accent = accent
-        self.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; '
-            f'border-left: 3px solid {accent}; border-radius: 4px;')
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(10, 8, 10, 8)
-        lay.setSpacing(4)
-
-        hdr = QLabel(title)
-        hdr.setFont(sans(9, bold=True))
-        hdr.setStyleSheet(f'color: {accent}; border: none;')
-        lay.addWidget(hdr)
-
-        self._body = QLabel("")
-        self._body.setFont(sans(10))
-        self._body.setStyleSheet(f'color: {TXT}; border: none;')
-        self._body.setWordWrap(True)
-        lay.addWidget(self._body)
-
-    def set_text(self, text: str):
-        self._body.setText(text)
-
 
 class _Sparkline(QWidget):
     """Mini lap-time sparkline chart drawn with QPainter."""
@@ -398,8 +390,8 @@ class _CornerCard(QFrame):
 
         color = _GRADE_COLORS.get(perf.grade, TXT2)
         self.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; '
-            f'border-left: 3px solid {color}; border-radius: 4px;')
+            f'background: {theme.SURFACE_RAISED}; border: 1px solid {theme.BORDER_SUBTLE}; '
+            f'border-left: 3px solid {color}; border-radius: {theme.RADIUS["md"]}px;')
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         self._lay = QVBoxLayout(self)
@@ -419,13 +411,13 @@ class _CornerCard(QFrame):
             tb_icon = f" {icon_str}"
 
         lbl = QLabel(f"T{c.corner_id} ({dir_str}){tb_icon}")
-        lbl.setFont(mono(11, bold=True))
+        lbl.setFont(theme.mono_font(11, bold=True))
         lbl.setStyleSheet(f'color: {color}; border: none;')
         hdr.addWidget(lbl)
 
         delta_txt = _fmt_delta(perf.delta_vs_best)
         delta_lbl = QLabel(delta_txt)
-        delta_lbl.setFont(mono(11))
+        delta_lbl.setFont(theme.mono_font(11))
         delta_color = _C_GREEN if perf.delta_vs_best <= 0.005 else (
             _C_YELLOW if perf.delta_vs_best < 0.5 else _C_RED)
         delta_lbl.setStyleSheet(f'color: {delta_color}; border: none;')
@@ -435,7 +427,7 @@ class _CornerCard(QFrame):
 
         # One-line issue
         self._issue_lbl = QLabel(corner_message(perf))
-        self._issue_lbl.setFont(sans(9))
+        self._issue_lbl.setFont(theme.ui_font(9))
         self._issue_lbl.setStyleSheet(f'color: {TXT}; border: none;')
         self._issue_lbl.setWordWrap(True)
         self._lay.addWidget(self._issue_lbl)
@@ -472,7 +464,7 @@ class _CornerCard(QFrame):
 
         for txt in details:
             d = QLabel(txt)
-            d.setFont(sans(9))
+            d.setFont(theme.ui_font(9))
             d.setStyleSheet(f'color: {TXT2}; border: none;')
             d.setWordWrap(True)
             detail_lay.addWidget(d)

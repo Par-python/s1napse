@@ -5,26 +5,20 @@ See docs/superpowers/specs/2026-04-25-strategy-tab-v1-design.md.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QScrollArea,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
 )
 
-from ..constants import BG, BG2, BG3, BORDER, BORDER2, TXT, TXT2, mono, sans
-
-
-def _card() -> QFrame:
-    f = QFrame()
-    f.setStyleSheet(
-        f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
-    return f
+from .. import theme
+from .primitives import Card
 
 
 def _chip_lbl(text: str, font_size: int = 8, bold: bool = True,
-              color: str = TXT2, letter_spacing: str = '1px') -> QLabel:
+              color: str | None = None, letter_spacing: str = '1px') -> QLabel:
+    lbl_color = color if color is not None else theme.TEXT_MUTED
     l = QLabel(text)
-    l.setFont(sans(font_size, bold=bold))
-    l.setStyleSheet(f'color: {color}; letter-spacing: {letter_spacing};')
+    l.setFont(theme.ui_font(font_size, bold=bold))
+    l.setStyleSheet(f'color: {lbl_color}; letter-spacing: {letter_spacing};')
     return l
 
 
@@ -42,109 +36,134 @@ class StrategyTab(QWidget):
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setContentsMargins(12, 12, 12, 12)
+        outer.setSpacing(12)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }')
+        outer.addWidget(self._build_headline_strip())
 
-        inner = QWidget()
-        inner.setStyleSheet(f'background: {BG};')
-        body = QVBoxLayout(inner)
-        body.setContentsMargins(14, 14, 14, 14)
-        body.setSpacing(10)
+        body = QHBoxLayout()
+        body.setSpacing(12)
+        outer.addLayout(body, 1)
 
-        body.addWidget(self._build_degradation_card())
-        body.addWidget(self._build_pit_window_card())
-        body.addWidget(self._build_fuel_save_cost_card())
-        body.addWidget(self._build_rival_watch_card())
-        body.addWidget(self._build_temp_watch_card())
-        body.addWidget(self._build_pit_summary_card())
-        body.addWidget(self._build_fuel_save_calculator_card())
-        body.addWidget(self._build_undercut_overcut_card())
-        body.addStretch()
+        # Column 1 — "Now" (live race state)
+        col_now = QVBoxLayout()
+        col_now.setSpacing(12)
+        col_now.addWidget(self._build_pit_window_card())
+        col_now.addWidget(self._build_fuel_save_cost_card())
+        col_now.addWidget(self._build_rival_watch_card())
+        col_now.addWidget(self._build_temp_watch_card())
+        col_now.addStretch(1)
+        body.addLayout(col_now, 1)
 
-        scroll.setWidget(inner)
-        outer.addWidget(scroll)
+        # Column 2 — "Plan" (calculators + projections)
+        col_plan = QVBoxLayout()
+        col_plan.setSpacing(12)
+        col_plan.addWidget(self._build_degradation_card())
+        col_plan.addWidget(self._build_pit_summary_card())
+        col_plan.addWidget(self._build_fuel_save_calculator_card())
+        col_plan.addWidget(self._build_undercut_overcut_card())
+        col_plan.addStretch(1)
+        body.addLayout(col_plan, 1)
+
+    def _build_headline_strip(self) -> QFrame:
+        """Top strip — STRATEGY label + live headline message."""
+        f = QFrame()
+        f.setStyleSheet(
+            f'background: {theme.SURFACE}; border: 1px solid {theme.BORDER_SUBTLE}; '
+            f'border-radius: {theme.RADIUS["lg"]}px;'
+        )
+        row = QHBoxLayout(f)
+        row.setContentsMargins(18, 14, 18, 14)
+        row.setSpacing(20)
+
+        title = QLabel('STRATEGY')
+        title.setFont(theme.ui_font(20, bold=True))
+        title.setStyleSheet(f'color: {theme.TEXT_PRIMARY}; background: transparent; border: none;')
+        row.addWidget(title, 0)
+
+        div = QFrame()
+        div.setFixedWidth(1)
+        div.setStyleSheet(f'background: {theme.BORDER_SUBTLE}; border: none;')
+        row.addWidget(div)
+
+        banner = QVBoxLayout()
+        banner.setSpacing(2)
+        self._headline_label = QLabel('► COLUMNS')
+        self._headline_label.setFont(theme.label_font())
+        self._headline_label.setStyleSheet(
+            f'color: {theme.ACCENT_FG}; background: transparent; border: none; letter-spacing: 0.7px;'
+        )
+        banner.addWidget(self._headline_label)
+        self._headline_msg = QLabel('Live → on the left  ·  Plan → on the right')
+        self._headline_msg.setFont(theme.ui_font(13, bold=True))
+        self._headline_msg.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; background: transparent; border: none;'
+        )
+        self._headline_msg.setWordWrap(True)
+        banner.addWidget(self._headline_msg)
+        row.addLayout(banner, 1)
+        return f
 
     # --- Card builders (placeholders for now; filled in Tasks 11-13) ---
 
-    def _build_degradation_card(self) -> QFrame:
-        c = _card()
-        v = QVBoxLayout(c)
-        v.setContentsMargins(18, 12, 18, 12)
-        v.addWidget(_chip_lbl('TYRE DEGRADATION'))
+    def _build_degradation_card(self) -> Card:
+        card = Card(label='TYRE DEGRADATION', dense=True)
         self._deg_status = QLabel('Need 3 laps to project.')
-        self._deg_status.setFont(mono(10))
-        self._deg_status.setStyleSheet(f'color: {TXT2};')
-        v.addWidget(self._deg_status)
-        return c
+        self._deg_status.setFont(theme.mono_font(10))
+        self._deg_status.setStyleSheet(f'color: {theme.TEXT_MUTED};')
+        card.body().addWidget(self._deg_status)
+        return card
 
-    def _build_pit_window_card(self) -> QFrame:
-        c = _card()
-        v = QVBoxLayout(c)
-        v.setContentsMargins(18, 12, 18, 12)
-        v.addWidget(_chip_lbl('PIT WINDOW'))
+    def _build_pit_window_card(self) -> Card:
+        card = Card(label='PIT WINDOW', dense=True)
         self._pw_status = QLabel('Complete a lap to estimate.')
-        self._pw_status.setFont(mono(10))
-        self._pw_status.setStyleSheet(f'color: {TXT2};')
-        v.addWidget(self._pw_status)
-        return c
+        self._pw_status.setFont(theme.mono_font(10))
+        self._pw_status.setStyleSheet(f'color: {theme.TEXT_MUTED};')
+        card.body().addWidget(self._pw_status)
+        return card
 
-    def _build_fuel_save_cost_card(self) -> QFrame:
-        c = _card()
-        v = QVBoxLayout(c)
-        v.setContentsMargins(18, 12, 18, 12)
-        v.addWidget(_chip_lbl('FUEL-SAVE COST'))
+    def _build_fuel_save_cost_card(self) -> Card:
+        card = Card(label='FUEL-SAVE COST', dense=True)
         self._fsc_status = QLabel('—')
-        self._fsc_status.setFont(mono(10))
-        self._fsc_status.setStyleSheet(f'color: {TXT2};')
-        v.addWidget(self._fsc_status)
-        return c
+        self._fsc_status.setFont(theme.mono_font(10))
+        self._fsc_status.setStyleSheet(f'color: {theme.TEXT_MUTED};')
+        card.body().addWidget(self._fsc_status)
+        return card
 
-    def _build_rival_watch_card(self) -> QFrame:
-        c = _card()
-        v = QVBoxLayout(c)
-        v.setContentsMargins(18, 12, 18, 12)
-        v.addWidget(_chip_lbl('RIVAL WATCH (inferred)'))
+    def _build_rival_watch_card(self) -> Card:
+        card = Card(label='RIVAL WATCH (inferred)', dense=True)
         self._rw_ahead = QLabel('Ahead: stable')
         self._rw_behind = QLabel('Behind: stable')
         for lbl in (self._rw_ahead, self._rw_behind):
-            lbl.setFont(mono(10))
-            lbl.setStyleSheet(f'color: {TXT};')
-            v.addWidget(lbl)
+            lbl.setFont(theme.mono_font(10))
+            lbl.setStyleSheet(f'color: {theme.TEXT_SECONDARY};')
+            card.body().addWidget(lbl)
         sub = QLabel('Inferred from gap delta. May fire on rival crash/spin.')
-        sub.setFont(sans(8))
-        sub.setStyleSheet(f'color: {TXT2};')
+        sub.setFont(theme.ui_font(8))
+        sub.setStyleSheet(f'color: {theme.TEXT_MUTED};')
         sub.setWordWrap(True)
-        v.addWidget(sub)
-        return c
+        card.body().addWidget(sub)
+        return card
 
-    def _build_temp_watch_card(self) -> QFrame:
-        c = _card()
-        v = QVBoxLayout(c)
-        v.setContentsMargins(18, 12, 18, 12)
-        v.addWidget(_chip_lbl('WEATHER / TRACK TEMP'))
+    def _build_temp_watch_card(self) -> Card:
+        card = Card(label='WEATHER / TRACK TEMP', dense=True)
         self._tw_status = QLabel('—')
-        self._tw_status.setFont(mono(10))
-        self._tw_status.setStyleSheet(f'color: {TXT2};')
-        v.addWidget(self._tw_status)
-        return c
+        self._tw_status.setFont(theme.mono_font(10))
+        self._tw_status.setStyleSheet(f'color: {theme.TEXT_MUTED};')
+        card.body().addWidget(self._tw_status)
+        return card
 
-    def _build_pit_summary_card(self) -> QFrame:
-        c = _card()
-        vbox = QVBoxLayout(c)
-        vbox.setContentsMargins(18, 12, 18, 12)
-        vbox.setSpacing(8)
+    def _build_pit_summary_card(self) -> Card:
+        card = Card(label='PIT STRATEGY', dense=True)
 
-        hdr_row = QHBoxLayout()
-        hdr_row.addWidget(_chip_lbl('PIT STRATEGY'))
-        hdr_row.addStretch()
+        # "no data" sub-label in header row — inject via a horizontal helper
+        no_data_row = QHBoxLayout()
+        no_data_row.setContentsMargins(0, 0, 0, 0)
         self._pit_no_data_lbl = _chip_lbl('Complete a lap to calculate',
-                                           color=TXT2, bold=False)
-        hdr_row.addWidget(self._pit_no_data_lbl)
-        vbox.addLayout(hdr_row)
+                                           color=theme.TEXT_MUTED, bold=False)
+        no_data_row.addStretch()
+        no_data_row.addWidget(self._pit_no_data_lbl)
+        card.body().addLayout(no_data_row)
 
         stats_row = QHBoxLayout()
         stats_row.setSpacing(0)
@@ -154,8 +173,8 @@ class StrategyTab(QWidget):
             col.setSpacing(2)
             col.addWidget(_chip_lbl(title, font_size=7))
             v = QLabel('—')
-            v.setFont(mono(11, bold=True))
-            v.setStyleSheet(f'color: {TXT};')
+            v.setFont(theme.mono_font(11, bold=True))
+            v.setStyleSheet(f'color: {theme.TEXT_SECONDARY};')
             col.addWidget(v)
             setattr(self, attr, v)
             return col
@@ -166,56 +185,48 @@ class StrategyTab(QWidget):
         stats_row.addSpacing(28)
         stats_row.addLayout(_pit_stat('TYRE CONDITION', '_pit_tyre_cond_lbl'))
         stats_row.addStretch()
-        vbox.addLayout(stats_row)
+        card.body().addLayout(stats_row)
 
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f'color: {BORDER2}; background: {BORDER2};')
+        sep.setStyleSheet(
+            f'color: {theme.BORDER_STRONG}; background: {theme.BORDER_STRONG};')
         sep.setFixedHeight(1)
-        vbox.addWidget(sep)
+        card.body().addWidget(sep)
 
         self._pit_rec_lbl = QLabel('—')
-        self._pit_rec_lbl.setFont(sans(11, bold=True))
-        self._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self._pit_rec_lbl.setFont(theme.ui_font(11, bold=True))
+        self._pit_rec_lbl.setStyleSheet(
+            f'color: {theme.TEXT_MUTED}; letter-spacing: 1px;')
         self._pit_rec_lbl.setWordWrap(True)
-        vbox.addWidget(self._pit_rec_lbl)
+        card.body().addWidget(self._pit_rec_lbl)
 
-        return c
+        return card
 
-    def _build_fuel_save_calculator_card(self) -> QFrame:
+    def _build_fuel_save_calculator_card(self) -> Card:
         from PyQt6.QtWidgets import QSpinBox
-        c = _card()
-        v = QVBoxLayout(c)
-        v.setContentsMargins(18, 12, 18, 12)
-        v.setSpacing(8)
-        v.addWidget(_chip_lbl('FUEL SAVE CALCULATOR'))
+        card = Card(label='FUEL SAVE CALCULATOR', dense=True)
 
         row = QHBoxLayout()
-        row.addWidget(_chip_lbl('LAPS TO GO', font_size=8, bold=False, color=TXT))
+        row.addWidget(_chip_lbl('LAPS TO GO', font_size=8, bold=False,
+                                color=theme.TEXT_SECONDARY))
         self._fs_laps_spin = QSpinBox()
         self._fs_laps_spin.setRange(1, 99)
         self._fs_laps_spin.setValue(10)
-        self._fs_laps_spin.setStyleSheet(
-            f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 4px 8px;')
         row.addWidget(self._fs_laps_spin)
         row.addStretch()
-        v.addLayout(row)
+        card.body().addLayout(row)
 
         self._fs_result_lbl = QLabel('—')
-        self._fs_result_lbl.setFont(mono(10, bold=True))
-        self._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
+        self._fs_result_lbl.setFont(theme.mono_font(10, bold=True))
+        self._fs_result_lbl.setStyleSheet(f'color: {theme.TEXT_MUTED};')
         self._fs_result_lbl.setWordWrap(True)
-        v.addWidget(self._fs_result_lbl)
-        return c
+        card.body().addWidget(self._fs_result_lbl)
+        return card
 
-    def _build_undercut_overcut_card(self) -> QFrame:
+    def _build_undercut_overcut_card(self) -> Card:
         from PyQt6.QtWidgets import QDoubleSpinBox
-        c = _card()
-        v = QVBoxLayout(c)
-        v.setContentsMargins(18, 12, 18, 12)
-        v.setSpacing(8)
-        v.addWidget(_chip_lbl('UNDERCUT / OVERCUT'))
+        card = Card(label='UNDERCUT / OVERCUT', dense=True)
 
         inputs_row = QHBoxLayout()
         inputs_row.setSpacing(20)
@@ -229,9 +240,6 @@ class StrategyTab(QWidget):
             spin.setValue(default)
             spin.setSingleStep(step)
             spin.setDecimals(decimals)
-            spin.setStyleSheet(
-                f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
-                f' border-radius: 4px; padding: 4px 8px;')
             spin.setFixedWidth(90)
             col.addWidget(spin)
             setattr(self, attr, spin)
@@ -242,30 +250,44 @@ class StrategyTab(QWidget):
         inputs_row.addLayout(
             _spin_col('PACE DELTA (s/lap)', '_uco_pace_delta_spin', 0.8, 0.0, 5.0, 0.1, 1))
         inputs_row.addStretch()
-        v.addLayout(inputs_row)
+        card.body().addLayout(inputs_row)
 
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f'color: {BORDER2}; background: {BORDER2};')
+        sep.setStyleSheet(
+            f'color: {theme.BORDER_STRONG}; background: {theme.BORDER_STRONG};')
         sep.setFixedHeight(1)
-        v.addWidget(sep)
+        card.body().addWidget(sep)
 
         self._uco_undercut_lbl = QLabel('UNDERCUT: —')
-        self._uco_undercut_lbl.setFont(mono(9, bold=True))
-        self._uco_undercut_lbl.setStyleSheet(f'color: {TXT2};')
+        self._uco_undercut_lbl.setFont(theme.mono_font(9, bold=True))
+        self._uco_undercut_lbl.setStyleSheet(f'color: {theme.TEXT_MUTED};')
         self._uco_overcut_lbl = QLabel('OVERCUT: —')
-        self._uco_overcut_lbl.setFont(mono(9, bold=True))
-        self._uco_overcut_lbl.setStyleSheet(f'color: {TXT2};')
-        v.addWidget(self._uco_undercut_lbl)
-        v.addWidget(self._uco_overcut_lbl)
-        return c
+        self._uco_overcut_lbl.setFont(theme.mono_font(9, bold=True))
+        self._uco_overcut_lbl.setStyleSheet(f'color: {theme.TEXT_MUTED};')
+        card.body().addWidget(self._uco_undercut_lbl)
+        card.body().addWidget(self._uco_overcut_lbl)
+        return card
 
     # --- Public API ---
 
+    def has_alert(self) -> bool:
+        return False
+
     def refresh(self, state) -> None:
-        """Re-render all six cards from a StrategyState. Cheap if invisible."""
+        """Re-render all cards from a StrategyState. Cheap if invisible."""
         if not self.isVisible():
             return
+
+        # Update headline strip from state
+        headline = state.headline()
+        if headline is not None:
+            # Headline.text carries the full callout string; severity drives colour.
+            self._headline_label.setText(f'► {headline.severity.upper()}')
+            self._headline_msg.setText(headline.text)
+        else:
+            self._headline_label.setText('► COLUMNS')
+            self._headline_msg.setText('Live → on the left  ·  Plan → on the right')
 
         # Card 1 — degradation
         if state.deg_slope_s_per_lap is None:
@@ -325,7 +347,7 @@ class StrategyTab(QWidget):
             if pitted_at is not None and (now - pitted_at) <= 30.0:
                 lbl.setStyleSheet('color: #f5a623;')
             else:
-                lbl.setStyleSheet(f'color: {TXT};')
+                lbl.setStyleSheet(f'color: {theme.TEXT_SECONDARY};')
 
         # Card 5 — weather/track-temp watch
         if state.track_temp_c is None:

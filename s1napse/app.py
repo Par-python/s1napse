@@ -26,11 +26,17 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from .constants import (
-    BG, BG1, BG2, BG3, BORDER, BORDER2, TXT, TXT2, WHITE,
     C_SPEED, C_THROTTLE, C_BRAKE, C_RPM, C_GEAR, C_STEER,
     C_ABS, C_TC, C_DELTA, C_PURPLE, C_PURPLE_BG, C_GREEN_BG, C_REF,
     N_TRACK_SEG, MONZA_LENGTH_M,
-    APP_STYLE, mono, sans,
+    mono, sans,
+)
+from . import theme
+from .theme import (
+    BG, SURFACE, SURFACE_RAISED, SURFACE_HOVER, BORDER_SUBTLE, BORDER_STRONG,
+    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, TEXT_FAINT,
+    ACCENT, GOOD, WARN, BAD, INFO,
+    ui_font, mono_font, label_font,
 )
 from .utils import (
     _safe_list, h_line, _channel_header, _vsep,
@@ -46,11 +52,13 @@ from .widgets import (
     TimeDeltaGraph, ComparisonGraph, ComparisonDeltaGraph,
     RacePaceChart, ReplayGraph, ReplayMultiGraph,
     SectorTimesPanel, SectorScrubWidget, LapHistoryPanel,
-    AidBadge, StrategyTab,
+    AidBadge, StrategyTab, LiveTabBar,
 )
+from .widgets.title_bar import TitleBar
 from .widgets.graphs import _style_ax
 from .widgets.coach_tab import CoachTab
 from .widgets.math_channel_panel import MathChannelPanel
+from .widgets.tabs import RaceTab, TyresTab, DashboardTab
 from .coaching.lap_coach import LapCoach
 from .coaching.math_engine import MathEngine
 from .coaching.strategy_engine import StrategyEngine
@@ -97,6 +105,18 @@ class TelemetrySampler(threading.Thread):
 
     def stop(self):
         self._running = False
+
+
+# Compatibility aliases for files inside s1napse/widgets/ that still import
+# old constant names. Removed once those modules are migrated to `theme`.
+BG1 = SURFACE
+BG2 = SURFACE_RAISED
+BG3 = SURFACE_HOVER
+BORDER = BORDER_SUBTLE
+BORDER2 = BORDER_STRONG
+TXT = TEXT_SECONDARY
+TXT2 = TEXT_MUTED
+WHITE = TEXT_PRIMARY
 
 
 class TelemetryApp(QMainWindow):
@@ -240,25 +260,42 @@ class TelemetryApp(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        main_layout.addWidget(self._build_connection_strip())
-        main_layout.addWidget(h_line())
+        self.title_bar = TitleBar()
+        main_layout.addWidget(self.title_bar)
+
+        controls = self._build_connection_strip_controls()
+        for w in controls:
+            self.title_bar.addTrailing(w)
 
         self.tabs = QTabWidget()
+        self.tabs.setTabBar(LiveTabBar(self.tabs))
         main_layout.addWidget(self.tabs)
 
-        # Instantiate StrategyTab BEFORE _build_race_tab so its labels exist
-        # for any references inside _build_race_tab / _update_race_tab.
+        # Instantiate StrategyTab before RaceTab so its labels are ready.
         self.strategy_tab = StrategyTab()
         self.strategy_tab._fs_laps_spin.valueChanged.connect(self._update_fuel_save)
         self.strategy_tab._uco_pit_loss_spin.valueChanged.connect(self._update_undercut)
         self.strategy_tab._uco_pace_delta_spin.valueChanged.connect(self._update_undercut)
 
-        self.tabs.addTab(self._build_dashboard_tab(), 'DASHBOARD')
+        # Legacy dashboard widgets are still referenced by _render_telemetry,
+        # _anim_tick, and _reset_display. Construct them but don't register the
+        # legacy tab — DashboardTab below replaces it visually. Task 27 cleans up.
+        # NOTE: We do NOT deleteLater() the returned widget because _build_dashboard_tab
+        # assigns self.<name> child widgets; deleting the parent would destroy those
+        # children and leave dangling C++ references. The orphan widget tree is kept
+        # alive (hidden) so all cross-cutting self.* references remain valid.
+        self._legacy_dashboard_widget = self._build_dashboard_tab()
+        self._legacy_dashboard_widget.setVisible(False)
+
+        self.dashboard_tab = DashboardTab(self)
+        self.tabs.addTab(self.dashboard_tab, 'DASHBOARD')
         self.tabs.addTab(self._build_graphs_tab(), 'TELEMETRY GRAPHS')
         self.tabs.addTab(self._build_analysis_tab(), 'LAP ANALYSIS')
-        self.tabs.addTab(self._build_race_tab(), 'RACE')
+        self.race_tab = RaceTab(self)
+        self.tabs.addTab(self.race_tab, 'RACE')
         self.tabs.addTab(self.strategy_tab, 'STRATEGY')
-        self.tabs.addTab(self._build_tyres_tab(), 'TYRES')
+        self.tyres_tab = TyresTab(self)
+        self.tabs.addTab(self.tyres_tab, 'TYRES')
         self.tabs.addTab(self._build_comparison_tab(), 'LAP COMPARISON')
         self.tabs.addTab(self._build_session_tab(), 'SESSION')
         self.tabs.addTab(self._build_replay_tab(), 'REPLAY')
@@ -1089,6 +1126,41 @@ class TelemetryApp(QMainWindow):
         self.current_reader = None
         self._stack.setCurrentIndex(0)
 
+    def _update_title_bar(self) -> None:
+        """Refresh the TitleBar with live source, track, temps, and lap info."""
+        src_name = ''
+        if self.current_reader is self.acc_reader: src_name = 'ACC'
+        elif self.current_reader is self.ac_reader: src_name = 'AC'
+        elif self.current_reader is self.ir_reader: src_name = 'iRacing'
+        elif self.current_reader is self.elm_reader: src_name = 'OBD-II'
+        track = self._last_track_name or ''
+        air = f'{self._last_air_temp:.0f}°C' if self._last_air_temp else ''
+        road = f'{self._last_road_temp:.0f}°C' if self._last_road_temp else ''
+        parts = [p for p in (src_name, track, f'{air} / {road}' if air or road else '') if p]
+        self.title_bar.setSource(' · '.join(parts), live=src_name != '')
+
+        last_ms = int(self.last_lap_time)
+        last_s = f'{last_ms//60000:01d}:{(last_ms//1000)%60:02d}.{last_ms%1000:03d}' if last_ms else '—'
+        self.title_bar.setSession(
+            lap=f'{self.current_lap_count} / —',
+            stint='',
+            last_lap=last_s,
+        )
+
+    def _update_tab_indicators(self) -> None:
+        """Paint a live-dot on tabs that have active data."""
+        bar = self.tabs.tabBar()
+        if not hasattr(bar, 'setLive'):
+            return
+        race_live = self.current_reader is not None
+        strategy_alert = bool(getattr(self.strategy_tab, 'has_alert', lambda: False)())
+        for i in range(self.tabs.count()):
+            title = self.tabs.tabText(i).upper()
+            if title == 'RACE':
+                bar.setLive(i, race_live)
+            elif title == 'STRATEGY':
+                bar.setLive(i, strategy_alert)
+
     def _update_real_telemetry(self):
         """Update the real racing dashboard from ELM327Reader data."""
         if not self.elm_reader or not self.elm_reader.is_connected():
@@ -1181,6 +1253,137 @@ class TelemetryApp(QMainWindow):
             self._real_speed_canvas.draw_idle()
             self._real_thr_canvas.draw_idle()
             self._real_rpm_canvas.draw_idle()
+
+    def _build_connection_strip_controls(self) -> list:
+        """Return the inner controls of the (now-deprecated) connection strip,
+        without the wrapping frame. Each widget is the same instance the strip
+        used to embed, with all signal wiring preserved."""
+        out: list = []
+
+        # Status indicator
+        self.connection_dot = QLabel('●')
+        self.connection_dot.setFont(sans(10))
+        self.connection_dot.setStyleSheet('color: #444;')
+
+        self.connection_label = QLabel('DISCONNECTED')
+        self.connection_label.setFont(sans(9))
+        self.connection_label.setStyleSheet(f'color: {TXT2}; letter-spacing: 0.5px;')
+
+        out.append(self.connection_dot)
+        out.append(self.connection_label)
+
+        # Game selector
+        game_lbl = QLabel('SOURCE')
+        game_lbl.setFont(sans(8))
+        game_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self.game_combo = QComboBox()
+        self.game_combo.addItems([
+            'Auto-Detect', 'ACC (Shared Memory)', 'AC (UDP)', 'iRacing (SDK)',
+            'ELM327 (OBD-II)',
+        ])
+        self.game_combo.setFixedWidth(170)
+        self.game_combo.currentTextChanged.connect(self._on_game_changed)
+        out.append(game_lbl)
+        out.append(self.game_combo)
+
+        # Track selector
+        track_lbl = QLabel('TRACK')
+        track_lbl.setFont(sans(8))
+        track_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self.track_combo = QComboBox()
+        self.track_combo.addItem('Auto-Detect', userData=None)
+        for key, td in TRACKS.items():
+            self.track_combo.addItem(td['name'], userData=key)
+        self.track_combo.setFixedWidth(155)
+        self.track_combo.currentIndexChanged.connect(self._on_track_changed)
+        out.append(track_lbl)
+        out.append(self.track_combo)
+
+        # UDP settings
+        host_lbl = QLabel('HOST')
+        host_lbl.setFont(sans(8))
+        host_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self.udp_host = QLineEdit('127.0.0.1')
+        self.udp_host.setFixedWidth(110)
+        port_lbl = QLabel('PORT')
+        port_lbl.setFont(sans(8))
+        port_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self.udp_port = QLineEdit('9996')
+        self.udp_port.setFixedWidth(55)
+        out.append(host_lbl)
+        out.append(self.udp_host)
+        out.append(port_lbl)
+        out.append(self.udp_port)
+
+        # Track recorder
+        self.rec_btn = QPushButton('⏺  REC')
+        self.rec_btn.setFixedSize(72, 22)
+        self.rec_btn.setCheckable(True)
+        self.rec_btn.setStyleSheet(
+            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
+            f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
+            f'QPushButton:checked {{ background: #5a0000; color: {C_BRAKE};'
+            f' border-color: {C_BRAKE}; }}'
+        )
+        self.rec_btn.toggled.connect(self._on_rec_toggled)
+        self.rec_label = QLabel('')
+        self.rec_label.setFont(sans(8))
+        self.rec_label.setStyleSheet(f'color: {TXT2};')
+        out.append(self.rec_btn)
+        out.append(self.rec_label)
+
+        # Import track map from JSON
+        self.import_track_btn = QPushButton('⬆  IMPORT MAP')
+        self.import_track_btn.setFixedSize(100, 22)
+        self.import_track_btn.setStyleSheet(
+            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
+            f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
+            f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
+        )
+        self.import_track_btn.clicked.connect(self._import_trackmap)
+        out.append(self.import_track_btn)
+
+        # Manual lap trigger (visible only in real racing mode)
+        self._manual_lap_btn = QPushButton('LAP')
+        self._manual_lap_btn.setFixedSize(55, 22)
+        self._manual_lap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._manual_lap_btn.setStyleSheet(
+            f'QPushButton {{ background: #0a2218; color: {C_THROTTLE};'
+            f' border: 1px solid {C_THROTTLE}; border-radius: 3px;'
+            f' font-size: 10px; font-weight: bold; letter-spacing: 1px; }}'
+            f'QPushButton:hover {{ background: #0f3322; }}'
+            f'QPushButton:pressed {{ background: #061a10; }}'
+        )
+        self._manual_lap_btn.setToolTip('Complete current lap and start next (shortcut: L)')
+        self._manual_lap_btn.clicked.connect(self._on_manual_lap)
+        self._manual_lap_btn.setVisible(False)
+        out.append(self._manual_lap_btn)
+
+        # Keyboard shortcut for lap trigger (not a widget, wired here)
+        self._lap_shortcut = QShortcut(QKeySequence('L'), self)
+        self._lap_shortcut.activated.connect(self._on_manual_lap)
+        self._lap_shortcut.setEnabled(False)
+
+        # Car / Track / Lap info labels
+        self.car_label = QLabel('—')
+        self.car_label.setFont(mono(10))
+        self.car_label.setStyleSheet(f'color: {TXT};')
+        self.car_label.setMaximumWidth(200)
+        self.car_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.track_label = QLabel('—')
+        self.track_label.setFont(mono(10))
+        self.track_label.setStyleSheet(f'color: {TXT};')
+        self.track_label.setMaximumWidth(240)
+        self.track_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.header_lap_label = QLabel('LAP —')
+        self.header_lap_label.setFont(mono(10, bold=True))
+        self.header_lap_label.setStyleSheet(f'color: {C_SPEED};')
+        self.header_lap_label.setMaximumWidth(80)
+        out.append(self.car_label)
+        out.append(self.track_label)
+        out.append(self.header_lap_label)
+
+        return out
 
     def _build_connection_strip(self) -> QWidget:
         strip = QWidget()
@@ -1951,7 +2154,6 @@ class TelemetryApp(QMainWindow):
             self._populate_comparison_combos()
             self._populate_replay_combo()
             self._refresh_session_tab()
-            self._race_pace_chart.refresh(self.session_laps)
 
             # ── Coaching analysis ────────────────────────────────────────
             try:
@@ -1975,162 +2177,6 @@ class TelemetryApp(QMainWindow):
         # Lap info is shown in the connection strip header label.
         # Graph channel headers stay clean (no per-lap suffix in the label text).
         _ = suffix  # acknowledged, intentionally unused here
-
-    # ------------------------------------------------------------------
-    # TYRES TAB
-    # ------------------------------------------------------------------
-
-    def _build_tyres_tab(self) -> QWidget:
-        tab = QWidget()
-        outer = QVBoxLayout(tab)
-        outer.setContentsMargins(10, 10, 10, 10)
-        outer.setSpacing(8)
-
-        # ── Info strip ────────────────────────────────────────────────
-        info_card = QFrame()
-        info_card.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
-        info_row = QHBoxLayout(info_card)
-        info_row.setContentsMargins(16, 8, 16, 8)
-        info_row.setSpacing(0)
-
-        def _stat_chip(title, attr, max_w=130):
-            col = QHBoxLayout()
-            col.setSpacing(8)
-            lbl = QLabel(title)
-            lbl.setFont(sans(7))
-            lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-            val = QLabel('—')
-            val.setFont(mono(10, bold=True))
-            val.setStyleSheet(f'color: {WHITE};')
-            val.setMaximumWidth(max_w)
-            val.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-            setattr(self, attr, val)
-            col.addWidget(lbl)
-            col.addWidget(val)
-            return col
-
-        info_row.addLayout(_stat_chip('COMPOUND', '_tyre_compound_lbl'))
-        info_row.addSpacing(28)
-        info_row.addLayout(_stat_chip('AIR', '_air_temp_lbl'))
-        info_row.addSpacing(28)
-        info_row.addLayout(_stat_chip('TRACK', '_road_temp_lbl'))
-        info_row.addStretch()
-
-        # Right side: ACC-only note when not on ACC
-        note = QLabel('Full tyre data available on ACC only')
-        note.setFont(sans(7))
-        note.setStyleSheet(f'color: {TXT2};')
-        info_row.addWidget(note)
-
-        outer.addWidget(info_card)
-
-        # ── 2×2 tyre grid ─────────────────────────────────────────────
-        grid_widget = QWidget()
-        grid = QGridLayout(grid_widget)
-        grid.setSpacing(8)
-        grid.setContentsMargins(0, 0, 0, 0)
-
-        self._tyre_cards: list[TyreCard] = []
-        for pos, row, col in [('FL', 0, 0), ('FR', 0, 1),
-                               ('RL', 1, 0), ('RR', 1, 1)]:
-            card = TyreCard(pos)
-            grid.addWidget(card, row, col)
-            self._tyre_cards.append(card)
-
-        outer.addWidget(grid_widget, stretch=1)
-
-        # ── Insights panel ────────────────────────────────────────────
-        insights_card = QFrame()
-        insights_card.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
-        ins_layout = QHBoxLayout(insights_card)
-        ins_layout.setContentsMargins(16, 10, 16, 10)
-
-        ins_icon = QLabel('◈')
-        ins_icon.setFont(sans(10))
-        ins_icon.setStyleSheet(f'color: {TXT2};')
-        ins_layout.addWidget(ins_icon)
-        ins_layout.addSpacing(8)
-
-        self._insights_lbl = QLabel('Connect to a game to see tyre insights.')
-        self._insights_lbl.setFont(sans(9))
-        self._insights_lbl.setStyleSheet(f'color: {TXT2};')
-        self._insights_lbl.setWordWrap(True)
-        ins_layout.addWidget(self._insights_lbl, stretch=1)
-
-        outer.addWidget(insights_card)
-
-        return tab
-
-    def _update_tyre_insights(self, temps: list, pressures: list,
-                              road_temp: float):
-        """Analyse the current tyre state and write a one-line insights string."""
-        if not any(t > 0.5 for t in temps):
-            self._insights_lbl.setText('Waiting for data…')
-            self._insights_lbl.setStyleSheet(f'color: {TXT2};')
-            return
-
-        fl, fr, rl, rr = temps
-        parts: list[str] = []
-        warn = False
-
-        # Left-right imbalance
-        front_diff = fl - fr
-        rear_diff  = rl - rr
-        if abs(front_diff) > 6:
-            side = 'FL' if front_diff > 0 else 'FR'
-            parts.append(f'Front imbalance {abs(front_diff):.0f}°C ({side} hotter)')
-            warn = True
-        if abs(rear_diff) > 6:
-            side = 'RL' if rear_diff > 0 else 'RR'
-            parts.append(f'Rear imbalance {abs(rear_diff):.0f}°C ({side} hotter)')
-            warn = True
-
-        # Front-rear bias
-        front_avg = (fl + fr) / 2
-        rear_avg  = (rl + rr) / 2
-        fr_bias   = front_avg - rear_avg
-        if abs(fr_bias) > 10:
-            parts.append(
-                f'{"Front" if fr_bias > 0 else "Rear"} tyres '
-                f'{abs(fr_bias):.0f}°C hotter than '
-                f'{"rear" if fr_bias > 0 else "front"}')
-
-        # Per-tyre status summary
-        statuses = [TyreCard.status_for(t)[0] for t in temps]
-        labels   = ['FL', 'FR', 'RL', 'RR']
-        cold_tyres = [labels[i] for i, s in enumerate(statuses)
-                      if s in ('COLD', 'FROZEN', 'BUILDING')]
-        hot_tyres  = [labels[i] for i, s in enumerate(statuses)
-                      if s in ('HOT', 'OVERHEAT')]
-
-        if cold_tyres:
-            parts.append(f'{", ".join(cold_tyres)} still building heat')
-        if hot_tyres:
-            parts.append(f'{", ".join(hot_tyres)} above optimal — risk of graining')
-            warn = True
-
-        # Pressure imbalance
-        if all(p > 5 for p in pressures):
-            lo, hi = min(pressures), max(pressures)
-            if hi - lo > 1.5:
-                parts.append(f'Pressure spread {lo:.1f}–{hi:.1f} PSI')
-
-        # Road-temp context
-        if road_temp > 45:
-            parts.append(f'High track temp ({road_temp:.0f}°C) — tyres heat faster')
-        elif road_temp > 0 and road_temp < 20:
-            parts.append(f'Cold track ({road_temp:.0f}°C) — allow longer warm-up')
-
-        if not parts:
-            text = 'All tyres within optimal temperature window.'
-        else:
-            text = '  ·  '.join(parts)
-
-        color = C_BRAKE if warn else C_THROTTLE
-        self._insights_lbl.setText(text)
-        self._insights_lbl.setStyleSheet(f'color: {color};')
 
     # ------------------------------------------------------------------
     # LAP COMPARISON TAB
@@ -2660,7 +2706,6 @@ class TelemetryApp(QMainWindow):
         self._populate_comparison_combos()
         self._populate_replay_combo()
         self._refresh_session_tab()
-        self._race_pace_chart.refresh(self.session_laps)
 
         # Auto-select the imported lap in combo B
         self._cmp_combo_b.setCurrentIndex(len(self.session_laps) - 1)
@@ -3236,7 +3281,6 @@ class TelemetryApp(QMainWindow):
         self._populate_replay_combo()
         self._populate_comparison_combos()
         self._refresh_session_tab()
-        self._race_pace_chart.refresh(self.session_laps)
 
         self._replay_combo.setCurrentIndex(len(self.session_laps) - 1)
         self._load_replay_lap(len(self.session_laps) - 1)
@@ -3572,202 +3616,6 @@ class TelemetryApp(QMainWindow):
         QMessageBox.information(self, 'Export CSV',
                                 f'Saved {len(self.session_laps)} laps to:\n{path}')
 
-    # ------------------------------------------------------------------
-    # RACE TAB
-    # ------------------------------------------------------------------
-
-    def _build_race_tab(self) -> QWidget:
-        tab = QWidget()
-        tab_layout = QVBoxLayout(tab)
-        tab_layout.setContentsMargins(0, 0, 0, 0)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }')
-
-        inner = QWidget()
-        inner.setStyleSheet(f'background: {BG};')
-        outer = QVBoxLayout(inner)
-        outer.setContentsMargins(14, 14, 14, 14)
-        outer.setSpacing(10)
-
-        def _card():
-            f = QFrame()
-            f.setStyleSheet(
-                f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
-            return f
-
-        def _chip_lbl(text, font_size=8, bold=True, color=TXT2, letter_spacing='1px'):
-            l = QLabel(text)
-            l.setFont(sans(font_size, bold=bold))
-            l.setStyleSheet(f'color: {color}; letter-spacing: {letter_spacing};')
-            return l
-
-        # Headline strategy banner — driven by StrategyState.headline()
-        self._race_strategy_banner = QLabel('STRATEGY: STABLE')
-        self._race_strategy_banner.setFont(sans(11, bold=True))
-        self._race_strategy_banner.setStyleSheet(
-            f'background: {BG2}; color: {TXT2}; '
-            f'border: 1px solid {BORDER}; border-radius: 6px; '
-            f'padding: 10px 18px; letter-spacing: 1px;')
-        self._race_strategy_banner.setFixedHeight(40)
-        self._race_strategy_banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # Click to jump to Strategy tab
-        self._race_strategy_banner.mousePressEvent = (
-            lambda e: self.tabs.setCurrentWidget(self.strategy_tab))
-        outer.addWidget(self._race_strategy_banner)
-
-        # ── Session banner ────────────────────────────────────────────
-        banner_card = _card()
-        banner_row = QHBoxLayout(banner_card)
-        banner_row.setContentsMargins(18, 10, 18, 10)
-        self._race_session_banner = QLabel('CONNECT TO A GAME')
-        self._race_session_banner.setFont(sans(11, bold=True))
-        self._race_session_banner.setStyleSheet(
-            f'color: {TXT2}; letter-spacing: 2px;')
-        banner_row.addWidget(self._race_session_banner)
-        banner_row.addStretch()
-        outer.addWidget(banner_card)
-
-        # ── Position / Gap row ────────────────────────────────────────
-        pos_row = QHBoxLayout()
-        pos_row.setSpacing(10)
-
-        def _big_stat_card(title, attr, big_font=48, color=WHITE):
-            c = _card()
-            vbox = QVBoxLayout(c)
-            vbox.setContentsMargins(20, 14, 20, 14)
-            vbox.setSpacing(2)
-            t = _chip_lbl(title)
-            v = QLabel('—')
-            v.setFont(mono(big_font, bold=True))
-            v.setStyleSheet(f'color: {color};')
-            v.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            vbox.addWidget(t)
-            vbox.addWidget(v)
-            setattr(self, attr, v)
-            return c
-
-        pos_row.addWidget(_big_stat_card('POSITION', '_race_position_lbl', 56, WHITE), stretch=1)
-        pos_row.addWidget(_big_stat_card('GAP AHEAD', '_race_gap_ahead_lbl', 36, C_THROTTLE), stretch=2)
-        pos_row.addWidget(_big_stat_card('GAP BEHIND', '_race_gap_behind_lbl', 36, C_BRAKE), stretch=2)
-        outer.addLayout(pos_row)
-
-        # ── Tyre card ─────────────────────────────────────────────────
-        tyre_card = _card()
-        tyre_vbox = QVBoxLayout(tyre_card)
-        tyre_vbox.setContentsMargins(18, 12, 18, 12)
-        tyre_vbox.setSpacing(8)
-
-        tyre_hdr = QHBoxLayout()
-        tyre_hdr.addWidget(_chip_lbl('TYRES'))
-        tyre_hdr.addSpacing(12)
-        self._race_compound_lbl = QLabel('—')
-        self._race_compound_lbl.setFont(mono(10, bold=True))
-        self._race_compound_lbl.setStyleSheet(f'color: {TXT};')
-        tyre_hdr.addWidget(self._race_compound_lbl)
-        tyre_hdr.addStretch()
-        self._race_stint_lbl = QLabel('0 laps')
-        self._race_stint_lbl.setFont(mono(10, bold=True))
-        self._race_stint_lbl.setStyleSheet(f'color: {C_RPM};')
-        tyre_hdr.addWidget(self._race_stint_lbl)
-        tyre_vbox.addLayout(tyre_hdr)
-
-        # Dot bar (20 dots = max stint)
-        dot_row = QHBoxLayout()
-        dot_row.setSpacing(4)
-        self._race_stint_dots: list = []
-        for _ in range(20):
-            d = QLabel('●')
-            d.setFont(sans(8))
-            d.setStyleSheet(f'color: {BORDER2};')
-            dot_row.addWidget(d)
-        dot_row.addStretch()
-        self._race_stint_dots = [dot_row.itemAt(i).widget()
-                                  for i in range(dot_row.count() - 1)]
-        tyre_vbox.addLayout(dot_row)
-
-        # Temp chips (FL / FR / RL / RR)
-        temp_row = QHBoxLayout()
-        temp_row.setSpacing(12)
-        self._race_tyre_temps: list = []
-        for corner in ('FL', 'FR', 'RL', 'RR'):
-            col = QVBoxLayout()
-            col.setSpacing(2)
-            lbl_corner = _chip_lbl(corner, font_size=7)
-            lbl_temp = QLabel('—°')
-            lbl_temp.setFont(mono(11, bold=True))
-            lbl_temp.setStyleSheet(f'color: {TXT2};')
-            col.addWidget(lbl_corner)
-            col.addWidget(lbl_temp)
-            temp_row.addLayout(col)
-            self._race_tyre_temps.append(lbl_temp)
-        temp_row.addStretch()
-        tyre_vbox.addLayout(temp_row)
-        outer.addWidget(tyre_card)
-
-        # ── Timing card ───────────────────────────────────────────────
-        timing_card = _card()
-        timing_grid = QHBoxLayout(timing_card)
-        timing_grid.setContentsMargins(18, 12, 18, 12)
-        timing_grid.setSpacing(0)
-
-        def _timing_col(title, attr, color=TXT):
-            col = QVBoxLayout()
-            col.setSpacing(2)
-            col.addWidget(_chip_lbl(title))
-            v = QLabel('—')
-            v.setFont(mono(13, bold=True))
-            v.setStyleSheet(f'color: {color};')
-            col.addWidget(v)
-            setattr(self, attr, v)
-            return col
-
-        timing_grid.addLayout(_timing_col('DELTA', '_race_delta_lbl', TXT2))
-        timing_grid.addSpacing(32)
-        timing_grid.addLayout(_timing_col('EST. LAP', '_race_est_lap_lbl', TXT))
-        timing_grid.addStretch()
-
-        # Stint time left (endurance — hidden when 0)
-        self._race_stint_time_card = QFrame()
-        self._race_stint_time_card.setStyleSheet('background: transparent; border: none;')
-        stint_col = QVBoxLayout(self._race_stint_time_card)
-        stint_col.setContentsMargins(0, 0, 0, 0)
-        stint_col.setSpacing(2)
-        stint_col.addWidget(_chip_lbl('STINT TIME LEFT'))
-        self._race_stint_time_lbl = QLabel('—')
-        self._race_stint_time_lbl.setFont(mono(13, bold=True))
-        self._race_stint_time_lbl.setStyleSheet(f'color: {C_RPM};')
-        stint_col.addWidget(self._race_stint_time_lbl)
-        self._race_stint_time_card.setVisible(False)
-        timing_grid.addWidget(self._race_stint_time_card)
-
-        outer.addWidget(timing_card)
-
-        # ── Lap trend card ────────────────────────────────────────────────
-        trend_card = _card()
-        trend_vbox = QVBoxLayout(trend_card)
-        trend_vbox.setContentsMargins(14, 10, 14, 10)
-        trend_vbox.setSpacing(6)
-
-        trend_hdr = QHBoxLayout()
-        trend_hdr.addWidget(_chip_lbl('LAP TIME TREND'))
-        trend_hdr.addStretch()
-        self._race_consistency_lbl = _chip_lbl('—', color=TXT2, bold=False)
-        trend_hdr.addWidget(self._race_consistency_lbl)
-        trend_vbox.addLayout(trend_hdr)
-
-        self._race_pace_chart = RacePaceChart()
-        trend_vbox.addWidget(self._race_pace_chart)
-        outer.addWidget(trend_card)
-
-        outer.addStretch()
-
-        scroll.setWidget(inner)
-        tab_layout.addWidget(scroll)
-        return tab
-
     def _update_fuel_save(self):
         history = self._fuel_per_lap_history
         if not history:
@@ -3825,146 +3673,6 @@ class TelemetryApp(QMainWindow):
             oc_col = TXT2
         self.strategy_tab._uco_overcut_lbl.setText(oc_text)
         self.strategy_tab._uco_overcut_lbl.setStyleSheet(f'color: {oc_col};')
-
-    def _update_race_tab(self, data: dict):
-        session = data.get('session_type', '')
-        lap = data.get('lap_count', 0)
-
-        # Session banner
-        session_str = session.replace('ACC_', '').replace('_', ' ')
-        if session_str:
-            self._race_session_banner.setText(f'{session_str}  ·  LAP {lap + 1}')
-        race_color = (C_BRAKE if 'RACE' in session
-                      else C_RPM if ('QUAL' in session or 'HOTLAP' in session)
-                      else TXT2)
-        self._race_session_banner.setStyleSheet(
-            f'color: {race_color}; letter-spacing: 2px;')
-
-        # Position
-        pos = data.get('position', 0)
-        self._race_position_lbl.setText(f'P{pos}' if pos > 0 else '—')
-        pos_color = C_PURPLE if pos == 1 else (C_RPM if pos <= 3 else WHITE)
-        self._race_position_lbl.setStyleSheet(f'color: {pos_color};')
-
-        # Gaps (ms → seconds)
-        gap_a = data.get('gap_ahead', 0)
-        gap_b = data.get('gap_behind', 0)
-        self._race_gap_ahead_lbl.setText(
-            f'-{abs(gap_a) / 1000:.3f}s' if gap_a != 0 else '—')
-        self._race_gap_behind_lbl.setText(
-            f'+{abs(gap_b) / 1000:.3f}s' if gap_b != 0 else '—')
-
-        # Tyre compound + stint dots
-        compound = data.get('tyre_compound', '') or '—'
-        self._race_compound_lbl.setText(compound)
-        n = self._tyre_stint_laps
-        self._race_stint_lbl.setText(f'{n} lap{"s" if n != 1 else ""}')
-        for i, dot in enumerate(self._race_stint_dots):
-            col = C_RPM if i < n else BORDER2
-            if n > 15 and i < n:
-                col = C_BRAKE  # warn when stint is long
-            dot.setStyleSheet(f'color: {col};')
-
-        # Tyre temps
-        temps = data.get('tyre_temp', [0, 0, 0, 0])
-        for i, lbl in enumerate(self._race_tyre_temps):
-            t = temps[i] if i < len(temps) else 0
-            col = _lerp_color(_TYRE_TEMP_KP, t).name()
-            lbl.setText(f'{t:.0f}°')
-            lbl.setStyleSheet(f'color: {col};')
-
-        # Delta
-        delta_ms = data.get('delta_lap_time', 0)
-        delta_s = delta_ms / 1000.0
-        sign = '+' if delta_s >= 0 else ''
-        self._race_delta_lbl.setText(f'{sign}{delta_s:.3f}s')
-        self._race_delta_lbl.setStyleSheet(
-            f'color: {C_BRAKE if delta_s > 0 else C_THROTTLE};')
-
-        # Estimated lap
-        est_ms = data.get('estimated_lap', 0)
-        if est_ms > 0:
-            m = int(est_ms // 60000)
-            s = (est_ms % 60000) / 1000.0
-            self._race_est_lap_lbl.setText(f'{m}:{s:06.3f}')
-
-        # Stint time left (endurance)
-        stint_ms = data.get('stint_time_left', 0)
-        if stint_ms > 0:
-            h = stint_ms // 3600000
-            rem = stint_ms % 3600000
-            m = rem // 60000
-            s = (rem % 60000) // 1000
-            self._race_stint_time_lbl.setText(
-                f'{h}:{m:02d}:{s:02d}' if h > 0 else f'{m}:{s:02d}')
-            self._race_stint_time_card.setVisible(True)
-        else:
-            self._race_stint_time_card.setVisible(False)
-
-        # ── Pit strategy ─────────────────────────────────────────────
-        history = self._fuel_per_lap_history
-        if not history:
-            self.strategy_tab._pit_no_data_lbl.setVisible(True)
-            self.strategy_tab._pit_rec_lbl.setText('—')
-            self.strategy_tab._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        else:
-            self.strategy_tab._pit_no_data_lbl.setVisible(False)
-            avg_fuel = sum(history[-5:]) / len(history[-5:])
-            fuel_laps = data.get('fuel', 0) / avg_fuel if avg_fuel > 0 else 0
-
-            stint = self._tyre_stint_laps
-            avg_temp = sum(data.get('tyre_temp', [80, 80, 80, 80])) / 4
-
-            # Tyre condition heuristic (GT3 dry-tyre baseline)
-            if stint < 6:
-                tyre_cond, tyre_color = 'FRESH', C_THROTTLE
-            elif stint < 14:
-                tyre_cond, tyre_color = 'GOOD', C_THROTTLE
-            elif stint < 20:
-                tyre_cond, tyre_color = 'WORN', C_RPM
-            else:
-                tyre_cond, tyre_color = 'CRITICAL', C_BRAKE
-            if avg_temp > 110:
-                tyre_cond, tyre_color = 'CRITICAL', C_BRAKE
-            elif avg_temp > 100 and tyre_cond == 'GOOD':
-                tyre_cond, tyre_color = 'WORN', C_RPM
-
-            fuel_laps_safe = max(0, fuel_laps - 1.0)
-            tyre_laps_left = max(0, 20 - stint)
-            pit_in = min(int(fuel_laps_safe), tyre_laps_left)
-
-            fuel_color = (C_THROTTLE if fuel_laps > 5
-                          else C_RPM if fuel_laps > 2 else C_BRAKE)
-            self.strategy_tab._pit_fuel_laps_lbl.setText(f'{fuel_laps:.1f}')
-            self.strategy_tab._pit_fuel_laps_lbl.setStyleSheet(f'color: {fuel_color};')
-            self.strategy_tab._pit_tyre_stint_lbl.setText(f'{stint} laps')
-            self.strategy_tab._pit_tyre_cond_lbl.setText(tyre_cond)
-            self.strategy_tab._pit_tyre_cond_lbl.setStyleSheet(f'color: {tyre_color};')
-
-            if tyre_cond == 'CRITICAL' or fuel_laps < 1.5:
-                rec, rec_color = 'PIT THIS LAP', C_BRAKE
-            elif pit_in <= 2:
-                rec = f'PIT IN {pit_in} LAP{"S" if pit_in != 1 else ""}'
-                rec_color = C_RPM
-            elif pit_in <= 5:
-                rec, rec_color = f'PREPARE TO PIT  ·  ~{pit_in} laps', C_RPM
-            else:
-                rec, rec_color = f'STAY OUT  ·  ~{pit_in} laps to window', C_THROTTLE
-            self.strategy_tab._pit_rec_lbl.setText(rec)
-            self.strategy_tab._pit_rec_lbl.setStyleSheet(
-                f'color: {rec_color}; letter-spacing: 1px;')
-
-        # ── Consistency label ─────────────────────────────────────────
-        times = [l['total_time_s'] for l in self.session_laps if l.get('total_time_s', 0) > 20]
-        if len(times) >= 2:
-            import statistics
-            sd = statistics.stdev(times[-8:])
-            self._race_consistency_lbl.setText(f'σ {sd:.3f}s')
-            col = C_THROTTLE if sd < 0.5 else (C_RPM if sd < 1.5 else C_BRAKE)
-            self._race_consistency_lbl.setStyleSheet(f'color: {col};')
-
-        self._update_fuel_save()
-        self._update_undercut()
 
     # ------------------------------------------------------------------
     # GAME SELECTION / AUTO-DETECT
@@ -4393,6 +4101,8 @@ class TelemetryApp(QMainWindow):
 
     def _render_telemetry(self):
         """~5 Hz UI render — drain buffered samples, then update widgets."""
+        self._update_title_bar()
+        self._update_tab_indicators()
         # ── Phase 1: Drain and process all buffered samples ──
         samples = self._sampler.drain()
         for s in samples:
@@ -4401,29 +4111,6 @@ class TelemetryApp(QMainWindow):
         # Strategy tab — re-render from latest engine snapshot
         try:
             self.strategy_tab.refresh(self._strategy_engine.state)
-        except Exception:
-            pass
-
-        # Race-tab headline banner
-        try:
-            h = self._strategy_engine.state.headline()
-            self._race_strategy_banner.setText(h.text)
-            color_map = {
-                'red':     '#d04444',
-                'amber':   '#f5a623',
-                'neutral': TXT2,
-            }
-            border_map = {
-                'red':     '#a03030',
-                'amber':   '#a07020',
-                'neutral': BORDER,
-            }
-            col = color_map.get(h.severity, TXT2)
-            border = border_map.get(h.severity, BORDER)
-            self._race_strategy_banner.setStyleSheet(
-                f'background: {BG2}; color: {col}; '
-                f'border: 1px solid {border}; border-radius: 6px; '
-                f'padding: 10px 18px; letter-spacing: 1px;')
         except Exception:
             pass
 
@@ -4496,23 +4183,6 @@ class TelemetryApp(QMainWindow):
                 data['track_name'], Qt.TextElideMode.ElideRight, 236))
         self._auto_detect_track(data['track_name'])
 
-        # ── Tyres tab ─────────────────────────────────────────────────────
-        t_temps  = data.get('tyre_temp',     [0.0, 0.0, 0.0, 0.0])
-        t_pres   = data.get('tyre_pressure', [0.0, 0.0, 0.0, 0.0])
-        t_brake  = data.get('brake_temp',    [0.0, 0.0, 0.0, 0.0])
-        t_wear   = data.get('tyre_wear',     [0.0, 0.0, 0.0, 0.0])
-        air_t    = data.get('air_temp',  0.0)
-        road_t   = data.get('road_temp', 0.0)
-        compound = data.get('tyre_compound', '')
-
-        for i, card in enumerate(self._tyre_cards):
-            card.update_data(t_temps[i], t_pres[i], t_brake[i], t_wear[i])
-
-        self._tyre_compound_lbl.setText(compound or '—')
-        self._air_temp_lbl.setText(f'{air_t:.1f}°C' if air_t else '—')
-        self._road_temp_lbl.setText(f'{road_t:.1f}°C' if road_t else '—')
-        self._update_tyre_insights(t_temps, t_pres, road_t)
-
         fuel = data.get('fuel', 0.0)
         self._fuel_lbl.setText(f"{fuel:.1f}")
 
@@ -4554,7 +4224,11 @@ class TelemetryApp(QMainWindow):
             s = lt % 60
             self._laptime_lbl.setText(f'{m}:{s:06.3f}')
 
-        self._update_race_tab(data)
+        self.dashboard_tab.update_tick(self._last_data)
+        self.race_tab.update_tick(self._last_data)
+        self.tyres_tab.update_tick(self._last_data)
+        self._update_fuel_save()
+        self._update_undercut()
 
         # Recorder label
         if self.recorder.recording:
@@ -4834,41 +4508,21 @@ class TelemetryApp(QMainWindow):
         self._bias_front_fill.setFixedWidth(0)
         self._position_lbl.setText('—')
         self._laptime_lbl.setText('—')
-        for card in self._tyre_cards:
-            card.update_data(0.0, 0.0, 0.0)
-        self._tyre_compound_lbl.setText('—')
-        self._air_temp_lbl.setText('—')
-        self._road_temp_lbl.setText('—')
-        self._insights_lbl.setText('Connect to a game to see tyre insights.')
-        self._insights_lbl.setStyleSheet(f'color: {TXT2};')
-        self._race_session_banner.setText('CONNECT TO A GAME')
-        self._race_session_banner.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
-        self._race_position_lbl.setText('—')
-        self._race_gap_ahead_lbl.setText('—')
-        self._race_gap_behind_lbl.setText('—')
-        self._race_compound_lbl.setText('—')
-        self._race_stint_lbl.setText('0 laps')
-        self._race_delta_lbl.setText('—')
-        self._race_est_lap_lbl.setText('—')
-        for dot in self._race_stint_dots:
-            dot.setStyleSheet(f'color: {BORDER2};')
-        for lbl in self._race_tyre_temps:
-            lbl.setText('—°')
+        self.dashboard_tab.update_tick(None)
+        self.race_tab.update_tick(None)
+        self.tyres_tab.update_tick(None)
         self.strategy_tab._pit_rec_lbl.setText('—')
         self.strategy_tab._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
         self.strategy_tab._pit_fuel_laps_lbl.setText('—')
         self.strategy_tab._pit_tyre_stint_lbl.setText('—')
         self.strategy_tab._pit_tyre_cond_lbl.setText('—')
         self.strategy_tab._pit_no_data_lbl.setVisible(True)
-        self._race_consistency_lbl.setText('—')
-        self._race_consistency_lbl.setStyleSheet(f'color: {TXT2};')
         self.strategy_tab._fs_result_lbl.setText('—')
         self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
         self.strategy_tab._uco_undercut_lbl.setText('UNDERCUT: —')
         self.strategy_tab._uco_undercut_lbl.setStyleSheet(f'color: {TXT2};')
         self.strategy_tab._uco_overcut_lbl.setText('OVERCUT: —')
         self.strategy_tab._uco_overcut_lbl.setStyleSheet(f'color: {TXT2};')
-        self._race_pace_chart.refresh([])
         self._reset_analysis_graphs()
         self.track_map.reset()
 

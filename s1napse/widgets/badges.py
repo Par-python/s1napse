@@ -4,7 +4,8 @@ from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import Qt, QRectF
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush
 
-from ..constants import BG3, BORDER, TXT2, C_ABS, C_TC, mono, sans
+from ..constants import C_ABS, C_TC, mono, sans
+from ..theme import SURFACE_HOVER as BG3, BORDER_SUBTLE as BORDER, TEXT_MUTED as TXT2
 
 _LABEL_COLORS = {
     'ABS': C_ABS,

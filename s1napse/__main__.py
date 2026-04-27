@@ -2,13 +2,13 @@
 
 import sys
 from PyQt6.QtWidgets import QApplication
-from .constants import APP_STYLE
+from . import theme
 from .app import TelemetryApp
 
 
 def main():
     app = QApplication(sys.argv)
-    app.setStyleSheet(APP_STYLE)
+    app.setStyleSheet(theme.build_app_qss())
     window = TelemetryApp()
     window.show()
     sys.exit(app.exec())

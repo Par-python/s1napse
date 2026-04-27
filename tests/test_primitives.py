@@ -1,0 +1,128 @@
+"""Visual primitives — props, sizing, paint sanity."""
+
+import pytest
+from PyQt6.QtWidgets import QApplication
+
+from s1napse.widgets.primitives import Pill
+from s1napse import theme
+
+
+@pytest.fixture(scope='module')
+def app():
+    return QApplication.instance() or QApplication([])
+
+
+def test_pill_neutral_default(app):
+    p = Pill('+1 lap')
+    assert p.text() == '+1 lap'
+    assert p.tone() == 'neutral'
+
+
+def test_pill_tone_violet(app):
+    p = Pill('PB', tone='violet')
+    assert p.tone() == 'violet'
+
+
+def test_pill_invalid_tone_raises(app):
+    with pytest.raises(ValueError):
+        Pill('x', tone='magenta')
+
+
+from s1napse.widgets.primitives import Card
+
+
+def test_card_default_normal_dense_false(app):
+    c = Card()
+    assert c.variant() == 'normal'
+    assert c.dense() is False
+
+
+def test_card_dense_padding_smaller(app):
+    c_roomy = Card(dense=False)
+    c_dense = Card(dense=True)
+    # roomy padding > dense padding on the content layout
+    p_r = c_roomy.contentLayout().contentsMargins()
+    p_d = c_dense.contentLayout().contentsMargins()
+    assert p_r.left() > p_d.left()
+
+
+def test_card_warn_variant_changes_border_color(app):
+    c = Card(variant='warn')
+    assert c.variant() == 'warn'
+    # Sanity: a stylesheet was generated and contains the warn token
+    assert theme.WARN[1:] in c.styleSheet().lower() or theme.WARN.lower() in c.styleSheet().lower()
+
+
+def test_card_pill_attaches_to_header(app):
+    c = Card(label='Last lap', pill=Pill('PB-0.41', tone='violet'))
+    # A header with a label and a pill should be visible
+    assert c.headerLabel().text() == 'Last lap'
+    assert c.headerPill() is not None
+
+
+from s1napse.widgets.primitives import Stat
+
+
+def test_stat_renders_value_and_unit(app):
+    s = Stat(value='12.4', unit='L')
+    assert s.valueLabel().text() == '12.4'
+    assert s.unitLabel() is not None
+    assert s.unitLabel().text() == 'L'
+
+
+def test_stat_delta_state_good(app):
+    s = Stat(value='1:29.871', delta='-0.41', delta_state='good')
+    style = s.deltaLabel().styleSheet()
+    assert 'color:' in style.lower()
+    assert theme.GOOD.lower() in style.lower()
+
+
+def test_stat_no_delta(app):
+    s = Stat(value='P4')
+    assert s.deltaLabel() is None
+
+
+def test_stat_invalid_delta_state_raises(app):
+    with pytest.raises(ValueError):
+        Stat(value='1', delta='+0', delta_state='maybe')
+
+
+from s1napse.widgets.primitives import Sparkline
+
+
+def test_sparkline_accepts_points(app):
+    s = Sparkline(points=[1.0, 1.2, 0.9, 1.1])
+    assert s.points() == [1.0, 1.2, 0.9, 1.1]
+
+
+def test_sparkline_ref_value_optional(app):
+    s = Sparkline(points=[1.0, 1.1], ref_value=1.05)
+    assert s.refValue() == 1.05
+
+
+def test_sparkline_paint_does_not_raise_on_empty(app):
+    from PyQt6.QtCore import QSize
+    s = Sparkline(points=[])
+    s.resize(QSize(120, 36))
+    s.repaint()
+
+
+from s1napse.widgets.primitives import GapBar
+
+
+def test_gapbar_default_range(app):
+    g = GapBar()
+    assert g.range_s() == 3.0
+
+
+def test_gapbar_clamps_outside_range(app):
+    g = GapBar(gap_ahead=-10.0, gap_behind=10.0, range_s=3.0)
+    assert g.gap_ahead() == -3.0  # clamped to -range
+    assert g.gap_behind() == 3.0
+
+
+def test_gapbar_updates_in_place(app):
+    g = GapBar()
+    g.setGaps(-1.5, 2.4)
+    assert g.gap_ahead() == -1.5
+    assert g.gap_behind() == 2.4
