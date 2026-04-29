@@ -1,6 +1,8 @@
 # S1napse
 
-A real-time telemetry dashboard for **sim racing** and **real racing**. Connects directly to your sim or to your car's OBD-II port via an ELM327 adapter, and displays live data, lap analysis, race strategy, and a self-building track map.
+A real-time telemetry dashboard for **sim racing** and **real racing**. Connects directly to your sim or to your car's OBD-II port via an ELM327 adapter, and displays live data, lap analysis, race strategy, post-session coaching, and a self-building track map.
+
+Built around a violet/dark design system with two density modes — dense, glance-while-driving live tabs (Dashboard, Race, Strategy, Tyres, Coach) and roomy analysis tabs (Telemetry, Lap Analysis, Lap Comparison, Session, Replay).
 
 ---
 
@@ -63,55 +65,79 @@ When S1napse launches you'll see a welcome screen with two options:
 
 ### Sim Racing
 
-| Game                             | Windows | Mac |
-| -------------------------------- | ------- | --- |
-| Assetto Corsa Competizione (ACC) | ✅      | ❌  |
-| Assetto Corsa (AC)               | ✅      | ❌  |
-| iRacing                          | ✅      | ❌  |
+| Game                             | Windows |
+| -------------------------------- | ------- |
+| Assetto Corsa Competizione (ACC) | ✅      |
+| Assetto Corsa (AC)               | ✅      |
+| iRacing                          | ✅      |
 
 ### Real Racing
 
-| Source                  | Windows | Mac |
-| ----------------------- | ------- | --- |
-| ELM327 OBD-II (WiFi)   | ✅      | ✅  |
-| ELM327 OBD-II (Bluetooth) | ✅   | ✅  |
+| Source                    | Windows | Mac |
+| ------------------------- | ------- | --- |
+| ELM327 OBD-II (WiFi)      | ✅      | ✅  |
+| ELM327 OBD-II (Bluetooth) | ✅      | ✅  |
 
 ---
 
 ## What's inside
 
+The app samples telemetry at 50 Hz in the background and renders the UI at ~5 Hz. A title bar at the top is always visible: brand, live source pill (with green dot when a reader is connected), session context (lap / stint / last lap), and the source/track/host/port controls.
+
 ### Dashboard
 
-Live car data at 20 Hz — speed, gear, RPM, throttle, brake, steering wheel, tyre temps & pressures, fuel remaining, lap time, ABS/TC activity.
+Selective gauges row — RevBar, throttle and brake PedalBars, SteeringBar — plus a 2×2 stat-card grid for Speed, Gear, Last lap, and Fuel.
 
 ### Telemetry Graphs
 
-Rolling graphs for the current lap: speed, throttle/brake, steering, RPM, gear, ABS/TC.
+Rolling graphs for the current lap: speed, throttle/brake, steering, RPM, gear, ABS/TC. Math-channel side panel for user-defined formulas.
 
 ### Lap Analysis
 
-Three-panel view:
+Multi-panel view:
 
 - **Sectors** — running lap timer + S1/S2/S3 splits vs your reference lap (green = faster, red = slower)
 - **Track Map** — builds itself from real car coordinates as you drive. Color-coded by throttle (green) and braking (red). Saved automatically after each lap so it loads instantly next session.
 - **Telemetry graphs** — distance-based speed, throttle, gear, RPM, steering for the current lap
 - **Delta graph** — time gained/lost vs your reference lap at every point on track
 
-### Race Tab
+### Race
 
-Race-specific data: position, gap to car ahead/behind, tyre compound & stint age, pit window recommendation, lap time trend, undercut/overcut calculator, fuel save calculator.
+Live, glance-while-driving layout in three columns plus a headline strip:
 
-### Tyres Tab
+- **Headline** — current race position (P4/22 style) with the active strategy banner inline next to it
+- **Pace column** — last lap time, lap-trend sparkline (last 12 laps with PB reference), S1/S2/S3 sector splits
+- **Position column** — gap to rivals ahead/behind in seconds, ±3s gap-bar visualizer, per-lap gap-trend ("closing/opening +0.18s this lap"), pit window range from the strategy engine
+- **Car column** — live tyre temps quad (cold/hot tinting), tyre stint laps + degradation projection, fuel remaining, stint summary (lap, average, best)
 
-Per-corner tyre temperatures, pressures, and brake temperatures.
+### Strategy
+
+Headline strip on top + two columns:
+
+- **Now** — pit window, fuel-save cost, rival watch (gap-jump pit detection), weather/track-temp watch
+- **Plan** — tyre degradation projection (fits a slope to recent lap times — needs ≥3 laps), pit summary, fuel-save calculator (laps-to-go input), undercut/overcut calculator (pit-loss + pace-delta inputs)
+
+The headline reads from `StrategyState.headline()` and surfaces the highest-priority active alert (rival pit, pit window open, weather change, etc.).
+
+### Tyres
+
+Per-corner TyreCard quad on the left, plus pressure / wear / IMO temp distribution panels on the right.
 
 ### Lap Comparison
 
 Pick any two laps from your session and overlay them on the same graphs. See exactly where you gained or lost time.
 
-### Session Tab
+### Session
 
 Full lap table with times, sector splits, and validity flags. Export everything to CSV with one click.
+
+### Replay
+
+Scrub through any saved lap with playback controls, telemetry graphs, and a time-synced track-map cursor.
+
+### Coach
+
+Post-lap analysis: a "quick win" tip card, per-tyre temperature feedback, and a session-progress card with a lap-time sparkline and per-corner grade history. Driven by the LapCoach engine.
 
 ### Real Racing Dashboard
 
@@ -149,27 +175,52 @@ You can also press **⏺ REC** in the top bar to start/stop a recording manually
 Clone the repo and run from source:
 
 ```bash
-pip install PyQt6 matplotlib pyaccsharedmemory irsdk obd
-python test-listener.py
+pip install -r requirements.txt
+python -m s1napse        # or: python s1napse.py
+```
+
+Run the test suite:
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -v
 ```
 
 Build the EXE yourself:
 
 ```bash
 pip install pyinstaller
-pyinstaller S1napsse.spec
+pyinstaller Synapse.spec
 # Output: dist/S1napsse.exe
 ```
 
 **Project structure:**
 
 ```
-S1napse/
-├── test-listener.py        # Main application
-├── S1napsse.spec            # PyInstaller build config
-├── requirements.txt        # Python dependencies
-├── tracks/                 # Auto-generated track JSON files
-├── REAL_RACING_GUIDE.md    # ELM327 setup & usage guide
+acc-telemetry/
+├── s1napse.py                     # Thin entry point
+├── s1napse/                       # Application package
+│   ├── __main__.py                # `python -m s1napse`
+│   ├── app.py                     # Main window + render orchestration
+│   ├── theme.py                   # Design tokens + QSS builder
+│   ├── constants.py               # Channel colors + track constants
+│   ├── readers/                   # ACC, AC-UDP, iRacing, ELM327 readers
+│   ├── coaching/                  # LapCoach, MathEngine, StrategyEngine
+│   ├── widgets/
+│   │   ├── primitives.py          # Card, Pill, Stat, Sparkline, GapBar
+│   │   ├── title_bar.py           # Always-visible top strip
+│   │   ├── tab_bar.py             # LiveTabBar (per-tab live-state dot)
+│   │   ├── tabs/                  # Per-tab modules (race, dashboard, tyres, ...)
+│   │   ├── strategy_tab.py        # Strategy tab (headline + 2-col)
+│   │   ├── coach_tab.py           # Coach tab
+│   │   └── ... (gauges, graphs, panels, track_map, etc.)
+│   ├── tracks/                    # Auto-generated track JSON files
+│   └── racelines/                 # Saved racelines
+├── tests/                         # pytest test suite
+├── docs/superpowers/              # Specs and implementation plans
+├── Synapse.spec                   # PyInstaller build config
+├── requirements.txt               # Runtime dependencies
+├── requirements-dev.txt           # Test/dev dependencies
 └── README.md
 ```
 
