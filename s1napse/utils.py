@@ -41,9 +41,9 @@ def _vsep() -> QFrame:
     return sep
 
 
-def _interp_time_at_dist(dists: list, times: list, target: float) -> float | None:
+def _interp_time_at_dist(dists, times, target: float) -> float | None:
     """Return interpolated time_ms at target distance using binary search."""
-    if not dists or target < dists[0]:
+    if len(dists) == 0 or target < dists[0]:
         return None
     if target >= dists[-1]:
         return float(times[-1])
@@ -61,11 +61,10 @@ def _interp_time_at_dist(dists: list, times: list, target: float) -> float | Non
     return times[lo] + t * (times[hi] - times[lo])
 
 
-def _compute_sector_times(dists: list, times: list,
-                          boundaries_m: list) -> list:
+def _compute_sector_times(dists, times, boundaries_m: list) -> list:
     """Return list of per-sector durations (s) at each distance boundary.
     Returns None for sectors not yet reached."""
-    if not dists or not times:
+    if len(dists) == 0 or len(times) == 0:
         return [None] * len(boundaries_m)
     result = []
     prev_ms = 0.0

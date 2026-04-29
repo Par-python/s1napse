@@ -343,12 +343,17 @@ class LapHistoryPanel(QWidget):
     def _make_row(self, lap: dict, best_time: float | None,
                   best_sectors: list) -> QWidget:
         lap_time   = lap.get('total_time_s', 0)
-        is_best    = (best_time is not None and lap_time > 0
+        lap_valid  = lap.get('lap_valid', True)
+        is_best    = (lap_valid and best_time is not None and lap_time > 0
                       and abs(lap_time - best_time) < 0.001)
         sectors    = lap.get('sectors', [None, None, None]) or [None, None, None]
 
         row = QFrame()
-        if is_best:
+        if not lap_valid:
+            row.setStyleSheet(
+                f'background: rgba(180,30,30,0.12); border: 1px solid {C_BRAKE};'
+                f' border-radius: 3px;')
+        elif is_best:
             row.setStyleSheet(
                 f'background: {C_PURPLE_BG}; border: 1px solid {C_PURPLE};'
                 f' border-radius: 3px;')
@@ -379,7 +384,7 @@ class LapHistoryPanel(QWidget):
         layout.addSpacing(8)
 
         if lap_time > 0:
-            time_col  = C_PURPLE if is_best else TXT
+            time_col  = C_PURPLE if is_best else (C_BRAKE if not lap_valid else TXT)
             time_bold = is_best
             _cell(self._fmt_time(lap_time), color=time_col, bold=time_bold, stretch=2)
         else:

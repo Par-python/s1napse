@@ -2128,6 +2128,7 @@ class TelemetryApp(QMainWindow):
         self.session_laps.append({
             'lap_number':    self.current_lap_count,
             'total_time_s':  total_time_s,
+            'lap_valid':     self._current_lap_valid,
             'sectors':       sectors,
             'data':          {k: v.tolist() for k, v in snap.items()},
                 # Session metadata snapshot at lap completion
