@@ -3,5 +3,5 @@ matplotlib>=3.7.0
 scipy>=1.10.0
 numpy>=1.24.0
 pyaccsharedmemory>=1.0.0
-irsdk>=1.4.0
+pyirsdk>=1.3.5
 obd>=0.7.1
