@@ -4033,7 +4033,7 @@ class TelemetryApp(QMainWindow):
         # Grow buffer if full (doubles capacity, amortised O(1) like list.append).
         n = self._lap_n
         if n >= len(self._lap_buf['speed']):
-            new_cap = n * 2
+            new_cap = max(n * 2, self._LAP_BUF_INIT)
             for ch in self._LAP_CHANNELS:
                 grown = np.empty(new_cap, dtype=np.float32)
                 grown[:n] = self._lap_buf[ch]
