@@ -344,8 +344,8 @@ class LapHistoryPanel(QWidget):
                   best_sectors: list) -> QWidget:
         lap_time   = lap.get('total_time_s', 0)
         lap_valid  = lap.get('lap_valid', True)
-        is_best    = (lap_valid and best_time is not None and lap_time > 0
-                      and abs(lap_time - best_time) < 0.001)
+        is_best    = bool(lap_valid and best_time is not None and lap_time > 0
+                         and abs(lap_time - best_time) < 0.001)
         sectors    = lap.get('sectors', [None, None, None]) or [None, None, None]
 
         row = QFrame()
@@ -395,8 +395,8 @@ class LapHistoryPanel(QWidget):
                 _cell('\u2014', color=TXT2, stretch=1)
                 continue
 
-            is_best_sec = (best_sectors[si] is not None
-                           and abs(sec_t - best_sectors[si]) < 0.001)
+            is_best_sec = bool(best_sectors[si] is not None
+                               and abs(sec_t - best_sectors[si]) < 0.001)
 
             if is_best and is_best_sec:
                 _cell(f'{sec_t:.3f}', color=C_PURPLE, bold=True, stretch=1)

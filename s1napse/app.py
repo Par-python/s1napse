@@ -3440,7 +3440,7 @@ class TelemetryApp(QMainWindow):
             t     = lap.get('total_time_s', 0)
             secs  = lap.get('sectors', [None, None, None]) or [None, None, None]
             valid = t > 20 and all(s is not None for s in secs)
-            is_best = best_t is not None and t > 0 and abs(t - best_t) < 0.001
+            is_best = bool(best_t is not None and t > 0 and abs(t - best_t) < 0.001)
             samples = len(lap['data'].get('speed', []))
 
             row = QFrame()
@@ -3473,8 +3473,8 @@ class TelemetryApp(QMainWindow):
                 if sec_t is None:
                     _cell('—', color=TXT2, stretch=1)
                 else:
-                    is_best_sec = (best_sectors[si] is not None
-                                   and abs(sec_t - best_sectors[si]) < 0.001)
+                    is_best_sec = bool(best_sectors[si] is not None
+                                       and abs(sec_t - best_sectors[si]) < 0.001)
                     _cell(f'{sec_t:.3f}',
                           color=C_THROTTLE if is_best_sec else TXT,
                           bold=is_best_sec, stretch=1)
