@@ -4308,11 +4308,12 @@ class TelemetryApp(QMainWindow):
             pass  # never crash the tick loop for math channels
 
         # ── Delta graph render ───────────────────────────────────────────
+        _lap_snap = self.current_lap_data  # snapshot once — property rebuilds dict each call
         if self._ref_lap_dists:
             if _current_tab == 2:  # LAP ANALYSIS
-                n_d = min(len(self.current_lap_data['dist_m']), len(self._current_deltas))
+                n_d = min(len(_lap_snap['dist_m']), len(self._current_deltas))
                 self.time_delta_graph.update_data(
-                    self.current_lap_data['dist_m'][:n_d],
+                    _lap_snap['dist_m'][:n_d],
                     self._current_deltas[:n_d],
                     distance_m)
         elif _current_tab == 2:
@@ -4321,12 +4322,12 @@ class TelemetryApp(QMainWindow):
         # ── Sector panel ─────────────────────────────────────────────────
         current_time_s = current_time / 1000.0
         if self._ref_lap_time_s > 0:
-            boundaries = [_track_length_m * f for f in (1/3, 2/3, 1.0)]
+            boundaries = self._sector_boundaries(_track_length_m)
             ref_secs = _compute_sector_times(
                 self._ref_lap_dists, self._ref_lap_times, boundaries)
             cur_secs = _compute_sector_times(
-                self.current_lap_data['dist_m'],
-                self.current_lap_data['time_ms'], boundaries)
+                _lap_snap['dist_m'],
+                _lap_snap['time_ms'], boundaries)
             self.sector_panel.update_laps(current_time_s, self._ref_lap_time_s,
                                           ref_secs, cur_secs)
         else:
