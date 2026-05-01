@@ -3732,6 +3732,15 @@ class TelemetryApp(QMainWindow):
             self.track_map.reset_track(display_name=display)
         self._update_track_edit_buttons()
 
+    def _sector_boundaries(self, track_length_m: float) -> list[float]:
+        """Return sector boundary distances in metres for the active track.
+        Falls back to equal thirds if no real sector data is available."""
+        td = TRACKS.get(self._active_track_key or '', {})
+        custom = td.get('sector_boundaries')
+        if custom:
+            return custom
+        return [track_length_m * f for f in (1/3, 2/3, 1.0)]
+
     def _update_track_edit_buttons(self):
         """Disable REC / LOCK SHAPE when the active track is already saved."""
         already_saved = bool(self._active_track_key and self._active_track_key in TRACKS)
