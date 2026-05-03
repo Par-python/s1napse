@@ -327,13 +327,15 @@ class LapHistoryPanel(QWidget):
         self._empty_label.setVisible(False)
 
         valid_times = [lap.get('total_time_s', 0) for lap in session_laps
-                       if lap.get('total_time_s', 0) > 0]
+                       if lap.get('total_time_s', 0) > 0
+                       and lap.get('lap_valid', True)]
         best_time = min(valid_times) if valid_times else None
 
         best_sectors = []
         for si in range(3):
             col_times = [lap['sectors'][si] for lap in session_laps
-                         if lap.get('sectors') and lap['sectors'][si] is not None]
+                         if lap.get('sectors') and lap['sectors'][si] is not None
+                         and lap.get('lap_valid', True)]
             best_sectors.append(min(col_times) if col_times else None)
 
         for lap in reversed(session_laps):
@@ -395,21 +397,15 @@ class LapHistoryPanel(QWidget):
                 _cell('\u2014', color=TXT2, stretch=1)
                 continue
 
+            if not lap_valid:
+                _cell(f'{sec_t:.3f}', color=C_BRAKE, stretch=1)
+                continue
+
             is_best_sec = bool(best_sectors[si] is not None
                                and abs(sec_t - best_sectors[si]) < 0.001)
-
-            if is_best_sec and not lap_valid:
+            if is_best_sec:
                 _cell(f'{sec_t:.3f}', color=C_PURPLE, bold=True, stretch=1)
-            elif not lap_valid:
-                _cell(f'{sec_t:.3f}', color=C_BRAKE, stretch=1)
-            elif is_best and is_best_sec:
-                _cell(f'{sec_t:.3f}', color=C_PURPLE, bold=True, stretch=1)
-            elif is_best_sec:
-                _cell(f'{sec_t:.3f}', color=C_THROTTLE, bold=True,
-                      bg=C_GREEN_BG, stretch=1)
-            elif is_best:
-                _cell(f'{sec_t:.3f}', color=C_PURPLE, stretch=1)
             else:
-                _cell(f'{sec_t:.3f}', color=TXT, stretch=1)
+                _cell(f'{sec_t:.3f}', color=C_THROTTLE, stretch=1)
 
         return row

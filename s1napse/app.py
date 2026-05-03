@@ -2115,6 +2115,8 @@ class TelemetryApp(QMainWindow):
         times = snap['time_ms']
         if len(times) == 0 or float(times[-1]) / 1000.0 < self._MIN_LAP_TIME_S:
             return  # too short — likely a pause/resume glitch
+        if self._lap_n < 100:
+            return  # too few samples — spurious lap-change misfire from stale telemetry
 
         total_time_s = float(times[-1]) / 1000.0
 
@@ -3430,14 +3432,17 @@ class TelemetryApp(QMainWindow):
             s = t_s % 60
             return f'{m}:{s:06.3f}'
 
-        valid_times = [l['total_time_s'] for l in laps if l.get('total_time_s', 0) > 0]
+        valid_times = [l['total_time_s'] for l in laps
+                       if l.get('total_time_s', 0) > 0
+                       and l.get('lap_valid', True)]
         best_t = min(valid_times) if valid_times else None
         avg_t  = (sum(valid_times) / len(valid_times)) if valid_times else None
 
         best_sectors: list = []
         for si in range(3):
             col = [l['sectors'][si] for l in laps
-                   if l.get('sectors') and l['sectors'][si] is not None]
+                   if l.get('sectors') and l['sectors'][si] is not None
+                   and l.get('lap_valid', True)]
             best_sectors.append(min(col) if col else None)
 
         # Stats bar
@@ -3488,17 +3493,15 @@ class TelemetryApp(QMainWindow):
             for si, sec_t in enumerate(secs):
                 if sec_t is None:
                     _cell('—', color=TXT2, stretch=1)
+                elif not lap_valid:
+                    _cell(f'{sec_t:.3f}', color=C_BRAKE, stretch=1)
                 else:
                     is_best_sec = bool(best_sectors[si] is not None
                                        and abs(sec_t - best_sectors[si]) < 0.001)
-                    if is_best_sec and not lap_valid:
+                    if is_best_sec:
                         _cell(f'{sec_t:.3f}', color=C_PURPLE, bold=True, stretch=1)
-                    elif not lap_valid:
-                        _cell(f'{sec_t:.3f}', color=C_BRAKE, stretch=1)
                     else:
-                        _cell(f'{sec_t:.3f}',
-                              color=C_THROTTLE if is_best_sec else TXT,
-                              bold=is_best_sec, stretch=1)
+                        _cell(f'{sec_t:.3f}', color=C_THROTTLE, stretch=1)
 
             _cell(str(samples), color=TXT2, stretch=1)
             valid_lbl = QLabel('✓' if valid else '✗')
