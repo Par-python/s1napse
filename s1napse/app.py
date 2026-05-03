@@ -60,7 +60,7 @@ from .widgets.title_bar import TitleBar
 from .widgets.graphs import _style_ax
 from .widgets.coach_tab import CoachTab
 from .widgets.math_channel_panel import MathChannelPanel
-from .widgets.tabs import RaceTab, TyresTab, DashboardTab, LapAnalysisTab, TelemetryTab
+from .widgets.tabs import RaceTab, TyresTab, DashboardTab, LapAnalysisTab, TelemetryTab, LapComparisonTab
 from .coaching.lap_coach import LapCoach
 from .coaching.math_engine import MathEngine
 from .coaching.strategy_engine import StrategyEngine
@@ -300,7 +300,8 @@ class TelemetryApp(QMainWindow):
         self.tabs.addTab(self.strategy_tab, 'STRATEGY')
         self.tyres_tab = TyresTab(self)
         self.tabs.addTab(self.tyres_tab, 'TYRES')
-        self.tabs.addTab(self._build_comparison_tab(), 'LAP COMPARISON')
+        self.comparison_tab = LapComparisonTab(self)
+        self.tabs.addTab(self.comparison_tab, 'LAP COMPARISON')
         self.tabs.addTab(self._build_session_tab(), 'SESSION')
         self.tabs.addTab(self._build_replay_tab(), 'REPLAY')
 
