@@ -2122,25 +2122,23 @@ class TelemetryApp(QMainWindow):
         if len(dists) == len(times):
             _track_length_m = TRACKS.get(self._active_track_key or '', {}).get(
                 'length_m', MONZA_LENGTH_M)
-            # Strip leading stale samples from the previous lap — ACC takes a few
-            # ticks to update lap_dist_pct after the line, so dist_m stays near
-            # track_length_m before resetting. Drop anything above 95% of the track.
-            stale_cutoff = _track_length_m * 0.95
-            trim = 0
-            while trim < len(dists) - 1 and float(dists[trim]) > stale_cutoff:
-                trim += 1
-            if trim:
-                dists = dists[trim:]
-                times = times[trim:]
+            # ACC takes a few ticks to update lap_dist_pct after the line crosses,
+            # leaving stale samples at both ends of the buffer:
+            #   head: dist_m near track_length (previous lap's final position)
+            #   tail: dist_m near 0 (new lap's first position already written)
+            # Strip both so sector boundaries land in clean monotonic data.
+            stale_hi = _track_length_m * 0.95
+            stale_lo = _track_length_m * 0.05
+            head = 0
+            while head < len(dists) - 1 and float(dists[head]) > stale_hi:
+                head += 1
+            tail = len(dists)
+            while tail > head + 1 and float(dists[tail - 1]) < stale_lo:
+                tail -= 1
+            dists = dists[head:tail]
+            times = times[head:tail]
             boundaries = [_track_length_m * f for f in (1/3, 2/3, 1.0)]
-            import sys
-            print(f'[DBG] n={len(dists)} dists[0]={float(dists[0]):.1f} '
-                  f'dists[-1]={float(dists[-1]):.1f} boundaries={[round(b) for b in boundaries]} '
-                  f'times[0]={float(times[0]):.0f} times[-1]={float(times[-1]):.0f}',
-                  file=sys.stderr, flush=True)
             sectors = _compute_sector_times(dists, times, boundaries)
-            print(f'[DBG] sectors={[round(float(s),3) if s is not None else None for s in sectors]}',
-                  file=sys.stderr, flush=True)
 
         self.session_laps.append({
             'lap_number':    self.current_lap_count,
