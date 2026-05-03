@@ -233,8 +233,8 @@ class TimeDeltaGraph(FigureCanvas):
         self._fill_neg = None
 
     def update_data(self, distances, deltas, current_distance_m: float):
-        self.distances = list(distances) if distances else []
-        self.deltas = list(deltas) if deltas else []
+        self.distances = list(distances) if len(distances) > 0 else []
+        self.deltas = list(deltas) if len(deltas) > 0 else []
         self.current_dist = current_distance_m
 
         if self._fill_pos:
@@ -299,12 +299,12 @@ class ComparisonGraph(FigureCanvas):
 
     def set_data(self, dists_a: list, vals_a: list,
                  dists_b: list, vals_b: list):
-        max_d = max((dists_a[-1] if dists_a else 0),
-                    (dists_b[-1] if dists_b else 0),
+        max_d = max((dists_a[-1] if len(dists_a) > 0 else 0),
+                    (dists_b[-1] if len(dists_b) > 0 else 0),
                     MONZA_LENGTH_M)
-        if dists_a and vals_a:
+        if len(dists_a) > 0 and len(vals_a) > 0:
             self.line_a.set_data(dists_a, vals_a)
-        if dists_b and vals_b:
+        if len(dists_b) > 0 and len(vals_b) > 0:
             self.line_b.set_data(dists_b, vals_b)
         self.ax.set_xlim(0, max_d)
         self.draw_idle()

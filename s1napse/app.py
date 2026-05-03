@@ -9,6 +9,8 @@ import threading
 from collections import deque
 from pathlib import Path
 
+import numpy as np
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QComboBox, QPushButton, QLineEdit, QSlider,
@@ -65,7 +67,7 @@ from .coaching.strategy_engine import StrategyEngine
 
 
 class TelemetrySampler(threading.Thread):
-    """Background thread: reads shared memory at ~50 Hz, buffers raw dicts."""
+    """Background thread: reads shared memory at ~120 Hz, buffers raw dicts."""
 
     def __init__(self):
         super().__init__(daemon=True)
@@ -90,7 +92,7 @@ class TelemetrySampler(threading.Thread):
                     with self._lock:
                         self._buffer.append(data)
                         self._latest = data
-            time.sleep(0.020)
+            time.sleep(0.008)  # ~120 Hz
 
     def drain(self) -> list[dict]:
         with self._lock:
@@ -2074,69 +2076,78 @@ class TelemetryApp(QMainWindow):
     # DATA MANAGEMENT
     # ------------------------------------------------------------------
 
+    # Channel names for the pre-allocated lap buffer (order must stay stable).
+    _LAP_CHANNELS = (
+        'time_ms', 'dist_m', 'speed', 'throttle', 'brake', 'steer_deg',
+        'rpm', 'gear', 'abs', 'tc', 'fuel_l', 'brake_bias_pct',
+        'world_x', 'world_z', 'air_temp', 'road_temp',
+        'tyre_temp_fl', 'tyre_temp_fr', 'tyre_temp_rl', 'tyre_temp_rr',
+        'tyre_pressure_fl', 'tyre_pressure_fr', 'tyre_pressure_rl', 'tyre_pressure_rr',
+        'brake_temp_fl', 'brake_temp_fr', 'brake_temp_rl', 'brake_temp_rr',
+        'tyre_wear_fl', 'tyre_wear_fr', 'tyre_wear_rl', 'tyre_wear_rr',
+    )
+    _LAP_BUF_INIT = 512  # initial capacity; doubles on overflow
+
     def _reset_current_lap_data(self):
-        self.current_lap_data = {
-            'time_ms':          [],
-            'dist_m':           [],
-            'speed':            [],
-            'throttle':         [],
-            'brake':            [],
-            'steer_deg':        [],
-            'rpm':              [],
-            'gear':             [],
-            'abs':              [],
-            'tc':               [],
-            # Extended per-tick fields
-            'fuel_l':           [],
-            'brake_bias_pct':   [],
-            'world_x':          [],
-            'world_z':          [],
-            'air_temp':         [],
-            'road_temp':        [],
-            'tyre_temp_fl':     [],
-            'tyre_temp_fr':     [],
-            'tyre_temp_rl':     [],
-            'tyre_temp_rr':     [],
-            'tyre_pressure_fl': [],
-            'tyre_pressure_fr': [],
-            'tyre_pressure_rl': [],
-            'tyre_pressure_rr': [],
-            'brake_temp_fl':    [],
-            'brake_temp_fr':    [],
-            'brake_temp_rl':    [],
-            'brake_temp_rr':    [],
-            'tyre_wear_fl':     [],
-            'tyre_wear_fr':     [],
-            'tyre_wear_rl':     [],
-            'tyre_wear_rr':     [],
-        }
+        # Pre-allocate float32 arrays per channel.  _lap_n tracks how many
+        # samples have been written; callers slice [:self._lap_n] to read.
+        self._lap_buf = {ch: np.empty(self._LAP_BUF_INIT, dtype=np.float32)
+                         for ch in self._LAP_CHANNELS}
+        self._lap_n = 0
         self._current_deltas = []
+
+    @property
+    def current_lap_data(self) -> dict:
+        """Live view of the current lap's channel arrays (sliced to written length)."""
+        n = self._lap_n
+        return {ch: self._lap_buf[ch][:n] for ch in self._LAP_CHANNELS}
 
     _MIN_LAP_TIME_S = 45  # ignore false laps from pause/resume glitches
 
     def _store_completed_lap(self):
         if self._current_lap_had_pit_exit:
             return  # outlap — car exited pit lane this lap, don't record
-        if self.current_lap_data.get('speed'):
-            dists = self.current_lap_data.get('dist_m', [])
-            times = self.current_lap_data.get('time_ms', [])
-            if times and times[-1] / 1000.0 < self._MIN_LAP_TIME_S:
-                return  # too short — likely a pause/resume glitch
+        # Snapshot once; avoids rebuilding the sliced-array dict multiple times.
+        snap = self.current_lap_data
+        if self._lap_n == 0:
+            return
+        dists = snap['dist_m']
+        times = snap['time_ms']
+        if len(times) == 0 or float(times[-1]) / 1000.0 < self._MIN_LAP_TIME_S:
+            return  # too short — likely a pause/resume glitch
+        if self._lap_n < 100:
+            return  # too few samples — spurious lap-change misfire from stale telemetry
 
-            total_time_s = (times[-1] / 1000.0) if times else 0.0
+        total_time_s = float(times[-1]) / 1000.0
 
-            sectors: list = [None, None, None]
-            if dists and times and len(dists) == len(times):
-                _track_length_m = TRACKS.get(self._active_track_key or '', {}).get(
-                    'length_m', MONZA_LENGTH_M)
-                boundaries = [_track_length_m * f for f in (1/3, 2/3, 1.0)]
-                sectors = _compute_sector_times(dists, times, boundaries)
+        sectors: list = [None, None, None]
+        if len(dists) == len(times):
+            _track_length_m = TRACKS.get(self._active_track_key or '', {}).get(
+                'length_m', MONZA_LENGTH_M)
+            # ACC takes a few ticks to update lap_dist_pct after the line crosses,
+            # leaving stale samples at both ends of the buffer:
+            #   head: dist_m near track_length (previous lap's final position)
+            #   tail: dist_m near 0 (new lap's first position already written)
+            # Strip both so sector boundaries land in clean monotonic data.
+            stale_hi = _track_length_m * 0.95
+            stale_lo = _track_length_m * 0.05
+            head = 0
+            while head < len(dists) - 1 and float(dists[head]) > stale_hi:
+                head += 1
+            tail = len(dists)
+            while tail > head + 1 and float(dists[tail - 1]) < stale_lo:
+                tail -= 1
+            dists = dists[head:tail]
+            times = times[head:tail]
+            boundaries = [_track_length_m * f for f in (1/3, 2/3, 1.0)]
+            sectors = _compute_sector_times(dists, times, boundaries)
 
-            self.session_laps.append({
-                'lap_number':    self.current_lap_count,
-                'total_time_s':  total_time_s,
-                'sectors':       sectors,
-                'data':          {k: list(v) for k, v in self.current_lap_data.items()},
+        self.session_laps.append({
+            'lap_number':    self.current_lap_count,
+            'total_time_s':  total_time_s,
+            'lap_valid':     self._current_lap_valid,
+            'sectors':       sectors,
+            'data':          {k: v.tolist() for k, v in snap.items()},
                 # Session metadata snapshot at lap completion
                 'meta': {
                     'car_name':      self._last_car_name,
@@ -2149,29 +2160,29 @@ class TelemetryApp(QMainWindow):
                     'air_temp_c':    round(self._last_air_temp, 1),
                     'road_temp_c':   round(self._last_road_temp, 1),
                 },
-            })
-            self.lap_history.refresh(self.session_laps)
-            self._populate_comparison_combos()
-            self._populate_replay_combo()
-            self._refresh_session_tab()
+        })
+        self.lap_history.refresh(self.session_laps)
+        self._populate_comparison_combos()
+        self._populate_replay_combo()
+        self._refresh_session_tab()
 
-            # ── Coaching analysis ────────────────────────────────────────
-            try:
-                report = self._lap_coach.analyze(self.session_laps[-1])
-                if report is not None:
-                    self.coach_tab.set_report(report)
-                    self.coach_tab.set_corners_on_map(
-                        self._lap_coach.corners,
-                        report.trail_brake_analyses,
-                        self.track_map)
-            except Exception as e:
-                print(f'Coaching analysis error: {e}')
+        # ── Coaching analysis ────────────────────────────────────────
+        try:
+            report = self._lap_coach.analyze(self.session_laps[-1])
+            if report is not None:
+                self.coach_tab.set_report(report)
+                self.coach_tab.set_corners_on_map(
+                    self._lap_coach.corners,
+                    report.trail_brake_analyses,
+                    self.track_map)
+        except Exception as e:
+            print(f'Coaching analysis error: {e}')
 
-            # Promote this lap to the reference for delta / sector comparison
-            if dists and times and len(dists) == len(times):
-                self._ref_lap_dists = list(dists)
-                self._ref_lap_times = list(times)
-                self._ref_lap_time_s = times[-1] / 1000.0
+        # Promote this lap to the reference for delta / sector comparison
+        if len(dists) > 0 and len(dists) == len(times):
+            self._ref_lap_dists = dists.tolist()
+            self._ref_lap_times = times.tolist()
+            self._ref_lap_time_s = float(times[-1]) / 1000.0
 
     def _set_graph_title_suffix(self, suffix: str):
         # Lap info is shown in the connection strip header label.
@@ -3421,14 +3432,17 @@ class TelemetryApp(QMainWindow):
             s = t_s % 60
             return f'{m}:{s:06.3f}'
 
-        valid_times = [l['total_time_s'] for l in laps if l.get('total_time_s', 0) > 0]
+        valid_times = [l['total_time_s'] for l in laps
+                       if l.get('total_time_s', 0) > 0
+                       and l.get('lap_valid', True)]
         best_t = min(valid_times) if valid_times else None
         avg_t  = (sum(valid_times) / len(valid_times)) if valid_times else None
 
         best_sectors: list = []
         for si in range(3):
             col = [l['sectors'][si] for l in laps
-                   if l.get('sectors') and l['sectors'][si] is not None]
+                   if l.get('sectors') and l['sectors'][si] is not None
+                   and l.get('lap_valid', True)]
             best_sectors.append(min(col) if col else None)
 
         # Stats bar
@@ -3443,11 +3457,12 @@ class TelemetryApp(QMainWindow):
 
         # Rows (newest first)
         for lap in reversed(laps):
-            t     = lap.get('total_time_s', 0)
-            secs  = lap.get('sectors', [None, None, None]) or [None, None, None]
-            valid = t > 20 and all(s is not None for s in secs)
-            is_best = best_t is not None and t > 0 and abs(t - best_t) < 0.001
-            samples = len(lap['data'].get('speed', []))
+            t          = lap.get('total_time_s', 0)
+            secs       = lap.get('sectors', [None, None, None]) or [None, None, None]
+            lap_valid  = lap.get('lap_valid', True)
+            valid      = lap_valid and t > 20 and all(s is not None for s in secs)
+            is_best    = bool(best_t is not None and t > 0 and abs(t - best_t) < 0.001)
+            samples    = len(lap['data'].get('speed', []))
 
             row = QFrame()
             if is_best:
@@ -3478,12 +3493,15 @@ class TelemetryApp(QMainWindow):
             for si, sec_t in enumerate(secs):
                 if sec_t is None:
                     _cell('—', color=TXT2, stretch=1)
+                elif not lap_valid:
+                    _cell(f'{sec_t:.3f}', color=C_BRAKE, stretch=1)
                 else:
-                    is_best_sec = (best_sectors[si] is not None
-                                   and abs(sec_t - best_sectors[si]) < 0.001)
-                    _cell(f'{sec_t:.3f}',
-                          color=C_THROTTLE if is_best_sec else TXT,
-                          bold=is_best_sec, stretch=1)
+                    is_best_sec = bool(best_sectors[si] is not None
+                                       and abs(sec_t - best_sectors[si]) < 0.001)
+                    if is_best_sec:
+                        _cell(f'{sec_t:.3f}', color=C_PURPLE, bold=True, stretch=1)
+                    else:
+                        _cell(f'{sec_t:.3f}', color=C_THROTTLE, stretch=1)
 
             _cell(str(samples), color=TXT2, stretch=1)
             valid_lbl = QLabel('✓' if valid else '✗')
@@ -3737,6 +3755,15 @@ class TelemetryApp(QMainWindow):
             display = key.replace('_', ' ').title()
             self.track_map.reset_track(display_name=display)
         self._update_track_edit_buttons()
+
+    def _sector_boundaries(self, track_length_m: float) -> list[float]:
+        """Return sector boundary distances in metres for the active track.
+        Falls back to equal thirds if no real sector data is available."""
+        td = TRACKS.get(self._active_track_key or '', {})
+        custom = td.get('sector_boundaries')
+        if custom:
+            return custom
+        return [track_length_m * f for f in (1/3, 2/3, 1.0)]
 
     def _update_track_edit_buttons(self):
         """Disable REC / LOCK SHAPE when the active track is already saved."""
@@ -4025,49 +4052,61 @@ class TelemetryApp(QMainWindow):
         steer_deg = math.degrees(data['steer_angle'])
         rpm = data['rpm']
 
-        self.current_lap_data['time_ms'].append(current_time)
-        self.current_lap_data['dist_m'].append(distance_m)
-        self.current_lap_data['speed'].append(data['speed'])
-        self.current_lap_data['throttle'].append(data['throttle'])
-        self.current_lap_data['brake'].append(data['brake'])
-        self.current_lap_data['steer_deg'].append(steer_deg)
-        self.current_lap_data['rpm'].append(rpm)
-        self.current_lap_data['gear'].append(gear_int)
-        self.current_lap_data['abs'].append(data['abs'])
-        self.current_lap_data['tc'].append(data['tc'])
         _raw_bias = data.get('brake_bias', 0.0)
         if 0.0 < _raw_bias <= 1.0:
-            _bias_pct = round(_raw_bias * 100, 2)
+            _bias_pct = _raw_bias * 100.0
         elif 50.0 <= _raw_bias <= 80.0:
-            _bias_pct = round(_raw_bias, 2)
+            _bias_pct = float(_raw_bias)
         else:
             _bias_pct = 0.0
-        self.current_lap_data['fuel_l'].append(round(fuel, 3))
-        self.current_lap_data['brake_bias_pct'].append(_bias_pct)
-        self.current_lap_data['world_x'].append(round(data.get('world_x', 0.0), 2))
-        self.current_lap_data['world_z'].append(round(data.get('world_z', 0.0), 2))
-        self.current_lap_data['air_temp'].append(round(data.get('air_temp', 0.0), 1))
-        self.current_lap_data['road_temp'].append(round(data.get('road_temp', 0.0), 1))
-        _tt = data.get('tyre_temp', [0.0, 0.0, 0.0, 0.0])
-        self.current_lap_data['tyre_temp_fl'].append(round(_tt[0], 1))
-        self.current_lap_data['tyre_temp_fr'].append(round(_tt[1], 1))
-        self.current_lap_data['tyre_temp_rl'].append(round(_tt[2], 1))
-        self.current_lap_data['tyre_temp_rr'].append(round(_tt[3], 1))
+        _tt = data.get('tyre_temp',     [0.0, 0.0, 0.0, 0.0])
         _tp = data.get('tyre_pressure', [0.0, 0.0, 0.0, 0.0])
-        self.current_lap_data['tyre_pressure_fl'].append(round(_tp[0], 2))
-        self.current_lap_data['tyre_pressure_fr'].append(round(_tp[1], 2))
-        self.current_lap_data['tyre_pressure_rl'].append(round(_tp[2], 2))
-        self.current_lap_data['tyre_pressure_rr'].append(round(_tp[3], 2))
-        _bt = data.get('brake_temp', [0.0, 0.0, 0.0, 0.0])
-        self.current_lap_data['brake_temp_fl'].append(round(_bt[0], 1))
-        self.current_lap_data['brake_temp_fr'].append(round(_bt[1], 1))
-        self.current_lap_data['brake_temp_rl'].append(round(_bt[2], 1))
-        self.current_lap_data['brake_temp_rr'].append(round(_bt[3], 1))
-        _tw = data.get('tyre_wear', [0.0, 0.0, 0.0, 0.0])
-        self.current_lap_data['tyre_wear_fl'].append(round(_tw[0], 4))
-        self.current_lap_data['tyre_wear_fr'].append(round(_tw[1], 4))
-        self.current_lap_data['tyre_wear_rl'].append(round(_tw[2], 4))
-        self.current_lap_data['tyre_wear_rr'].append(round(_tw[3], 4))
+        _bt = data.get('brake_temp',    [0.0, 0.0, 0.0, 0.0])
+        _tw = data.get('tyre_wear',     [0.0, 0.0, 0.0, 0.0])
+
+        # Grow buffer if full (doubles capacity, amortised O(1) like list.append).
+        n = self._lap_n
+        if n >= len(self._lap_buf['speed']):
+            new_cap = max(n * 2, self._LAP_BUF_INIT)
+            for ch in self._LAP_CHANNELS:
+                grown = np.empty(new_cap, dtype=np.float32)
+                grown[:n] = self._lap_buf[ch]
+                self._lap_buf[ch] = grown
+
+        b = self._lap_buf
+        b['time_ms'][n]          = current_time
+        b['dist_m'][n]           = distance_m
+        b['speed'][n]            = data['speed']
+        b['throttle'][n]         = data['throttle']
+        b['brake'][n]            = data['brake']
+        b['steer_deg'][n]        = steer_deg
+        b['rpm'][n]              = rpm
+        b['gear'][n]             = gear_int
+        b['abs'][n]              = data['abs']
+        b['tc'][n]               = data['tc']
+        b['fuel_l'][n]           = fuel
+        b['brake_bias_pct'][n]   = _bias_pct
+        b['world_x'][n]          = data.get('world_x', 0.0)
+        b['world_z'][n]          = data.get('world_z', 0.0)
+        b['air_temp'][n]         = data.get('air_temp', 0.0)
+        b['road_temp'][n]        = data.get('road_temp', 0.0)
+        b['tyre_temp_fl'][n]     = _tt[0]
+        b['tyre_temp_fr'][n]     = _tt[1]
+        b['tyre_temp_rl'][n]     = _tt[2]
+        b['tyre_temp_rr'][n]     = _tt[3]
+        b['tyre_pressure_fl'][n] = _tp[0]
+        b['tyre_pressure_fr'][n] = _tp[1]
+        b['tyre_pressure_rl'][n] = _tp[2]
+        b['tyre_pressure_rr'][n] = _tp[3]
+        b['brake_temp_fl'][n]    = _bt[0]
+        b['brake_temp_fr'][n]    = _bt[1]
+        b['brake_temp_rl'][n]    = _bt[2]
+        b['brake_temp_rr'][n]    = _bt[3]
+        b['tyre_wear_fl'][n]     = _tw[0]
+        b['tyre_wear_fr'][n]     = _tw[1]
+        b['tyre_wear_rl'][n]     = _tw[2]
+        b['tyre_wear_rr'][n]     = _tw[3]
+        self._lap_n = n + 1
 
         # ── Delta vs reference lap (data part only) ──────────────────────
         if self._ref_lap_dists:
@@ -4302,11 +4341,12 @@ class TelemetryApp(QMainWindow):
             pass  # never crash the tick loop for math channels
 
         # ── Delta graph render ───────────────────────────────────────────
+        _lap_snap = self.current_lap_data  # snapshot once — property rebuilds dict each call
         if self._ref_lap_dists:
             if _current_tab == 2:  # LAP ANALYSIS
-                n_d = min(len(self.current_lap_data['dist_m']), len(self._current_deltas))
+                n_d = min(len(_lap_snap['dist_m']), len(self._current_deltas))
                 self.time_delta_graph.update_data(
-                    self.current_lap_data['dist_m'][:n_d],
+                    _lap_snap['dist_m'][:n_d],
                     self._current_deltas[:n_d],
                     distance_m)
         elif _current_tab == 2:
@@ -4315,12 +4355,12 @@ class TelemetryApp(QMainWindow):
         # ── Sector panel ─────────────────────────────────────────────────
         current_time_s = current_time / 1000.0
         if self._ref_lap_time_s > 0:
-            boundaries = [_track_length_m * f for f in (1/3, 2/3, 1.0)]
+            boundaries = self._sector_boundaries(_track_length_m)
             ref_secs = _compute_sector_times(
                 self._ref_lap_dists, self._ref_lap_times, boundaries)
             cur_secs = _compute_sector_times(
-                self.current_lap_data['dist_m'],
-                self.current_lap_data['time_ms'], boundaries)
+                _lap_snap['dist_m'],
+                _lap_snap['time_ms'], boundaries)
             self.sector_panel.update_laps(current_time_s, self._ref_lap_time_s,
                                           ref_secs, cur_secs)
         else:
@@ -4397,12 +4437,15 @@ class TelemetryApp(QMainWindow):
         return self.current_lap_data
 
     def _get_session_data(self):
-        combined = {k: [] for k in self.current_lap_data}
+        snap = self.current_lap_data
+        combined = {k: [] for k in snap}
         for lap in self.session_laps:
             for key in combined:
                 combined[key].extend(lap['data'].get(key, []))
         for key in combined:
-            combined[key].extend(self.current_lap_data.get(key, []))
+            arr = snap.get(key)
+            if arr is not None and len(arr) > 0:
+                combined[key].extend(arr.tolist())
         return combined
 
     def _export_graphs(self, data_dict: dict, dialog_title: str, default_filename: str):
