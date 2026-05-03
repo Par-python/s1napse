@@ -1,6 +1,7 @@
 """Matplotlib-based graph widgets for telemetry visualization."""
 
 import matplotlib
+import matplotlib as _mpl
 matplotlib.use('Qt5Agg')
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -15,21 +16,47 @@ from ..theme import (
     BG, SURFACE as BG1, TEXT_MUTED as TXT2, TEXT_PRIMARY as WHITE,
     BORDER_STRONG as BORDER2,
 )
+from .. import theme as _theme
 from ..utils import _interp_time_at_dist
 
+# Apply S1napse theme to matplotlib defaults — runs once on module import.
+_mpl.rcParams.update({
+    'axes.edgecolor':    _theme.BORDER_SUBTLE,
+    'axes.labelcolor':   _theme.TEXT_MUTED,
+    'axes.titlecolor':   _theme.TEXT_MUTED,
+    'figure.facecolor':  _theme.BG,
+    'axes.facecolor':    _theme.SURFACE,
+    'savefig.facecolor': _theme.BG,
+    'xtick.color':       _theme.TEXT_FAINT,
+    'ytick.color':       _theme.TEXT_FAINT,
+    'grid.color':        _theme.BORDER_SUBTLE,
+    'grid.alpha':        0.5,
+    'grid.linewidth':    0.5,
+    'text.color':        _theme.TEXT_SECONDARY,
+    'legend.facecolor':  _theme.SURFACE,
+    'legend.edgecolor':  _theme.BORDER_SUBTLE,
+    'legend.labelcolor': _theme.TEXT_SECONDARY,
+})
 
-def _style_ax(ax, fig, ylabel: str = '', ylim=None):
-    """Apply consistent MoTeC-inspired dark styling to an axes object."""
-    fig.patch.set_facecolor(BG)
-    ax.set_facecolor(BG1)
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_color('#303030')
-    ax.spines['bottom'].set_color('#303030')
-    ax.tick_params(colors=TXT2, labelsize=7, length=3)
-    ax.grid(True, color='#1c1c1c', linewidth=0.8, linestyle='-', axis='y')
+
+def _style_ax(ax, fig, ylabel: str = '', ylim=None, title: str = '', xlabel: str = '') -> None:
+    """Apply S1napse theme to a matplotlib axes — call once after ax creation."""
+    ax.set_facecolor(_theme.SURFACE)
+    fig.patch.set_facecolor(_theme.BG)
+    for spine in ax.spines.values():
+        spine.set_color(_theme.BORDER_SUBTLE)
+        spine.set_linewidth(0.6)
+    ax.tick_params(axis='both', which='both',
+                   colors=_theme.TEXT_FAINT, labelsize=8.5,
+                   length=2, pad=4, width=0.6)
+    ax.grid(True, color=_theme.BORDER_SUBTLE, linewidth=0.5, alpha=0.5)
+    if title:
+        ax.set_title(title, color=_theme.TEXT_MUTED, fontsize=10,
+                     loc='left', pad=6, fontweight=500)
+    if xlabel:
+        ax.set_xlabel(xlabel, color=_theme.TEXT_MUTED, fontsize=9)
     if ylabel:
-        ax.set_ylabel(ylabel, color=TXT2, fontsize=8, labelpad=4)
+        ax.set_ylabel(ylabel, color=_theme.TEXT_MUTED, fontsize=9)
     if ylim:
         ax.set_ylim(ylim)
     fig.subplots_adjust(left=0.09, right=0.98, top=0.95, bottom=0.22)
