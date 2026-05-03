@@ -3460,7 +3460,7 @@ class TelemetryApp(QMainWindow):
             t          = lap.get('total_time_s', 0)
             secs       = lap.get('sectors', [None, None, None]) or [None, None, None]
             lap_valid  = lap.get('lap_valid', True)
-            valid      = t > 20 and all(s is not None for s in secs)
+            valid      = lap_valid and t > 20 and all(s is not None for s in secs)
             is_best    = bool(best_t is not None and t > 0 and abs(t - best_t) < 0.001)
             samples    = len(lap['data'].get('speed', []))
 
