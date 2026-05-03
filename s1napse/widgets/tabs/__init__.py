@@ -13,5 +13,6 @@ from .race import RaceTab
 from .tyres import TyresTab
 from .dashboard import DashboardTab
 from .lap_analysis import LapAnalysisTab
+from .telemetry import TelemetryTab
 
-__all__ = ['RaceTab', 'TyresTab', 'DashboardTab', 'LapAnalysisTab']
+__all__ = ['RaceTab', 'TyresTab', 'DashboardTab', 'LapAnalysisTab', 'TelemetryTab']
