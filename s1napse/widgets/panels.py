@@ -398,7 +398,11 @@ class LapHistoryPanel(QWidget):
             is_best_sec = bool(best_sectors[si] is not None
                                and abs(sec_t - best_sectors[si]) < 0.001)
 
-            if is_best and is_best_sec:
+            if is_best_sec and not lap_valid:
+                _cell(f'{sec_t:.3f}', color=C_PURPLE, bold=True, stretch=1)
+            elif not lap_valid:
+                _cell(f'{sec_t:.3f}', color=C_BRAKE, stretch=1)
+            elif is_best and is_best_sec:
                 _cell(f'{sec_t:.3f}', color=C_PURPLE, bold=True, stretch=1)
             elif is_best_sec:
                 _cell(f'{sec_t:.3f}', color=C_THROTTLE, bold=True,

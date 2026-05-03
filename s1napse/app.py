@@ -2122,8 +2122,25 @@ class TelemetryApp(QMainWindow):
         if len(dists) == len(times):
             _track_length_m = TRACKS.get(self._active_track_key or '', {}).get(
                 'length_m', MONZA_LENGTH_M)
+            # Strip leading stale samples from the previous lap — ACC takes a few
+            # ticks to update lap_dist_pct after the line, so dist_m stays near
+            # track_length_m before resetting. Drop anything above 95% of the track.
+            stale_cutoff = _track_length_m * 0.95
+            trim = 0
+            while trim < len(dists) - 1 and float(dists[trim]) > stale_cutoff:
+                trim += 1
+            if trim:
+                dists = dists[trim:]
+                times = times[trim:]
             boundaries = [_track_length_m * f for f in (1/3, 2/3, 1.0)]
+            import sys
+            print(f'[DBG] n={len(dists)} dists[0]={float(dists[0]):.1f} '
+                  f'dists[-1]={float(dists[-1]):.1f} boundaries={[round(b) for b in boundaries]} '
+                  f'times[0]={float(times[0]):.0f} times[-1]={float(times[-1]):.0f}',
+                  file=sys.stderr, flush=True)
             sectors = _compute_sector_times(dists, times, boundaries)
+            print(f'[DBG] sectors={[round(float(s),3) if s is not None else None for s in sectors]}',
+                  file=sys.stderr, flush=True)
 
         self.session_laps.append({
             'lap_number':    self.current_lap_count,
@@ -3437,11 +3454,12 @@ class TelemetryApp(QMainWindow):
 
         # Rows (newest first)
         for lap in reversed(laps):
-            t     = lap.get('total_time_s', 0)
-            secs  = lap.get('sectors', [None, None, None]) or [None, None, None]
-            valid = t > 20 and all(s is not None for s in secs)
-            is_best = bool(best_t is not None and t > 0 and abs(t - best_t) < 0.001)
-            samples = len(lap['data'].get('speed', []))
+            t          = lap.get('total_time_s', 0)
+            secs       = lap.get('sectors', [None, None, None]) or [None, None, None]
+            lap_valid  = lap.get('lap_valid', True)
+            valid      = t > 20 and all(s is not None for s in secs)
+            is_best    = bool(best_t is not None and t > 0 and abs(t - best_t) < 0.001)
+            samples    = len(lap['data'].get('speed', []))
 
             row = QFrame()
             if is_best:
@@ -3475,9 +3493,14 @@ class TelemetryApp(QMainWindow):
                 else:
                     is_best_sec = bool(best_sectors[si] is not None
                                        and abs(sec_t - best_sectors[si]) < 0.001)
-                    _cell(f'{sec_t:.3f}',
-                          color=C_THROTTLE if is_best_sec else TXT,
-                          bold=is_best_sec, stretch=1)
+                    if is_best_sec and not lap_valid:
+                        _cell(f'{sec_t:.3f}', color=C_PURPLE, bold=True, stretch=1)
+                    elif not lap_valid:
+                        _cell(f'{sec_t:.3f}', color=C_BRAKE, stretch=1)
+                    else:
+                        _cell(f'{sec_t:.3f}',
+                              color=C_THROTTLE if is_best_sec else TXT,
+                              bold=is_best_sec, stretch=1)
 
             _cell(str(samples), color=TXT2, stretch=1)
             valid_lbl = QLabel('✓' if valid else '✗')
