@@ -3224,7 +3224,11 @@ class TelemetryApp(QMainWindow):
 
     def _toggle_math_panel(self, checked: bool) -> None:
         if checked:
-            self._graphs_splitter.addWidget(self._math_panel)
+            # Only add to the splitter the first time — subsequent toggles
+            # just show the existing widget. Re-adding creates duplicate
+            # slots that stretch the right side of the splitter.
+            if self._math_panel.parent() is not self._graphs_splitter:
+                self._graphs_splitter.addWidget(self._math_panel)
             self._math_panel.show()
             self._math_panel.rebuild_list()
         else:

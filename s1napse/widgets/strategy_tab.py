@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .. import theme
-from .primitives import Card
+from .primitives import Card, Stat
 
 
 def _chip_lbl(text: str, font_size: int = 8, bold: bool = True,
@@ -108,25 +108,32 @@ class StrategyTab(QWidget):
 
     def _build_degradation_card(self) -> Card:
         card = Card(label='TYRE DEGRADATION', dense=True)
-        self._deg_status = QLabel('Need 3 laps to project.')
-        self._deg_status.setFont(theme.mono_font(10))
-        self._deg_status.setStyleSheet(f'color: {theme.TEXT_MUTED};')
-        card.body().addWidget(self._deg_status)
+        self._deg_stat = Stat(
+            value='—',
+            sub='Need 3 laps to project.',
+        )
+        # Keep _deg_status as a hidden label so refresh() setText calls still work
+        self._deg_status = self._deg_stat.valueLabel()
+        card.body().addWidget(self._deg_stat)
         return card
 
     def _build_pit_window_card(self) -> Card:
         card = Card(label='PIT WINDOW', dense=True)
-        self._pw_status = QLabel('Complete a lap to estimate.')
-        self._pw_status.setFont(theme.mono_font(10))
-        self._pw_status.setStyleSheet(f'color: {theme.TEXT_MUTED};')
-        card.body().addWidget(self._pw_status)
+        self._pw_stat = Stat(
+            value='—',
+            sub='Complete a lap to estimate.',
+        )
+        # Keep _pw_status pointing to the internal value label for refresh() setText calls
+        self._pw_status = self._pw_stat.valueLabel()
+        card.body().addWidget(self._pw_stat)
         return card
 
     def _build_fuel_save_cost_card(self) -> Card:
         card = Card(label='FUEL-SAVE COST', dense=True)
         self._fsc_status = QLabel('—')
-        self._fsc_status.setFont(theme.mono_font(10))
+        self._fsc_status.setFont(theme.mono_font(13))
         self._fsc_status.setStyleSheet(f'color: {theme.TEXT_MUTED};')
+        self._fsc_status.setWordWrap(True)
         card.body().addWidget(self._fsc_status)
         return card
 
@@ -135,7 +142,7 @@ class StrategyTab(QWidget):
         self._rw_ahead = QLabel('Ahead: stable')
         self._rw_behind = QLabel('Behind: stable')
         for lbl in (self._rw_ahead, self._rw_behind):
-            lbl.setFont(theme.mono_font(10))
+            lbl.setFont(theme.mono_font(13))
             lbl.setStyleSheet(f'color: {theme.TEXT_SECONDARY};')
             card.body().addWidget(lbl)
         sub = QLabel('Inferred from gap delta. May fire on rival crash/spin.')
@@ -148,8 +155,9 @@ class StrategyTab(QWidget):
     def _build_temp_watch_card(self) -> Card:
         card = Card(label='WEATHER / TRACK TEMP', dense=True)
         self._tw_status = QLabel('—')
-        self._tw_status.setFont(theme.mono_font(10))
-        self._tw_status.setStyleSheet(f'color: {theme.TEXT_MUTED};')
+        self._tw_status.setFont(theme.mono_font(13))
+        self._tw_status.setStyleSheet(f'color: {theme.TEXT_PRIMARY};')
+        self._tw_status.setWordWrap(True)
         card.body().addWidget(self._tw_status)
         return card
 
@@ -173,8 +181,8 @@ class StrategyTab(QWidget):
             col.setSpacing(2)
             col.addWidget(_chip_lbl(title, font_size=7))
             v = QLabel('—')
-            v.setFont(theme.mono_font(11, bold=True))
-            v.setStyleSheet(f'color: {theme.TEXT_SECONDARY};')
+            v.setFont(theme.mono_font(theme.FONT_NUMERIC_LG, bold=True))
+            v.setStyleSheet(f'color: {theme.TEXT_PRIMARY};')
             col.addWidget(v)
             setattr(self, attr, v)
             return col
@@ -218,8 +226,8 @@ class StrategyTab(QWidget):
         card.body().addLayout(row)
 
         self._fs_result_lbl = QLabel('—')
-        self._fs_result_lbl.setFont(theme.mono_font(10, bold=True))
-        self._fs_result_lbl.setStyleSheet(f'color: {theme.TEXT_MUTED};')
+        self._fs_result_lbl.setFont(theme.mono_font(13, bold=True))
+        self._fs_result_lbl.setStyleSheet(f'color: {theme.TEXT_PRIMARY};')
         self._fs_result_lbl.setWordWrap(True)
         card.body().addWidget(self._fs_result_lbl)
         return card
@@ -260,11 +268,11 @@ class StrategyTab(QWidget):
         card.body().addWidget(sep)
 
         self._uco_undercut_lbl = QLabel('UNDERCUT: —')
-        self._uco_undercut_lbl.setFont(theme.mono_font(9, bold=True))
-        self._uco_undercut_lbl.setStyleSheet(f'color: {theme.TEXT_MUTED};')
+        self._uco_undercut_lbl.setFont(theme.mono_font(13, bold=True))
+        self._uco_undercut_lbl.setStyleSheet(f'color: {theme.TEXT_PRIMARY};')
         self._uco_overcut_lbl = QLabel('OVERCUT: —')
-        self._uco_overcut_lbl.setFont(theme.mono_font(9, bold=True))
-        self._uco_overcut_lbl.setStyleSheet(f'color: {theme.TEXT_MUTED};')
+        self._uco_overcut_lbl.setFont(theme.mono_font(13, bold=True))
+        self._uco_overcut_lbl.setStyleSheet(f'color: {theme.TEXT_PRIMARY};')
         card.body().addWidget(self._uco_undercut_lbl)
         card.body().addWidget(self._uco_overcut_lbl)
         return card
@@ -283,10 +291,25 @@ class StrategyTab(QWidget):
         headline = state.headline()
         if headline is not None:
             # Headline.text carries the full callout string; severity drives colour.
+            severity = (headline.severity or '').lower()
+            if severity == 'red':
+                color = theme.BAD
+            elif severity == 'amber':
+                color = theme.WARN
+            elif severity == 'green':
+                color = theme.GOOD
+            else:
+                color = theme.ACCENT_FG
             self._headline_label.setText(f'► {headline.severity.upper()}')
+            self._headline_label.setStyleSheet(
+                f'color: {color}; background: transparent; border: none; letter-spacing: 0.7px;'
+            )
             self._headline_msg.setText(headline.text)
         else:
             self._headline_label.setText('► COLUMNS')
+            self._headline_label.setStyleSheet(
+                f'color: {theme.ACCENT_FG}; background: transparent; border: none; letter-spacing: 0.7px;'
+            )
             self._headline_msg.setText('Live → on the left  ·  Plan → on the right')
 
         # Card 1 — degradation
@@ -345,7 +368,7 @@ class StrategyTab(QWidget):
             (self._rw_behind, state.rival_behind_pitted_at),
         ):
             if pitted_at is not None and (now - pitted_at) <= 30.0:
-                lbl.setStyleSheet('color: #f5a623;')
+                lbl.setStyleSheet(f'color: {theme.WARN};')
             else:
                 lbl.setStyleSheet(f'color: {theme.TEXT_SECONDARY};')
 

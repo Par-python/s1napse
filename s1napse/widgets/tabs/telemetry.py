@@ -67,10 +67,10 @@ class TelemetryTab(QWidget):
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(12, 12, 12, 12)
-        outer.setSpacing(12)
+        outer.setSpacing(8)
 
         # ── Top action row: math-channel toggle + export buttons ─────────
-        controls_card = Card(dense=False)
+        controls_card = Card(dense=True)
         btn_row = QHBoxLayout()
         btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.setSpacing(8)
