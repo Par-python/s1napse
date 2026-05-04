@@ -3829,7 +3829,7 @@ class TelemetryApp(QMainWindow):
 
     def _finish_recording(self):
         data = self._sampler.latest
-        track_name = data['track_name'] if data else 'Unknown Track'
+        track_name = data.get('track_name', 'Unknown Track') if data else 'Unknown Track'
         length_m = TRACKS.get(self._active_track_key or '', {}).get('length_m', MONZA_LENGTH_M)
 
         path = self.recorder.save(track_name, length_m)
@@ -4007,8 +4007,10 @@ class TelemetryApp(QMainWindow):
             self._reset_current_lap_data()
             try:
                 self._math_engine.on_lap_start({
-                    'speed': data['speed'], 'throttle': data['throttle'],
-                    'brake': data['brake'], 'fuel_l': data.get('fuel', 0.0),
+                    'speed': data.get('speed', 0.0) or 0.0,
+                    'throttle': data.get('throttle', 0.0) or 0.0,
+                    'brake': data.get('brake', 0.0) or 0.0,
+                    'fuel_l': data.get('fuel', 0.0) or 0.0,
                 })
             except Exception:
                 pass
@@ -4030,7 +4032,7 @@ class TelemetryApp(QMainWindow):
         distance_m = lap_progress * _track_length_m
 
         # ── Track map (lightweight — no Qt paint, just data) ─────────────
-        self.track_map.update_telemetry(lap_progress, data['throttle'], data['brake'])
+        self.track_map.update_telemetry(lap_progress, data.get('throttle', 0.0) or 0.0, data.get('brake', 0.0) or 0.0)
         if self.current_lap_count >= 1 and self._current_lap_valid:
             self.track_map.feed_world_pos(
                 lap_progress,
@@ -4052,10 +4054,17 @@ class TelemetryApp(QMainWindow):
             self._fuel_at_lap_start = fuel
 
         # ── Store raw lap data ───────────────────────────────────────────
-        gear = data['gear']
+        gear = data.get('gear', 1)
+        if gear is None:
+            gear = 1
         gear_int = gear if isinstance(gear, int) else 0
-        steer_deg = math.degrees(data['steer_angle'])
-        rpm = data['rpm']
+        _steer_angle = data.get('steer_angle', 0.0)
+        if _steer_angle is None:
+            _steer_angle = 0.0
+        steer_deg = math.degrees(_steer_angle)
+        rpm = data.get('rpm', 0.0)
+        if rpm is None:
+            rpm = 0.0
 
         _raw_bias = data.get('brake_bias', 0.0)
         if 0.0 < _raw_bias <= 1.0:
@@ -4081,14 +4090,14 @@ class TelemetryApp(QMainWindow):
         b = self._lap_buf
         b['time_ms'][n]          = current_time
         b['dist_m'][n]           = distance_m
-        b['speed'][n]            = data['speed']
-        b['throttle'][n]         = data['throttle']
-        b['brake'][n]            = data['brake']
+        b['speed'][n]            = data.get('speed', 0.0) or 0.0
+        b['throttle'][n]         = data.get('throttle', 0.0) or 0.0
+        b['brake'][n]            = data.get('brake', 0.0) or 0.0
         b['steer_deg'][n]        = steer_deg
         b['rpm'][n]              = rpm
         b['gear'][n]             = gear_int
-        b['abs'][n]              = data['abs']
-        b['tc'][n]               = data['tc']
+        b['abs'][n]              = data.get('abs', 0.0) or 0.0
+        b['tc'][n]               = data.get('tc', 0.0) or 0.0
         b['fuel_l'][n]           = fuel
         b['brake_bias_pct'][n]   = _bias_pct
         b['world_x'][n]          = data.get('world_x', 0.0)
@@ -4194,7 +4203,9 @@ class TelemetryApp(QMainWindow):
         self.connection_label.setStyleSheet(f'color: {TXT}; letter-spacing: 0.5px;')
 
         # Gear text  (all readers normalise to: 0=R, 1=N, 2+=1st,2nd,…)
-        gear = data['gear']
+        gear = data.get('gear', 1)
+        if gear is None:
+            gear = 1
         if gear == 0:
             gear_text = 'R'
         elif gear == 1:
@@ -4203,29 +4214,37 @@ class TelemetryApp(QMainWindow):
             gear_text = str(gear - 1)  # 2→1st, 3→2nd, …
 
         # ── Dashboard updates ────────────────────────────────────────────
-        self.speed_value.setText(f"{int(data['speed'])}")
+        speed = data.get('speed', 0.0) or 0.0
+        self.speed_value.setText(f"{int(speed)}")
         self.gear_value.setText(gear_text)
 
-        rpm = data['rpm']
-        max_rpm = data['max_rpm']
+        rpm = data.get('rpm', 0.0) or 0.0
+        max_rpm = data.get('max_rpm', 8000.0) or 8000.0
         self.rev_bar.set_value(rpm, max_rpm)
         self.rpm_numbers.setText(f"{int(rpm):,} / {int(max_rpm):,}")
 
-        self.throttle_bar.set_value(data['throttle'])
-        self.brake_bar.set_value(data['brake'])
+        throttle = data.get('throttle', 0.0) or 0.0
+        brake = data.get('brake', 0.0) or 0.0
+        self.throttle_bar.set_value(throttle)
+        self.brake_bar.set_value(brake)
 
-        self.steering_widget.set_angle(data['steer_angle'])
+        steer_angle = data.get('steer_angle', 0.0) or 0.0
+        self.steering_widget.set_angle(steer_angle)
 
-        self.abs_badge.set_active(data['abs'] > 0, f"{data['abs']:.1f}")
-        self.tc_badge.set_active(data['tc'] > 0, f"{data['tc']:.1f}")
+        abs_val = data.get('abs', 0.0) or 0.0
+        tc_val = data.get('tc', 0.0) or 0.0
+        self.abs_badge.set_active(abs_val > 0, f"{abs_val:.1f}")
+        self.tc_badge.set_active(tc_val > 0, f"{tc_val:.1f}")
 
+        car_name = data.get('car_name', '') or ''
+        track_name = data.get('track_name', '') or ''
         self.car_label.setText(
             QFontMetrics(self.car_label.font()).elidedText(
-                data['car_name'], Qt.TextElideMode.ElideRight, 196))
+                car_name, Qt.TextElideMode.ElideRight, 196))
         self.track_label.setText(
             QFontMetrics(self.track_label.font()).elidedText(
-                data['track_name'], Qt.TextElideMode.ElideRight, 236))
-        self._auto_detect_track(data['track_name'])
+                track_name, Qt.TextElideMode.ElideRight, 236))
+        self._auto_detect_track(track_name)
 
         fuel = data.get('fuel', 0.0)
         self._fuel_lbl.setText(f"{fuel:.1f}")
@@ -4260,10 +4279,12 @@ class TelemetryApp(QMainWindow):
             self._bias_front_fill.setStyleSheet(
                 f'background: {col}; border-radius: 3px; border: none;')
 
-        self._position_lbl.setText(str(data['position']))
+        position = data.get('position', 0) or 0
+        self._position_lbl.setText(str(position))
 
-        if data['lap_time'] > 0:
-            lt = data['lap_time']
+        lap_time = data.get('lap_time', 0) or 0
+        if lap_time > 0:
+            lt = lap_time
             m = int(lt // 60)
             s = lt % 60
             self._laptime_lbl.setText(f'{m}:{s:06.3f}')
@@ -4279,17 +4300,17 @@ class TelemetryApp(QMainWindow):
             self.rec_label.setText(f'{self.recorder.sample_count} pts')
 
         # ── Graph updates (only render when visible) ──────────────────────
-        steer_deg = math.degrees(data['steer_angle'])
+        steer_deg = math.degrees(steer_angle)
         gear_int = gear if isinstance(gear, int) else 0
         _current_tab = self.tabs.currentIndex()
 
         if _current_tab == 1:  # TELEMETRY GRAPHS
-            self.speed_graph.update_data(data['speed'])
-            self.pedals_graph.update_data(data['throttle'], data['brake'])
+            self.speed_graph.update_data(speed)
+            self.pedals_graph.update_data(throttle, brake)
             self.steering_graph.update_data(steer_deg)
             self.rpm_graph.update_data(rpm)
             self.gear_graph.update_data(gear_int)
-            self.aids_graph.update_data(data['abs'], data['tc'])
+            self.aids_graph.update_data(abs_val, tc_val)
 
         # ── Lap Analysis graphs ──────────────────────────────────────────
         current_time = data.get('current_time', 0)
@@ -4302,8 +4323,8 @@ class TelemetryApp(QMainWindow):
         distance_m = lap_progress * _track_length_m
 
         if _current_tab == 2:  # LAP ANALYSIS
-            self.ana_speed.update_data(distance_m, data['speed'])
-            self.ana_throttle_brake.update_data(distance_m, data['throttle'], data['brake'])
+            self.ana_speed.update_data(distance_m, speed)
+            self.ana_throttle_brake.update_data(distance_m, throttle, brake)
             self.ana_gear.update_data(distance_m, gear_int)
             self.ana_rpm.update_data(distance_m, rpm)
             self.ana_steer.update_data(distance_m, steer_deg)
@@ -4321,10 +4342,10 @@ class TelemetryApp(QMainWindow):
         else:
             _bias_pct = 0.0
         _math_raw = {
-            'speed': data['speed'], 'throttle': data['throttle'],
-            'brake': data['brake'], 'steer_deg': steer_deg,
+            'speed': speed, 'throttle': throttle,
+            'brake': brake, 'steer_deg': steer_deg,
             'rpm': float(rpm), 'gear': float(gear_int),
-            'abs': data['abs'], 'tc': data['tc'],
+            'abs': abs_val, 'tc': tc_val,
             'fuel_l': data.get('fuel', 0.0), 'brake_bias_pct': _bias_pct,
             'air_temp': data.get('air_temp', 0.0),
             'road_temp': data.get('road_temp', 0.0),
