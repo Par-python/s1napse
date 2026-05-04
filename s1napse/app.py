@@ -109,16 +109,6 @@ class TelemetrySampler(threading.Thread):
         self._running = False
 
 
-# Compatibility aliases for files inside s1napse/widgets/ that still import
-# old constant names. Removed once those modules are migrated to `theme`.
-BG1 = SURFACE
-BG2 = SURFACE_RAISED
-BG3 = SURFACE_HOVER
-BORDER = BORDER_SUBTLE
-BORDER2 = BORDER_STRONG
-TXT = TEXT_SECONDARY
-TXT2 = TEXT_MUTED
-WHITE = TEXT_PRIMARY
 
 
 class TelemetryApp(QMainWindow):
@@ -339,7 +329,7 @@ class TelemetryApp(QMainWindow):
         title = QLabel('s1napse')
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setFont(sans(48, bold=True))
-        title.setStyleSheet(f'color: {WHITE}; background: transparent; letter-spacing: 6px;')
+        title.setStyleSheet(f'color: {TEXT_PRIMARY}; background: transparent; letter-spacing: 6px;')
         outer.addWidget(title)
 
         # Accent line under title
@@ -430,7 +420,7 @@ class TelemetryApp(QMainWindow):
         desc = QLabel('Real-time telemetry analysis and lap replay')
         desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         desc.setFont(sans(10))
-        desc.setStyleSheet(f'color: {TXT2}; background: transparent; padding-bottom: 24px;')
+        desc.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; padding-bottom: 24px;')
         outer.addWidget(desc)
 
         return page
@@ -442,13 +432,13 @@ class TelemetryApp(QMainWindow):
         card.setFixedSize(240, 150)
         card.setEnabled(enabled)
 
-        border_col = BORDER2 if enabled else '#1a1a1a'
-        text_col = TXT if enabled else TXT2
-        sub_col = TXT2 if enabled else '#3a3a3a'
+        border_col = BORDER_STRONG if enabled else '#1a1a1a'
+        text_col = TEXT_SECONDARY if enabled else TEXT_MUTED
+        sub_col = TEXT_MUTED if enabled else '#3a3a3a'
 
         card.setStyleSheet(f"""
             QWidget {{
-                background: {BG2};
+                background: {SURFACE_RAISED};
                 border: 1px solid {border_col};
                 border-radius: 10px;
             }}
@@ -474,8 +464,8 @@ class TelemetryApp(QMainWindow):
             QRadioButton::indicator {{
                 width: 14px; height: 14px;
                 border-radius: 7px;
-                border: 2px solid {BORDER2 if enabled else '#1a1a1a'};
-                background: {BG3};
+                border: 2px solid {BORDER_STRONG if enabled else '#1a1a1a'};
+                background: {SURFACE_HOVER};
             }}
             QRadioButton::indicator:checked {{
                 background: {C_SPEED};
@@ -502,7 +492,7 @@ class TelemetryApp(QMainWindow):
             tag = QLabel('COMING SOON')
             tag.setFont(sans(7, bold=True))
             tag.setAlignment(Qt.AlignmentFlag.AlignRight)
-            tag.setStyleSheet(f'color: {TXT2}; background: transparent; border: none;'
+            tag.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; border: none;'
                               f' letter-spacing: 1px;')
             vl.addWidget(tag)
 
@@ -534,7 +524,7 @@ class TelemetryApp(QMainWindow):
         title = QLabel('ELM327 OBD-II SETUP')
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setFont(sans(28, bold=True))
-        title.setStyleSheet(f'color: {WHITE}; background: transparent; letter-spacing: 4px;')
+        title.setStyleSheet(f'color: {TEXT_PRIMARY}; background: transparent; letter-spacing: 4px;')
         outer.addWidget(title)
 
         # Accent line
@@ -554,7 +544,7 @@ class TelemetryApp(QMainWindow):
         form = QWidget()
         form.setFixedWidth(400)
         form.setStyleSheet(f"""
-            QWidget {{ background: {BG2}; border: 1px solid {BORDER2}; border-radius: 10px; }}
+            QWidget {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_STRONG}; border-radius: 10px; }}
         """)
         fl = QVBoxLayout(form)
         fl.setContentsMargins(28, 24, 28, 24)
@@ -563,14 +553,14 @@ class TelemetryApp(QMainWindow):
         # Connection type
         type_lbl = QLabel('CONNECTION TYPE')
         type_lbl.setFont(sans(8, bold=True))
-        type_lbl.setStyleSheet(f'color: {TXT2}; background: transparent; border: none;'
+        type_lbl.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; border: none;'
                                f' letter-spacing: 1px;')
         fl.addWidget(type_lbl)
 
         self._obd_type_combo = QComboBox()
         self._obd_type_combo.addItems(['WiFi', 'Bluetooth / Serial'])
         self._obd_type_combo.setStyleSheet(f"""
-            QComboBox {{ background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};
+            QComboBox {{ background: {SURFACE_HOVER}; color: {TEXT_SECONDARY}; border: 1px solid {BORDER_STRONG};
                          border-radius: 4px; padding: 6px 10px; }}
         """)
         self._obd_type_combo.currentIndexChanged.connect(self._on_obd_type_changed)
@@ -585,24 +575,24 @@ class TelemetryApp(QMainWindow):
 
         ip_lbl = QLabel('IP ADDRESS')
         ip_lbl.setFont(sans(8, bold=True))
-        ip_lbl.setStyleSheet(f'color: {TXT2}; background: transparent; border: none;'
+        ip_lbl.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; border: none;'
                              f' letter-spacing: 1px;')
         wfl.addWidget(ip_lbl)
         self._obd_ip = QLineEdit('192.168.0.10')
         self._obd_ip.setStyleSheet(f"""
-            QLineEdit {{ background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};
+            QLineEdit {{ background: {SURFACE_HOVER}; color: {TEXT_SECONDARY}; border: 1px solid {BORDER_STRONG};
                          border-radius: 4px; padding: 6px 10px; }}
         """)
         wfl.addWidget(self._obd_ip)
 
         port_lbl = QLabel('PORT')
         port_lbl.setFont(sans(8, bold=True))
-        port_lbl.setStyleSheet(f'color: {TXT2}; background: transparent; border: none;'
+        port_lbl.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; border: none;'
                                f' letter-spacing: 1px;')
         wfl.addWidget(port_lbl)
         self._obd_port = QLineEdit('35000')
         self._obd_port.setStyleSheet(f"""
-            QLineEdit {{ background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};
+            QLineEdit {{ background: {SURFACE_HOVER}; color: {TEXT_SECONDARY}; border: 1px solid {BORDER_STRONG};
                          border-radius: 4px; padding: 6px 10px; }}
         """)
         wfl.addWidget(self._obd_port)
@@ -618,14 +608,14 @@ class TelemetryApp(QMainWindow):
 
         serial_lbl = QLabel('SERIAL PORT')
         serial_lbl.setFont(sans(8, bold=True))
-        serial_lbl.setStyleSheet(f'color: {TXT2}; background: transparent; border: none;'
+        serial_lbl.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; border: none;'
                                  f' letter-spacing: 1px;')
         bfl.addWidget(serial_lbl)
         import platform as _plat
         default_serial = 'COM3' if _plat.system() == 'Windows' else '/dev/rfcomm0'
         self._obd_serial = QLineEdit(default_serial)
         self._obd_serial.setStyleSheet(f"""
-            QLineEdit {{ background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};
+            QLineEdit {{ background: {SURFACE_HOVER}; color: {TEXT_SECONDARY}; border: 1px solid {BORDER_STRONG};
                          border-radius: 4px; padding: 6px 10px; }}
         """)
         bfl.addWidget(self._obd_serial)
@@ -635,7 +625,7 @@ class TelemetryApp(QMainWindow):
         self._obd_status = QLabel('')
         self._obd_status.setFont(sans(9))
         self._obd_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._obd_status.setStyleSheet(f'color: {TXT2}; background: transparent; border: none;')
+        self._obd_status.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; border: none;')
         fl.addWidget(self._obd_status)
 
         # Buttons
@@ -647,7 +637,7 @@ class TelemetryApp(QMainWindow):
         back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         back_btn.setFixedHeight(40)
         back_btn.setStyleSheet(f"""
-            QPushButton {{ background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};
+            QPushButton {{ background: {SURFACE_HOVER}; color: {TEXT_SECONDARY}; border: 1px solid {BORDER_STRONG};
                            border-radius: 6px; letter-spacing: 1px; }}
             QPushButton:hover {{ background: #2d2d2d; border-color: #4a4a4a; }}
         """)
@@ -678,8 +668,8 @@ class TelemetryApp(QMainWindow):
         demo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         demo_btn.setFixedHeight(32)
         demo_btn.setStyleSheet(f"""
-            QPushButton {{ background: transparent; color: {TXT2};
-                           border: 1px solid {BORDER2}; border-radius: 4px;
+            QPushButton {{ background: transparent; color: {TEXT_MUTED};
+                           border: 1px solid {BORDER_STRONG}; border-radius: 4px;
                            letter-spacing: 0.5px; }}
             QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}
         """)
@@ -702,7 +692,7 @@ class TelemetryApp(QMainWindow):
         hint = QLabel('Plug the ELM327 adapter into your OBD-II port and ensure it is powered on')
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint.setFont(sans(9))
-        hint.setStyleSheet(f'color: {TXT2}; background: transparent; padding-bottom: 24px;')
+        hint.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; padding-bottom: 24px;')
         outer.addWidget(hint)
 
         return page
@@ -788,7 +778,7 @@ class TelemetryApp(QMainWindow):
         # ── Top bar ──────────────────────────────────────────────────────
         top = QWidget()
         top.setFixedHeight(42)
-        top.setStyleSheet(f'background: {BG2}; border-bottom: 1px solid {BORDER2};')
+        top.setStyleSheet(f'background: {SURFACE_RAISED}; border-bottom: 1px solid {BORDER_STRONG};')
         tl = QHBoxLayout(top)
         tl.setContentsMargins(16, 0, 16, 0)
         tl.setSpacing(14)
@@ -800,7 +790,7 @@ class TelemetryApp(QMainWindow):
 
         self._real_status = QLabel('OBD-II CONNECTED')
         self._real_status.setFont(sans(9, bold=True))
-        self._real_status.setStyleSheet(f'color: {WHITE}; letter-spacing: 1px;')
+        self._real_status.setStyleSheet(f'color: {TEXT_PRIMARY}; letter-spacing: 1px;')
         tl.addWidget(self._real_status)
 
         tl.addWidget(_vsep())
@@ -826,7 +816,7 @@ class TelemetryApp(QMainWindow):
         # Lap info
         self._real_lap_lbl = QLabel('LAP 0')
         self._real_lap_lbl.setFont(sans(9, bold=True))
-        self._real_lap_lbl.setStyleSheet(f'color: {TXT}; letter-spacing: 1px;')
+        self._real_lap_lbl.setStyleSheet(f'color: {TEXT_SECONDARY}; letter-spacing: 1px;')
         tl.addWidget(self._real_lap_lbl)
 
         tl.addWidget(_vsep())
@@ -840,7 +830,7 @@ class TelemetryApp(QMainWindow):
 
         self._real_last_lbl = QLabel('LAST  --:--.---')
         self._real_last_lbl.setFont(mono(10))
-        self._real_last_lbl.setStyleSheet(f'color: {TXT2};')
+        self._real_last_lbl.setStyleSheet(f'color: {TEXT_MUTED};')
         tl.addWidget(self._real_last_lbl)
 
         tl.addWidget(_vsep())
@@ -851,9 +841,9 @@ class TelemetryApp(QMainWindow):
         back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         back_btn.setFont(sans(8, bold=True))
         back_btn.setStyleSheet(
-            f'QPushButton {{ background: {BG3}; color: {TXT2};'
-            f' border: 1px solid {BORDER2}; border-radius: 4px; letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ color: {TXT}; border-color: #4a4a4a; }}'
+            f'QPushButton {{ background: {SURFACE_HOVER}; color: {TEXT_MUTED};'
+            f' border: 1px solid {BORDER_STRONG}; border-radius: 4px; letter-spacing: 1px; }}'
+            f'QPushButton:hover {{ color: {TEXT_SECONDARY}; border-color: #4a4a4a; }}'
         )
         back_btn.clicked.connect(self._on_real_back)
         tl.addWidget(back_btn)
@@ -874,13 +864,13 @@ class TelemetryApp(QMainWindow):
         # Speed card
         speed_card = QFrame()
         speed_card.setStyleSheet(
-            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
         sc_l = QVBoxLayout(speed_card)
         sc_l.setContentsMargins(24, 20, 24, 20)
         sc_l.setSpacing(4)
         sc_hdr = QLabel('SPEED')
         sc_hdr.setFont(sans(8, bold=True))
-        sc_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
+        sc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 2px;')
         sc_l.addWidget(sc_hdr)
         self._real_speed = QLabel('0')
         self._real_speed.setFont(mono(52, bold=True))
@@ -889,7 +879,7 @@ class TelemetryApp(QMainWindow):
         sc_l.addWidget(self._real_speed)
         sc_unit = QLabel('km/h')
         sc_unit.setFont(sans(10))
-        sc_unit.setStyleSheet(f'color: {TXT2};')
+        sc_unit.setStyleSheet(f'color: {TEXT_MUTED};')
         sc_unit.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sc_l.addWidget(sc_unit)
         hero_row.addWidget(speed_card, 3)
@@ -897,13 +887,13 @@ class TelemetryApp(QMainWindow):
         # RPM card
         rpm_card = QFrame()
         rpm_card.setStyleSheet(
-            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
         rc_l = QVBoxLayout(rpm_card)
         rc_l.setContentsMargins(24, 20, 24, 20)
         rc_l.setSpacing(4)
         rc_hdr = QLabel('RPM')
         rc_hdr.setFont(sans(8, bold=True))
-        rc_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
+        rc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 2px;')
         rc_l.addWidget(rc_hdr)
         self._real_rpm = QLabel('0')
         self._real_rpm.setFont(mono(52, bold=True))
@@ -919,18 +909,18 @@ class TelemetryApp(QMainWindow):
         # Gear card
         gear_card = QFrame()
         gear_card.setStyleSheet(
-            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
         gc_l = QVBoxLayout(gear_card)
         gc_l.setContentsMargins(16, 20, 16, 20)
         gc_l.setSpacing(4)
         gc_hdr = QLabel('GEAR')
         gc_hdr.setFont(sans(8, bold=True))
-        gc_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
+        gc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 2px;')
         gc_hdr.setAlignment(Qt.AlignmentFlag.AlignCenter)
         gc_l.addWidget(gc_hdr)
         self._real_gear = QLabel('N')
         self._real_gear.setFont(mono(64, bold=True))
-        self._real_gear.setStyleSheet(f'color: {WHITE};')
+        self._real_gear.setStyleSheet(f'color: {TEXT_PRIMARY};')
         self._real_gear.setAlignment(Qt.AlignmentFlag.AlignCenter)
         gc_l.addWidget(self._real_gear)
         gc_l.addStretch()
@@ -945,13 +935,13 @@ class TelemetryApp(QMainWindow):
         # Throttle card
         thr_card = QFrame()
         thr_card.setStyleSheet(
-            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
         tc_l = QVBoxLayout(thr_card)
         tc_l.setContentsMargins(20, 14, 20, 14)
         tc_l.setSpacing(6)
         tc_hdr = QLabel('THROTTLE')
         tc_hdr.setFont(sans(8, bold=True))
-        tc_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
+        tc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 2px;')
         tc_l.addWidget(tc_hdr)
         self._real_throttle_val = QLabel('0%')
         self._real_throttle_val.setFont(mono(24, bold=True))
@@ -961,7 +951,7 @@ class TelemetryApp(QMainWindow):
         self._real_throttle_bar = QWidget()
         self._real_throttle_bar.setFixedHeight(10)
         self._real_throttle_bar.setStyleSheet(
-            f'background: {BG3}; border-radius: 5px;')
+            f'background: {SURFACE_HOVER}; border-radius: 5px;')
         tc_l.addWidget(self._real_throttle_bar)
         self._real_thr_fill = QWidget(self._real_throttle_bar)
         self._real_thr_fill.setFixedHeight(10)
@@ -973,13 +963,13 @@ class TelemetryApp(QMainWindow):
         # Fuel card
         fuel_card = QFrame()
         fuel_card.setStyleSheet(
-            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
         fc_l = QVBoxLayout(fuel_card)
         fc_l.setContentsMargins(20, 14, 20, 14)
         fc_l.setSpacing(6)
         fc_hdr = QLabel('FUEL LEVEL')
         fc_hdr.setFont(sans(8, bold=True))
-        fc_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
+        fc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 2px;')
         fc_l.addWidget(fc_hdr)
         self._real_fuel = QLabel('--%')
         self._real_fuel.setFont(mono(24, bold=True))
@@ -989,7 +979,7 @@ class TelemetryApp(QMainWindow):
         self._real_fuel_bar = QWidget()
         self._real_fuel_bar.setFixedHeight(10)
         self._real_fuel_bar.setStyleSheet(
-            f'background: {BG3}; border-radius: 5px;')
+            f'background: {SURFACE_HOVER}; border-radius: 5px;')
         fc_l.addWidget(self._real_fuel_bar)
         self._real_fuel_fill = QWidget(self._real_fuel_bar)
         self._real_fuel_fill.setFixedHeight(10)
@@ -1001,13 +991,13 @@ class TelemetryApp(QMainWindow):
         # Coolant temp card
         cool_card = QFrame()
         cool_card.setStyleSheet(
-            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
         cc_l = QVBoxLayout(cool_card)
         cc_l.setContentsMargins(20, 14, 20, 14)
         cc_l.setSpacing(6)
         cc_hdr = QLabel('COOLANT TEMP')
         cc_hdr.setFont(sans(8, bold=True))
-        cc_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
+        cc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 2px;')
         cc_l.addWidget(cc_hdr)
         self._real_coolant = QLabel('--\u00b0C')
         self._real_coolant.setFont(mono(24, bold=True))
@@ -1019,13 +1009,13 @@ class TelemetryApp(QMainWindow):
         # Intake temp card
         intake_card = QFrame()
         intake_card.setStyleSheet(
-            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
         ic_l = QVBoxLayout(intake_card)
         ic_l.setContentsMargins(20, 14, 20, 14)
         ic_l.setSpacing(6)
         ic_hdr = QLabel('INTAKE TEMP')
         ic_hdr.setFont(sans(8, bold=True))
-        ic_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
+        ic_hdr.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 2px;')
         ic_l.addWidget(ic_hdr)
         self._real_intake = QLabel('--\u00b0C')
         self._real_intake.setFont(mono(24, bold=True))
@@ -1042,22 +1032,22 @@ class TelemetryApp(QMainWindow):
 
         # Speed history graph
         self._real_speed_history: list[float] = []
-        self._real_speed_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=BG2))
+        self._real_speed_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=SURFACE_RAISED))
         self._real_speed_ax = self._real_speed_canvas.figure.add_subplot(111)
-        self._real_speed_ax.set_facecolor(BG2)
-        self._real_speed_ax.tick_params(colors=TXT2, labelsize=7)
+        self._real_speed_ax.set_facecolor(SURFACE_RAISED)
+        self._real_speed_ax.tick_params(colors=TEXT_MUTED, labelsize=7)
         self._real_speed_ax.spines['top'].set_visible(False)
         self._real_speed_ax.spines['right'].set_visible(False)
-        self._real_speed_ax.spines['left'].set_color(BORDER)
-        self._real_speed_ax.spines['bottom'].set_color(BORDER)
-        self._real_speed_ax.set_ylabel('km/h', color=TXT2, fontsize=7)
-        self._real_speed_ax.set_title('SPEED', color=TXT2, fontsize=8, pad=4)
+        self._real_speed_ax.spines['left'].set_color(BORDER_SUBTLE)
+        self._real_speed_ax.spines['bottom'].set_color(BORDER_SUBTLE)
+        self._real_speed_ax.set_ylabel('km/h', color=TEXT_MUTED, fontsize=7)
+        self._real_speed_ax.set_title('SPEED', color=TEXT_MUTED, fontsize=8, pad=4)
         self._real_speed_canvas.figure.subplots_adjust(
             left=0.12, right=0.97, top=0.82, bottom=0.15)
 
         s_frame = QFrame()
         s_frame.setStyleSheet(
-            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
         sfl = QVBoxLayout(s_frame)
         sfl.setContentsMargins(4, 4, 4, 4)
         sfl.addWidget(self._real_speed_canvas)
@@ -1065,22 +1055,22 @@ class TelemetryApp(QMainWindow):
 
         # Throttle history graph
         self._real_thr_history: list[float] = []
-        self._real_thr_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=BG2))
+        self._real_thr_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=SURFACE_RAISED))
         self._real_thr_ax = self._real_thr_canvas.figure.add_subplot(111)
-        self._real_thr_ax.set_facecolor(BG2)
-        self._real_thr_ax.tick_params(colors=TXT2, labelsize=7)
+        self._real_thr_ax.set_facecolor(SURFACE_RAISED)
+        self._real_thr_ax.tick_params(colors=TEXT_MUTED, labelsize=7)
         self._real_thr_ax.spines['top'].set_visible(False)
         self._real_thr_ax.spines['right'].set_visible(False)
-        self._real_thr_ax.spines['left'].set_color(BORDER)
-        self._real_thr_ax.spines['bottom'].set_color(BORDER)
-        self._real_thr_ax.set_ylabel('%', color=TXT2, fontsize=7)
-        self._real_thr_ax.set_title('THROTTLE', color=TXT2, fontsize=8, pad=4)
+        self._real_thr_ax.spines['left'].set_color(BORDER_SUBTLE)
+        self._real_thr_ax.spines['bottom'].set_color(BORDER_SUBTLE)
+        self._real_thr_ax.set_ylabel('%', color=TEXT_MUTED, fontsize=7)
+        self._real_thr_ax.set_title('THROTTLE', color=TEXT_MUTED, fontsize=8, pad=4)
         self._real_thr_canvas.figure.subplots_adjust(
             left=0.12, right=0.97, top=0.82, bottom=0.15)
 
         t_frame = QFrame()
         t_frame.setStyleSheet(
-            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
         tfl = QVBoxLayout(t_frame)
         tfl.setContentsMargins(4, 4, 4, 4)
         tfl.addWidget(self._real_thr_canvas)
@@ -1088,22 +1078,22 @@ class TelemetryApp(QMainWindow):
 
         # RPM history graph
         self._real_rpm_history: list[float] = []
-        self._real_rpm_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=BG2))
+        self._real_rpm_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=SURFACE_RAISED))
         self._real_rpm_ax = self._real_rpm_canvas.figure.add_subplot(111)
-        self._real_rpm_ax.set_facecolor(BG2)
-        self._real_rpm_ax.tick_params(colors=TXT2, labelsize=7)
+        self._real_rpm_ax.set_facecolor(SURFACE_RAISED)
+        self._real_rpm_ax.tick_params(colors=TEXT_MUTED, labelsize=7)
         self._real_rpm_ax.spines['top'].set_visible(False)
         self._real_rpm_ax.spines['right'].set_visible(False)
-        self._real_rpm_ax.spines['left'].set_color(BORDER)
-        self._real_rpm_ax.spines['bottom'].set_color(BORDER)
-        self._real_rpm_ax.set_ylabel('rpm', color=TXT2, fontsize=7)
-        self._real_rpm_ax.set_title('RPM', color=TXT2, fontsize=8, pad=4)
+        self._real_rpm_ax.spines['left'].set_color(BORDER_SUBTLE)
+        self._real_rpm_ax.spines['bottom'].set_color(BORDER_SUBTLE)
+        self._real_rpm_ax.set_ylabel('rpm', color=TEXT_MUTED, fontsize=7)
+        self._real_rpm_ax.set_title('RPM', color=TEXT_MUTED, fontsize=8, pad=4)
         self._real_rpm_canvas.figure.subplots_adjust(
             left=0.12, right=0.97, top=0.82, bottom=0.15)
 
         r_frame = QFrame()
         r_frame.setStyleSheet(
-            f'QFrame {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 8px; }}')
+            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
         rfl = QVBoxLayout(r_frame)
         rfl.setContentsMargins(4, 4, 4, 4)
         rfl.addWidget(self._real_rpm_canvas)
@@ -1234,19 +1224,19 @@ class TelemetryApp(QMainWindow):
                 (self._real_rpm_ax,   self._real_rpm_history,   C_RPM),
             ]:
                 ax.clear()
-                ax.set_facecolor(BG2)
+                ax.set_facecolor(SURFACE_RAISED)
                 ax.plot(hist, color=color, linewidth=1.2)
-                ax.tick_params(colors=TXT2, labelsize=7)
+                ax.tick_params(colors=TEXT_MUTED, labelsize=7)
                 ax.spines['top'].set_visible(False)
                 ax.spines['right'].set_visible(False)
-                ax.spines['left'].set_color(BORDER)
-                ax.spines['bottom'].set_color(BORDER)
-            self._real_speed_ax.set_title('SPEED', color=TXT2, fontsize=8, pad=4)
-            self._real_speed_ax.set_ylabel('km/h', color=TXT2, fontsize=7)
-            self._real_thr_ax.set_title('THROTTLE', color=TXT2, fontsize=8, pad=4)
-            self._real_thr_ax.set_ylabel('%', color=TXT2, fontsize=7)
-            self._real_rpm_ax.set_title('RPM', color=TXT2, fontsize=8, pad=4)
-            self._real_rpm_ax.set_ylabel('rpm', color=TXT2, fontsize=7)
+                ax.spines['left'].set_color(BORDER_SUBTLE)
+                ax.spines['bottom'].set_color(BORDER_SUBTLE)
+            self._real_speed_ax.set_title('SPEED', color=TEXT_MUTED, fontsize=8, pad=4)
+            self._real_speed_ax.set_ylabel('km/h', color=TEXT_MUTED, fontsize=7)
+            self._real_thr_ax.set_title('THROTTLE', color=TEXT_MUTED, fontsize=8, pad=4)
+            self._real_thr_ax.set_ylabel('%', color=TEXT_MUTED, fontsize=7)
+            self._real_rpm_ax.set_title('RPM', color=TEXT_MUTED, fontsize=8, pad=4)
+            self._real_rpm_ax.set_ylabel('rpm', color=TEXT_MUTED, fontsize=7)
             self._real_speed_canvas.draw_idle()
             self._real_thr_canvas.draw_idle()
             self._real_rpm_canvas.draw_idle()
@@ -1264,7 +1254,7 @@ class TelemetryApp(QMainWindow):
 
         self.connection_label = QLabel('DISCONNECTED')
         self.connection_label.setFont(sans(9))
-        self.connection_label.setStyleSheet(f'color: {TXT2}; letter-spacing: 0.5px;')
+        self.connection_label.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 0.5px;')
 
         out.append(self.connection_dot)
         out.append(self.connection_label)
@@ -1272,7 +1262,7 @@ class TelemetryApp(QMainWindow):
         # Game selector
         game_lbl = QLabel('SOURCE')
         game_lbl.setFont(sans(8))
-        game_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        game_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
         self.game_combo = QComboBox()
         self.game_combo.addItems([
             'Auto-Detect', 'ACC (Shared Memory)', 'AC (UDP)', 'iRacing (SDK)',
@@ -1286,7 +1276,7 @@ class TelemetryApp(QMainWindow):
         # Track selector
         track_lbl = QLabel('TRACK')
         track_lbl.setFont(sans(8))
-        track_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        track_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
         self.track_combo = QComboBox()
         self.track_combo.addItem('Auto-Detect', userData=None)
         for key, td in TRACKS.items():
@@ -1299,12 +1289,12 @@ class TelemetryApp(QMainWindow):
         # UDP settings
         host_lbl = QLabel('HOST')
         host_lbl.setFont(sans(8))
-        host_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        host_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
         self.udp_host = QLineEdit('127.0.0.1')
         self.udp_host.setFixedWidth(110)
         port_lbl = QLabel('PORT')
         port_lbl.setFont(sans(8))
-        port_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        port_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
         self.udp_port = QLineEdit('9996')
         self.udp_port.setFixedWidth(55)
         out.append(host_lbl)
@@ -1317,7 +1307,7 @@ class TelemetryApp(QMainWindow):
         self.rec_btn.setFixedSize(72, 22)
         self.rec_btn.setCheckable(True)
         self.rec_btn.setStyleSheet(
-            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
+            f'QPushButton {{ background: {SURFACE_HOVER}; color: {TEXT_MUTED}; border: 1px solid {BORDER_STRONG};'
             f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
             f'QPushButton:checked {{ background: #5a0000; color: {C_BRAKE};'
             f' border-color: {C_BRAKE}; }}'
@@ -1325,7 +1315,7 @@ class TelemetryApp(QMainWindow):
         self.rec_btn.toggled.connect(self._on_rec_toggled)
         self.rec_label = QLabel('')
         self.rec_label.setFont(sans(8))
-        self.rec_label.setStyleSheet(f'color: {TXT2};')
+        self.rec_label.setStyleSheet(f'color: {TEXT_MUTED};')
         out.append(self.rec_btn)
         out.append(self.rec_label)
 
@@ -1333,7 +1323,7 @@ class TelemetryApp(QMainWindow):
         self.import_track_btn = QPushButton('⬆  IMPORT MAP')
         self.import_track_btn.setFixedSize(100, 22)
         self.import_track_btn.setStyleSheet(
-            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
+            f'QPushButton {{ background: {SURFACE_HOVER}; color: {TEXT_MUTED}; border: 1px solid {BORDER_STRONG};'
             f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
             f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
         )
@@ -1364,12 +1354,12 @@ class TelemetryApp(QMainWindow):
         # Car / Track / Lap info labels
         self.car_label = QLabel('—')
         self.car_label.setFont(mono(10))
-        self.car_label.setStyleSheet(f'color: {TXT};')
+        self.car_label.setStyleSheet(f'color: {TEXT_SECONDARY};')
         self.car_label.setMaximumWidth(200)
         self.car_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.track_label = QLabel('—')
         self.track_label.setFont(mono(10))
-        self.track_label.setStyleSheet(f'color: {TXT};')
+        self.track_label.setStyleSheet(f'color: {TEXT_SECONDARY};')
         self.track_label.setMaximumWidth(240)
         self.track_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.header_lap_label = QLabel('LAP —')
@@ -1385,7 +1375,7 @@ class TelemetryApp(QMainWindow):
     def _build_connection_strip(self) -> QWidget:
         strip = QWidget()
         strip.setFixedHeight(38)
-        strip.setStyleSheet(f'background: {BG2}; border-bottom: 1px solid {BORDER2};')
+        strip.setStyleSheet(f'background: {SURFACE_RAISED}; border-bottom: 1px solid {BORDER_STRONG};')
         layout = QHBoxLayout(strip)
         layout.setContentsMargins(12, 0, 12, 0)
         layout.setSpacing(18)
@@ -1397,7 +1387,7 @@ class TelemetryApp(QMainWindow):
 
         self.connection_label = QLabel('DISCONNECTED')
         self.connection_label.setFont(sans(9))
-        self.connection_label.setStyleSheet(f'color: {TXT2}; letter-spacing: 0.5px;')
+        self.connection_label.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 0.5px;')
 
         layout.addWidget(self.connection_dot)
         layout.addWidget(self.connection_label)
@@ -1406,7 +1396,7 @@ class TelemetryApp(QMainWindow):
         # Game selector
         game_lbl = QLabel('SOURCE')
         game_lbl.setFont(sans(8))
-        game_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        game_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
         self.game_combo = QComboBox()
         self.game_combo.addItems([
             'Auto-Detect', 'ACC (Shared Memory)', 'AC (UDP)', 'iRacing (SDK)',
@@ -1422,7 +1412,7 @@ class TelemetryApp(QMainWindow):
         # Track selector
         track_lbl = QLabel('TRACK')
         track_lbl.setFont(sans(8))
-        track_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        track_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
         self.track_combo = QComboBox()
         self.track_combo.addItem('Auto-Detect', userData=None)
         for key, td in TRACKS.items():
@@ -1437,12 +1427,12 @@ class TelemetryApp(QMainWindow):
         # UDP settings
         host_lbl = QLabel('HOST')
         host_lbl.setFont(sans(8))
-        host_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        host_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
         self.udp_host = QLineEdit('127.0.0.1')
         self.udp_host.setFixedWidth(110)
         port_lbl = QLabel('PORT')
         port_lbl.setFont(sans(8))
-        port_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        port_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
         self.udp_port = QLineEdit('9996')
         self.udp_port.setFixedWidth(55)
         layout.addWidget(host_lbl)
@@ -1457,7 +1447,7 @@ class TelemetryApp(QMainWindow):
         self.rec_btn.setFixedSize(72, 22)
         self.rec_btn.setCheckable(True)
         self.rec_btn.setStyleSheet(
-            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
+            f'QPushButton {{ background: {SURFACE_HOVER}; color: {TEXT_MUTED}; border: 1px solid {BORDER_STRONG};'
             f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
             f'QPushButton:checked {{ background: #5a0000; color: {C_BRAKE};'
             f' border-color: {C_BRAKE}; }}'
@@ -1465,7 +1455,7 @@ class TelemetryApp(QMainWindow):
         self.rec_btn.toggled.connect(self._on_rec_toggled)
         self.rec_label = QLabel('')
         self.rec_label.setFont(sans(8))
-        self.rec_label.setStyleSheet(f'color: {TXT2};')
+        self.rec_label.setStyleSheet(f'color: {TEXT_MUTED};')
         layout.addWidget(self.rec_btn)
         layout.addWidget(self.rec_label)
 
@@ -1475,7 +1465,7 @@ class TelemetryApp(QMainWindow):
         self.import_track_btn = QPushButton('⬆  IMPORT MAP')
         self.import_track_btn.setFixedSize(100, 22)
         self.import_track_btn.setStyleSheet(
-            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
+            f'QPushButton {{ background: {SURFACE_HOVER}; color: {TEXT_MUTED}; border: 1px solid {BORDER_STRONG};'
             f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
             f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
         )
@@ -1510,12 +1500,12 @@ class TelemetryApp(QMainWindow):
         # Car / Track / Lap info
         self.car_label = QLabel('—')
         self.car_label.setFont(mono(10))
-        self.car_label.setStyleSheet(f'color: {TXT};')
+        self.car_label.setStyleSheet(f'color: {TEXT_SECONDARY};')
         self.car_label.setMaximumWidth(200)
         self.car_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.track_label = QLabel('—')
         self.track_label.setFont(mono(10))
-        self.track_label.setStyleSheet(f'color: {TXT};')
+        self.track_label.setStyleSheet(f'color: {TEXT_SECONDARY};')
         self.track_label.setMaximumWidth(240)
         self.track_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.header_lap_label = QLabel('LAP —')
@@ -1530,241 +1520,6 @@ class TelemetryApp(QMainWindow):
         layout.addWidget(self.header_lap_label)
 
         return strip
-
-    def _build_graphs_tab(self) -> QWidget:
-        tab = QWidget()
-        outer = QVBoxLayout(tab)
-        outer.setContentsMargins(10, 8, 10, 8)
-        outer.setSpacing(6)
-
-        # Export buttons — right-aligned
-        btn_row = QHBoxLayout()
-
-        # Math channel toggle button
-        _math_btn_style = (
-            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 5px 12px; font-size: 10px; letter-spacing: 0.5px; }}'
-            f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
-            f'QPushButton:checked {{ color: {C_SPEED}; border-color: {C_SPEED}; background: #0d2a3a; }}'
-        )
-        self._math_toggle_btn = QPushButton('\U0001f9ee  MATH CHANNELS')
-        self._math_toggle_btn.setFont(sans(8, bold=True))
-        self._math_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._math_toggle_btn.setStyleSheet(_math_btn_style)
-        self._math_toggle_btn.setCheckable(True)
-        self._math_toggle_btn.setToolTip('Open the math channel manager')
-        self._math_toggle_btn.toggled.connect(self._toggle_math_panel)
-        btn_row.addWidget(self._math_toggle_btn)
-
-        btn_row.addStretch()
-        self.export_last_lap_button = QPushButton('EXPORT LAP')
-        self.export_last_lap_button.clicked.connect(self.export_last_lap_graphs)
-        self.export_session_button = QPushButton('EXPORT SESSION')
-        self.export_session_button.clicked.connect(self.export_session_graphs)
-        _json_btn_style = (
-            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 5px 12px; font-size: 10px; letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
-        )
-        export_json_btn = QPushButton('⬇  EXPORT JSON')
-        export_json_btn.setFont(sans(8, bold=True))
-        export_json_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        export_json_btn.setStyleSheet(_json_btn_style)
-        export_json_btn.setToolTip('Export last completed lap as JSON (importable in Replay tab)')
-        export_json_btn.clicked.connect(self._export_graphs_lap_json)
-
-        _full_btn_style = (
-            f'QPushButton {{ background: {BG3}; color: {C_THROTTLE}; border: 1px solid {C_THROTTLE}44;'
-            f' border-radius: 4px; padding: 5px 12px; font-size: 10px; letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ color: {WHITE}; border-color: {C_THROTTLE}; background: {C_THROTTLE}22; }}'
-        )
-        export_full_btn = QPushButton('⬇  EXPORT FULL JSON')
-        export_full_btn.setFont(sans(8, bold=True))
-        export_full_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        export_full_btn.setStyleSheet(_full_btn_style)
-        export_full_btn.setToolTip(
-            'Export last lap with ALL data — telemetry, tyres, fuel, track map, session info')
-        export_full_btn.clicked.connect(self._export_full_lap_json)
-
-        btn_row.addWidget(self.export_last_lap_button)
-        btn_row.addWidget(self.export_session_button)
-        btn_row.addWidget(export_json_btn)
-        btn_row.addWidget(export_full_btn)
-        outer.addLayout(btn_row)
-
-        # Scroll area for graphs + math panel in a horizontal splitter
-        self._graphs_splitter = QSplitter(Qt.Orientation.Horizontal)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }')
-        container = QWidget()
-        container.setStyleSheet(f'background: {BG};')
-        vbox = QVBoxLayout(container)
-        vbox.setContentsMargins(4, 8, 4, 8)
-        vbox.setSpacing(10)
-        scroll.setWidget(container)
-
-        self._graphs_splitter.addWidget(scroll)
-        outer.addWidget(self._graphs_splitter)
-
-        self.speed_graph_title = _channel_header(C_SPEED, 'SPEED', 'km/h')
-        vbox.addWidget(self.speed_graph_title)
-        self.speed_graph = ChannelGraph(C_SPEED, 'km/h', ylim=(0, 300))
-        vbox.addWidget(self.speed_graph)
-        vbox.addWidget(h_line())
-
-        self.pedals_graph_title = _channel_header(C_THROTTLE, 'THROTTLE & BRAKE', '%')
-        vbox.addWidget(self.pedals_graph_title)
-        self.pedals_graph = MultiChannelGraph(
-            C_THROTTLE, C_BRAKE, '%', 'Throttle', 'Brake', ylim=(0, 100))
-        vbox.addWidget(self.pedals_graph)
-        vbox.addWidget(h_line())
-
-        self.steering_graph_title = _channel_header(C_STEER, 'STEERING', '°')
-        vbox.addWidget(self.steering_graph_title)
-        self.steering_graph = ChannelGraph(C_STEER, '°', ylim=(-540, 540))
-        vbox.addWidget(self.steering_graph)
-        vbox.addWidget(h_line())
-
-        self.rpm_graph_title = _channel_header(C_RPM, 'RPM', 'rpm')
-        vbox.addWidget(self.rpm_graph_title)
-        self.rpm_graph = ChannelGraph(C_RPM, 'rpm', ylim=(0, 10000))
-        vbox.addWidget(self.rpm_graph)
-        vbox.addWidget(h_line())
-
-        self.gear_graph_title = _channel_header(C_GEAR, 'GEAR', '')
-        vbox.addWidget(self.gear_graph_title)
-        self.gear_graph = ChannelGraph(C_GEAR, 'gear', ylim=(-1, 8))
-        vbox.addWidget(self.gear_graph)
-        vbox.addWidget(h_line())
-
-        self.aids_graph_title = _channel_header(C_ABS, 'ABS / TC', '')
-        vbox.addWidget(self.aids_graph_title)
-        self.aids_graph = MultiChannelGraph(
-            C_ABS, C_TC, 'activity', 'ABS', 'TC', ylim=(0, 10))
-        vbox.addWidget(self.aids_graph)
-
-        # Placeholder container for dynamically-added math channel graphs
-        self._math_graphs_container = QVBoxLayout()
-        vbox.addLayout(self._math_graphs_container)
-        self._math_graph_widgets: dict[str, tuple[QWidget, ChannelGraph]] = {}
-
-        return tab
-
-    def _build_analysis_tab(self) -> QWidget:
-        tab = QWidget()
-        main_layout = QVBoxLayout(tab)
-        main_layout.setContentsMargins(8, 8, 8, 8)
-        main_layout.setSpacing(6)
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-
-        # Left: sector times panel
-        self.sector_panel = SectorTimesPanel()
-        splitter.addWidget(self.sector_panel)
-
-        # Center: track map + lock button
-        map_container = QWidget()
-        map_container.setStyleSheet(f'background: {BG};')
-        map_vbox = QVBoxLayout(map_container)
-        map_vbox.setContentsMargins(0, 0, 0, 4)
-        map_vbox.setSpacing(4)
-        self.track_map = TrackMapWidget()
-        self.track_map.setMinimumWidth(300)
-        map_vbox.addWidget(self.track_map, stretch=1)
-        ctrl_row = QHBoxLayout()
-        ctrl_row.setContentsMargins(0, 0, 0, 0)
-        ctrl_row.setSpacing(8)
-
-        self._track_lock_btn = QPushButton('LOCK SHAPE')
-        self._track_lock_btn.setFont(mono(9, bold=True))
-        self._track_lock_btn.setCheckable(True)
-        self._track_lock_btn.setStyleSheet(
-            f'QPushButton {{background:{BG3};color:{WHITE};border:1px solid {BORDER};'
-            f'border-radius:4px;padding:4px 12px;}}'
-            f'QPushButton:checked {{background:#b45309;color:#fff;border-color:#d97706;}}'
-        )
-        self._track_lock_btn.toggled.connect(self._on_track_lock_toggled)
-        ctrl_row.addWidget(self._track_lock_btn)
-
-        self._raceline_chk = QCheckBox('Raceline')
-        self._raceline_chk.setFont(mono(9, bold=True))
-        self._raceline_chk.setChecked(True)
-        self._raceline_chk.setStyleSheet(
-            f'QCheckBox {{color:{TXT};spacing:6px;}}'
-            f'QCheckBox::indicator {{width:14px;height:14px;border:1px solid {BORDER};'
-            f'border-radius:3px;background:{BG3};}}'
-            f'QCheckBox::indicator:checked {{background:{C_THROTTLE};border-color:{C_THROTTLE};}}'
-        )
-        self._raceline_chk.toggled.connect(self._on_raceline_toggled)
-        ctrl_row.addWidget(self._raceline_chk)
-        ctrl_row.addStretch(1)
-        map_vbox.addLayout(ctrl_row)
-        splitter.addWidget(map_container)
-
-        # Right: analysis telemetry graphs in a scroll area
-        right_container = QWidget()
-        right_container.setStyleSheet(f'background: {BG};')
-        right_vbox = QVBoxLayout(right_container)
-        right_vbox.setContentsMargins(4, 4, 4, 4)
-        right_vbox.setSpacing(2)
-
-        self.ana_speed = AnalysisTelemetryGraph('Speed km/h', color=C_SPEED, ylim=(0, 320))
-        self.ana_throttle_brake = AnalysisMultiLineGraph(
-            '%', 'Throttle', 'Brake', color1=C_THROTTLE, color2=C_BRAKE, ylim=(0, 100))
-        self.ana_gear = AnalysisTelemetryGraph('Gear', color=C_GEAR, ylim=(-1, 8))
-        self.ana_rpm = AnalysisTelemetryGraph('RPM', color=C_RPM, ylim=(0, 10000))
-        self.ana_steer = AnalysisTelemetryGraph('Steer °', color=C_STEER, ylim=(-540, 540))
-
-        for label, graph in [
-            (('SPEED', C_SPEED, 'km/h'), self.ana_speed),
-            (('THROTTLE & BRAKE', C_THROTTLE, '%'), self.ana_throttle_brake),
-            (('GEAR', C_GEAR, ''), self.ana_gear),
-            (('RPM', C_RPM, 'rpm'), self.ana_rpm),
-            (('STEERING', C_STEER, '°'), self.ana_steer),
-        ]:
-            right_vbox.addWidget(_channel_header(label[1], label[0], label[2]))
-            right_vbox.addWidget(graph)
-            right_vbox.addWidget(h_line())
-
-        right_scroll = QScrollArea()
-        right_scroll.setWidgetResizable(True)
-        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        right_scroll.setWidget(right_container)
-        right_scroll.setMinimumWidth(300)
-        splitter.addWidget(right_scroll)
-        splitter.setSizes([220, 400, 420])
-        main_layout.addWidget(splitter, stretch=3)
-
-        # Bottom: time delta graph
-        delta_header = QLabel('TIME DELTA')
-        delta_header.setFont(sans(8))
-        delta_header.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px; padding-top: 4px;')
-        main_layout.addWidget(delta_header)
-
-        self.time_delta_graph = TimeDeltaGraph()
-        self.time_delta_graph.setMinimumHeight(130)
-        main_layout.addWidget(self.time_delta_graph, stretch=1)
-
-        # Sector marker strip
-        sector_strip = QHBoxLayout()
-        sector_strip.setSpacing(2)
-        sector_colors = [C_SPEED, C_THROTTLE, C_RPM, C_STEER, C_BRAKE]
-        for s, c in zip(['S1', 'S2', 'S3', 'S4', 'S5'], sector_colors):
-            lbl = QLabel(s)
-            lbl.setFont(mono(8, bold=True))
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet(
-                f'background: {BG3}; color: {c}; border: 1px solid {BORDER}; '
-                f'padding: 2px 8px; border-radius: 2px;'
-            )
-            sector_strip.addWidget(lbl)
-        sector_strip.addStretch()
-        main_layout.addLayout(sector_strip)
-
-        return tab
 
     # ------------------------------------------------------------------
     # DATA MANAGEMENT
@@ -1886,161 +1641,6 @@ class TelemetryApp(QMainWindow):
     # ------------------------------------------------------------------
     # LAP COMPARISON TAB
     # ------------------------------------------------------------------
-
-    def _build_comparison_tab(self) -> QWidget:
-        tab = QWidget()
-        outer = QVBoxLayout(tab)
-        outer.setContentsMargins(10, 10, 10, 10)
-        outer.setSpacing(8)
-
-        # ── Selector bar ──────────────────────────────────────────────
-        sel_card = QFrame()
-        sel_card.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
-        sel_row = QHBoxLayout(sel_card)
-        sel_row.setContentsMargins(14, 10, 14, 10)
-        sel_row.setSpacing(12)
-
-        def _lbl(text, color=TXT2):
-            l = QLabel(text)
-            l.setFont(sans(8, bold=True))
-            l.setStyleSheet(f'color: {color}; letter-spacing: 1px;')
-            return l
-
-        sel_row.addWidget(_lbl('LAP A'))
-        self._cmp_combo_a = QComboBox()
-        self._cmp_combo_a.setStyleSheet(
-            f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 4px 8px;')
-        self._cmp_combo_a.setMinimumWidth(180)
-        sel_row.addWidget(self._cmp_combo_a)
-
-        self._cmp_time_a = QLabel('—')
-        self._cmp_time_a.setFont(mono(9))
-        self._cmp_time_a.setStyleSheet(f'color: {C_SPEED};')
-        sel_row.addWidget(self._cmp_time_a)
-
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.VLine)
-        sep.setStyleSheet(f'color: {BORDER2};')
-        sel_row.addWidget(sep)
-
-        sel_row.addWidget(_lbl('LAP B'))
-        self._cmp_combo_b = QComboBox()
-        self._cmp_combo_b.setStyleSheet(
-            f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 4px 8px;')
-        self._cmp_combo_b.setMinimumWidth(180)
-        sel_row.addWidget(self._cmp_combo_b)
-
-        self._cmp_time_b = QLabel('—')
-        self._cmp_time_b.setFont(mono(9))
-        self._cmp_time_b.setStyleSheet(f'color: {C_STEER};')
-        sel_row.addWidget(self._cmp_time_b)
-
-        sel_row.addStretch()
-
-        self._cmp_delta_lbl = QLabel('')
-        self._cmp_delta_lbl.setFont(mono(9, bold=True))
-        self._cmp_delta_lbl.setStyleSheet(f'color: {TXT2};')
-        sel_row.addWidget(self._cmp_delta_lbl)
-
-        cmp_btn = QPushButton('COMPARE')
-        cmp_btn.setFont(sans(8, bold=True))
-        cmp_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        cmp_btn.setStyleSheet(
-            f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 6px 18px;'
-            f' letter-spacing: 1px;')
-        cmp_btn.clicked.connect(self._refresh_comparison)
-        sel_row.addWidget(cmp_btn)
-
-        sep2 = QFrame()
-        sep2.setFrameShape(QFrame.Shape.VLine)
-        sep2.setStyleSheet(f'color: {BORDER2};')
-        sel_row.addWidget(sep2)
-
-        _btn_style = (
-            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 6px 12px; font-size: 10px; letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
-        )
-
-        export_lap_btn = QPushButton('⬇  EXPORT LAP')
-        export_lap_btn.setFont(sans(8, bold=True))
-        export_lap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        export_lap_btn.setStyleSheet(_btn_style)
-        export_lap_btn.clicked.connect(self._export_lap_json)
-        sel_row.addWidget(export_lap_btn)
-
-        import_lap_btn = QPushButton('⬆  IMPORT LAP')
-        import_lap_btn.setFont(sans(8, bold=True))
-        import_lap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        import_lap_btn.setStyleSheet(_btn_style)
-        import_lap_btn.clicked.connect(self._import_lap_json)
-        sel_row.addWidget(import_lap_btn)
-
-        outer.addWidget(sel_card)
-
-        # ── Legend ────────────────────────────────────────────────────
-        legend_row = QHBoxLayout()
-        legend_row.setSpacing(16)
-        for label, color, style in [('Lap A', C_SPEED, '─────'),
-                                     ('Lap B', C_STEER, '- - -')]:
-            dot = QLabel(f'{style}  {label}')
-            dot.setFont(mono(8))
-            dot.setStyleSheet(f'color: {color};')
-            legend_row.addWidget(dot)
-        legend_row.addStretch()
-        outer.addLayout(legend_row)
-
-        # ── Scrollable graphs ─────────────────────────────────────────
-        graphs_container = QWidget()
-        graphs_container.setStyleSheet(f'background: {BG};')
-        graphs_vbox = QVBoxLayout(graphs_container)
-        graphs_vbox.setContentsMargins(4, 4, 4, 8)
-        graphs_vbox.setSpacing(4)
-
-        COLOR_A = C_SPEED
-        COLOR_B = C_STEER
-
-        self._cmp_speed = ComparisonGraph(
-            'Speed km/h', COLOR_A, COLOR_B, ylim=(0, 320))
-        self._cmp_thr_brk_a = ComparisonGraph(
-            'Throttle %', COLOR_A, COLOR_B, ylim=(0, 100))
-        self._cmp_brk = ComparisonGraph(
-            'Brake %', C_BRAKE, '#ff99aa', ylim=(0, 100))
-        self._cmp_gear = ComparisonGraph(
-            'Gear', COLOR_A, COLOR_B, ylim=(-1, 8))
-        self._cmp_rpm = ComparisonGraph(
-            'RPM', C_RPM, '#ffdd88', ylim=(0, 10000))
-        self._cmp_steer = ComparisonGraph(
-            'Steer °', COLOR_A, COLOR_B, ylim=(-540, 540))
-
-        for title, color, graph in [
-            ('SPEED', C_SPEED, self._cmp_speed),
-            ('THROTTLE', C_THROTTLE, self._cmp_thr_brk_a),
-            ('BRAKE', C_BRAKE, self._cmp_brk),
-            ('GEAR', C_GEAR, self._cmp_gear),
-            ('RPM', C_RPM, self._cmp_rpm),
-            ('STEERING', C_STEER, self._cmp_steer),
-        ]:
-            graphs_vbox.addWidget(_channel_header(color, title))
-            graphs_vbox.addWidget(graph)
-
-        # Delta graph
-        graphs_vbox.addWidget(_channel_header(C_DELTA, 'TIME DELTA', 's'))
-        self._cmp_delta_graph = ComparisonDeltaGraph()
-        graphs_vbox.addWidget(self._cmp_delta_graph)
-
-        graphs_scroll = QScrollArea()
-        graphs_scroll.setWidgetResizable(True)
-        graphs_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        graphs_scroll.setWidget(graphs_container)
-        graphs_scroll.setStyleSheet(f'background: {BG}; border: none;')
-        outer.addWidget(graphs_scroll, stretch=1)
-
-        return tab
 
     def _populate_comparison_combos(self):
         """Rebuild both QComboBoxes from self.session_laps (called after each lap stored)."""
@@ -2424,303 +2024,6 @@ class TelemetryApp(QMainWindow):
     # REPLAY TAB
     # ------------------------------------------------------------------
 
-    def _build_replay_tab(self) -> QWidget:
-        tab = QWidget()
-        outer = QVBoxLayout(tab)
-        outer.setContentsMargins(10, 10, 10, 10)
-        outer.setSpacing(8)
-
-        _btn_style = (
-            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 6px 12px; font-size: 10px; letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
-        )
-
-        # ── Top controls bar ──────────────────────────────────────────
-        ctrl_card = QFrame()
-        ctrl_card.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
-        ctrl_row = QHBoxLayout(ctrl_card)
-        ctrl_row.setContentsMargins(14, 8, 14, 8)
-        ctrl_row.setSpacing(10)
-
-        def _lbl(text):
-            l = QLabel(text)
-            l.setFont(sans(8, bold=True))
-            l.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-            return l
-
-        ctrl_row.addWidget(_lbl('LAP'))
-        self._replay_combo = QComboBox()
-        self._replay_combo.setStyleSheet(
-            f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 4px 8px;')
-        self._replay_combo.setMinimumWidth(200)
-        ctrl_row.addWidget(self._replay_combo)
-
-        import_btn = QPushButton('IMPORT LAP')
-        import_btn.setFont(sans(8, bold=True))
-        import_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        import_btn.setStyleSheet(_btn_style)
-        import_btn.clicked.connect(self._import_replay_lap_json)
-        ctrl_row.addWidget(import_btn)
-
-        load_btn = QPushButton('LOAD')
-        load_btn.setFont(sans(8, bold=True))
-        load_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        load_btn.setStyleSheet(
-            f'QPushButton {{ background: {BG3}; color: {C_SPEED}; border: 1px solid {C_SPEED};'
-            f' border-radius: 4px; padding: 6px 18px; font-size: 10px; letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ background: #0a2030; }}'
-        )
-        load_btn.clicked.connect(
-            lambda: self._load_replay_lap(self._replay_combo.currentIndex()))
-        ctrl_row.addWidget(load_btn)
-
-        sep1 = QFrame()
-        sep1.setFrameShape(QFrame.Shape.VLine)
-        sep1.setStyleSheet(f'color: {BORDER2};')
-        ctrl_row.addWidget(sep1)
-
-        self._replay_play_btn = QPushButton('PLAY')
-        self._replay_play_btn.setFont(sans(9, bold=True))
-        self._replay_play_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._replay_play_btn.setFixedWidth(72)
-        self._replay_play_btn.setStyleSheet(
-            f'QPushButton {{ background: {BG3}; color: {C_THROTTLE}; border: 1px solid {C_THROTTLE};'
-            f' border-radius: 4px; padding: 6px; letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ background: #0a2018; }}'
-        )
-        self._replay_play_btn.clicked.connect(self._toggle_replay_playback)
-        ctrl_row.addWidget(self._replay_play_btn)
-
-        ctrl_row.addWidget(_lbl('SPEED'))
-        self._replay_speed_combo = QComboBox()
-        self._replay_speed_combo.addItems(['0.25x', '0.5x', '1x', '2x', '5x', '10x'])
-        self._replay_speed_combo.setCurrentIndex(2)
-        self._replay_speed_combo.setFixedWidth(70)
-        self._replay_speed_combo.setStyleSheet(
-            f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 4px 6px;')
-        self._replay_speed_combo.currentTextChanged.connect(self._on_replay_speed_changed)
-        ctrl_row.addWidget(self._replay_speed_combo)
-
-        ctrl_row.addStretch()
-
-        self._rpl_time_lbl = QLabel('—:——.——— / —:——.———')
-        self._rpl_time_lbl.setFont(mono(10, bold=True))
-        self._rpl_time_lbl.setStyleSheet(f'color: {C_SPEED};')
-        ctrl_row.addWidget(self._rpl_time_lbl)
-
-        outer.addWidget(ctrl_card)
-
-        # ── Sector scrubber ───────────────────────────────────────────
-        self._replay_scrub = SectorScrubWidget()
-        self._replay_scrub.valueChanged.connect(self._replay_scrubber_moved)
-        outer.addWidget(self._replay_scrub)
-
-        # ── Main content (left dashboard + right track map) ───────────
-        content_splitter = QSplitter(Qt.Orientation.Horizontal)
-        content_splitter.setHandleWidth(4)
-        content_splitter.setStyleSheet(f'QSplitter::handle {{ background: {BORDER2}; }}')
-
-        # ── Left: mini dashboard ──────────────────────────────────────
-        left_panel = QFrame()
-        left_panel.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
-        left_panel.setMinimumWidth(270)
-        left_panel.setMaximumWidth(370)
-        ll = QVBoxLayout(left_panel)
-        ll.setContentsMargins(12, 10, 12, 10)
-        ll.setSpacing(6)
-
-        # ── Sector badge ──────────────────────────────
-        sec_row = QHBoxLayout()
-        sec_hdr = QLabel('SECTOR')
-        sec_hdr.setFont(sans(7, bold=True))
-        sec_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        sec_row.addWidget(sec_hdr)
-        sec_row.addStretch()
-        self._rpl_sector_lbl = QLabel('—')
-        self._rpl_sector_lbl.setFont(mono(12, bold=True))
-        self._rpl_sector_lbl.setStyleSheet(f'color: {TXT2};')
-        sec_row.addWidget(self._rpl_sector_lbl)
-        ll.addLayout(sec_row)
-        ll.addWidget(h_line())
-
-        # ── Two-column body: info (left) | pedals + aids (right) ──────
-        body_row = QHBoxLayout()
-        body_row.setSpacing(10)
-
-        # Info column
-        info_col = QVBoxLayout()
-        info_col.setSpacing(4)
-
-        # Speed + Gear on same row
-        sg_row = QHBoxLayout()
-        sg_row.setSpacing(14)
-
-        speed_col = QVBoxLayout()
-        speed_col.setSpacing(0)
-        spd_hdr = QLabel('SPEED')
-        spd_hdr.setFont(sans(7, bold=True))
-        spd_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        self._rpl_speed_lbl = QLabel('0')
-        self._rpl_speed_lbl.setFont(mono(22, bold=True))
-        self._rpl_speed_lbl.setStyleSheet(f'color: {C_SPEED};')
-        spd_unit = QLabel('km/h')
-        spd_unit.setFont(sans(7))
-        spd_unit.setStyleSheet(f'color: {TXT2};')
-        speed_col.addWidget(spd_hdr)
-        speed_col.addWidget(self._rpl_speed_lbl)
-        speed_col.addWidget(spd_unit)
-        sg_row.addLayout(speed_col)
-
-        gear_col = QVBoxLayout()
-        gear_col.setSpacing(0)
-        gear_hdr = QLabel('GEAR')
-        gear_hdr.setFont(sans(7, bold=True))
-        gear_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        self._rpl_gear_lbl = QLabel('—')
-        self._rpl_gear_lbl.setFont(mono(22, bold=True))
-        self._rpl_gear_lbl.setStyleSheet(f'color: {C_GEAR};')
-        gear_col.addWidget(gear_hdr)
-        gear_col.addWidget(self._rpl_gear_lbl)
-        sg_row.addLayout(gear_col)
-        sg_row.addStretch()
-        info_col.addLayout(sg_row)
-
-        # RPM: label + value on one row, then bar
-        rpm_row = QHBoxLayout()
-        rpm_lbl_hdr = QLabel('RPM')
-        rpm_lbl_hdr.setFont(sans(7, bold=True))
-        rpm_lbl_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        self._rpl_rpm_lbl = QLabel('0')
-        self._rpl_rpm_lbl.setFont(mono(8))
-        self._rpl_rpm_lbl.setStyleSheet(f'color: {C_RPM};')
-        rpm_row.addWidget(rpm_lbl_hdr)
-        rpm_row.addWidget(self._rpl_rpm_lbl)
-        rpm_row.addStretch()
-        info_col.addLayout(rpm_row)
-        self._rpl_rev_bar = RevBar()
-        info_col.addWidget(self._rpl_rev_bar)
-
-        # Steering
-        steer_hdr = QLabel('STEERING')
-        steer_hdr.setFont(sans(7, bold=True))
-        steer_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        info_col.addWidget(steer_hdr)
-        self._rpl_steer = SteeringWidget()
-        self._rpl_steer.setMinimumHeight(80)
-        self._rpl_steer.setMaximumHeight(120)
-        info_col.addWidget(self._rpl_steer, stretch=1)
-
-        body_row.addLayout(info_col, stretch=1)
-
-        # Pedals + ABS/TC column (right side, fixed width)
-        side_col = QVBoxLayout()
-        side_col.setSpacing(4)
-
-        ped_hdr = QLabel('T / B')
-        ped_hdr.setFont(sans(7, bold=True))
-        ped_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        side_col.addWidget(ped_hdr)
-
-        ped_row = QHBoxLayout()
-        ped_row.setSpacing(4)
-        self._rpl_throttle_bar = PedalBar(C_THROTTLE, 'T')
-        self._rpl_brake_bar = PedalBar(C_BRAKE, 'B')
-        ped_row.addWidget(self._rpl_throttle_bar)
-        ped_row.addWidget(self._rpl_brake_bar)
-        side_col.addLayout(ped_row, stretch=1)
-
-        side_col.addSpacing(6)
-        self._rpl_abs_badge = AidBadge('ABS')
-        self._rpl_tc_badge = AidBadge('TC')
-        side_col.addWidget(self._rpl_abs_badge)
-        side_col.addWidget(self._rpl_tc_badge)
-
-        body_row.addLayout(side_col)
-        ll.addLayout(body_row, stretch=1)
-
-        content_splitter.addWidget(left_panel)
-
-        # ── Right: track map ──────────────────────────────────────────
-        right_panel = QFrame()
-        right_panel.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
-        rl = QVBoxLayout(right_panel)
-        rl.setContentsMargins(8, 8, 8, 8)
-        rl.setSpacing(4)
-
-        map_hdr_row = QHBoxLayout()
-        map_title = QLabel('TRACK POSITION')
-        map_title.setFont(sans(7, bold=True))
-        map_title.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        map_hdr_row.addWidget(map_title)
-        map_hdr_row.addStretch()
-
-        self._rpl_s1_lbl = QLabel('S1: —')
-        self._rpl_s2_lbl = QLabel('S2: —')
-        self._rpl_s3_lbl = QLabel('S3: —')
-        for i, lbl in enumerate((self._rpl_s1_lbl, self._rpl_s2_lbl, self._rpl_s3_lbl)):
-            colors = [C_DELTA, C_STEER, C_RPM]
-            lbl.setFont(mono(8, bold=True))
-            lbl.setStyleSheet(f'color: {colors[i]};')
-            map_hdr_row.addWidget(lbl)
-            map_hdr_row.addSpacing(8)
-
-        rl.addLayout(map_hdr_row)
-
-        self._rpl_map = TrackMapWidget()
-        self._rpl_map.setMinimumSize(180, 150)   # override widget's own 440x370 minimum
-        rl.addWidget(self._rpl_map, stretch=1)
-
-        content_splitter.addWidget(right_panel)
-        content_splitter.setSizes([310, 500])
-
-        outer.addWidget(content_splitter, stretch=1)
-
-        # ── Bottom: scrollable telemetry graphs ───────────────────────
-        graphs_container = QWidget()
-        graphs_container.setStyleSheet(f'background: {BG};')
-        gv = QVBoxLayout(graphs_container)
-        gv.setContentsMargins(4, 4, 4, 8)
-        gv.setSpacing(4)
-
-        self._rpl_speed_graph   = ReplayGraph('Speed km/h', C_SPEED, ylim=(0, 320))
-        self._rpl_thr_brk_graph = ReplayMultiGraph(
-            'T/B %', C_THROTTLE, C_BRAKE, 'Throttle', 'Brake', ylim=(0, 100))
-        self._rpl_steer_graph   = ReplayGraph('Steer °', C_STEER, ylim=(-540, 540))
-        self._rpl_rpm_graph     = ReplayGraph('RPM', C_RPM, ylim=(0, 10000))
-        self._rpl_gear_graph    = ReplayGraph('Gear', C_GEAR, ylim=(-1, 8))
-
-        self._replay_graphs = [
-            self._rpl_speed_graph, self._rpl_thr_brk_graph,
-            self._rpl_steer_graph, self._rpl_rpm_graph, self._rpl_gear_graph,
-        ]
-
-        for title, color, graph in [
-            ('SPEED',           C_SPEED,    self._rpl_speed_graph),
-            ('THROTTLE / BRAKE', C_THROTTLE, self._rpl_thr_brk_graph),
-            ('STEERING',        C_STEER,    self._rpl_steer_graph),
-            ('RPM',             C_RPM,      self._rpl_rpm_graph),
-            ('GEAR',            C_GEAR,     self._rpl_gear_graph),
-        ]:
-            gv.addWidget(_channel_header(color, title))
-            gv.addWidget(graph)
-
-        graphs_scroll = QScrollArea()
-        graphs_scroll.setWidgetResizable(True)
-        graphs_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        graphs_scroll.setWidget(graphs_container)
-        graphs_scroll.setStyleSheet(
-            f'QScrollArea {{ border: none; background: transparent; }}')
-        graphs_scroll.setFixedHeight(240)
-
-        outer.addWidget(graphs_scroll)
-        return tab
-
     # ------------------------------------------------------------------
     # REPLAY HELPERS
     # ------------------------------------------------------------------
@@ -2994,115 +2297,6 @@ class TelemetryApp(QMainWindow):
     # SESSION TAB
     # ------------------------------------------------------------------
 
-    def _build_session_tab(self) -> QWidget:
-        tab = QWidget()
-        outer = QVBoxLayout(tab)
-        outer.setContentsMargins(12, 12, 12, 12)
-        outer.setSpacing(10)
-
-        # ── Stats bar ─────────────────────────────────────────────────
-        self._sess_stats_card = QFrame()
-        self._sess_stats_card.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
-        stats_row = QHBoxLayout(self._sess_stats_card)
-        stats_row.setContentsMargins(18, 10, 18, 10)
-        stats_row.setSpacing(0)
-
-        def _stat_chip(label_text, value_text, color=TXT):
-            col = QVBoxLayout()
-            col.setSpacing(2)
-            lbl = QLabel(label_text)
-            lbl.setFont(sans(7, bold=True))
-            lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-            val = QLabel(value_text)
-            val.setFont(mono(11, bold=True))
-            val.setStyleSheet(f'color: {color};')
-            col.addWidget(lbl)
-            col.addWidget(val)
-            return col, val
-
-        sep_v = lambda: (lambda f: (f.setFrameShape(QFrame.Shape.VLine),
-                                    f.setStyleSheet(f'color: {BORDER2};'),
-                                    f.setFixedWidth(1),
-                                    f)[-1])(QFrame())
-
-        c1, self._sess_lbl_count   = _stat_chip('LAPS', '0', TXT)
-        c2, self._sess_lbl_best    = _stat_chip('BEST LAP', '—:——.———', C_PURPLE)
-        c3, self._sess_lbl_avg     = _stat_chip('AVG LAP', '—:——.———', TXT)
-        c4, self._sess_lbl_gap     = _stat_chip('BEST → AVG', '—', TXT2)
-
-        for i, (col, _) in enumerate([(c1, None), (c2, None),
-                                       (c3, None), (c4, None)]):
-            stats_row.addLayout(col)
-            if i < 3:
-                stats_row.addSpacing(28)
-                stats_row.addWidget(sep_v())
-                stats_row.addSpacing(28)
-        stats_row.addStretch()
-
-        # Export button
-        export_btn = QPushButton('⬇  EXPORT CSV')
-        export_btn.setFont(sans(8, bold=True))
-        export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        export_btn.setStyleSheet(
-            f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 8px 18px; letter-spacing: 1px;')
-        export_btn.clicked.connect(self._export_csv)
-        stats_row.addWidget(export_btn)
-
-        outer.addWidget(self._sess_stats_card)
-
-        # ── Column headers ────────────────────────────────────────────
-        hdr_frame = QFrame()
-        hdr_frame.setStyleSheet(f'background: transparent;')
-        hdr_layout = QHBoxLayout(hdr_frame)
-        hdr_layout.setContentsMargins(10, 4, 10, 4)
-        hdr_layout.setSpacing(0)
-        for txt, stretch, align in [
-            ('#',       0, Qt.AlignmentFlag.AlignCenter),
-            ('LAP TIME', 2, Qt.AlignmentFlag.AlignCenter),
-            ('S1',       1, Qt.AlignmentFlag.AlignCenter),
-            ('S2',       1, Qt.AlignmentFlag.AlignCenter),
-            ('S3',       1, Qt.AlignmentFlag.AlignCenter),
-            ('SAMPLES',  1, Qt.AlignmentFlag.AlignCenter),
-            ('VALID',    0, Qt.AlignmentFlag.AlignCenter),
-            ('',         0, Qt.AlignmentFlag.AlignCenter),
-        ]:
-            l = QLabel(txt)
-            l.setFont(sans(7, bold=True))
-            l.setStyleSheet(f'color: {TXT2}; letter-spacing: 0.8px;')
-            l.setAlignment(align)
-            l.setMinimumWidth(40)
-            l.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
-            hdr_layout.addWidget(l, stretch)
-        outer.addWidget(hdr_frame)
-        outer.addWidget(h_line())
-
-        # ── Scrollable rows ───────────────────────────────────────────
-        self._sess_rows_widget = QWidget()
-        self._sess_rows_widget.setStyleSheet(f'background: transparent;')
-        self._sess_rows_layout = QVBoxLayout(self._sess_rows_widget)
-        self._sess_rows_layout.setContentsMargins(0, 0, 0, 0)
-        self._sess_rows_layout.setSpacing(3)
-        self._sess_rows_layout.addStretch()
-
-        sess_scroll = QScrollArea()
-        sess_scroll.setWidgetResizable(True)
-        sess_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        sess_scroll.setWidget(self._sess_rows_widget)
-        sess_scroll.setStyleSheet(
-            f'QScrollArea {{ border: none; background: transparent; }}')
-        outer.addWidget(sess_scroll, stretch=1)
-
-        # Empty-state label lives outside the rows layout so the clear loop never deletes it
-        self._sess_empty_lbl = QLabel('No completed laps yet.')
-        self._sess_empty_lbl.setFont(sans(10))
-        self._sess_empty_lbl.setStyleSheet(f'color: {TXT2};')
-        self._sess_empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        outer.addWidget(self._sess_empty_lbl)
-
-        return tab
-
     def _refresh_session_tab(self):
         """Rebuild session summary rows and stats bar from self.session_laps."""
         laps = self.session_laps
@@ -3165,13 +2359,13 @@ class TelemetryApp(QMainWindow):
                     f' border-radius: 4px;')
             else:
                 row.setStyleSheet(
-                    f'background: {BG2}; border: 1px solid {BORDER};'
+                    f'background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE};'
                     f' border-radius: 4px;')
             rl = QHBoxLayout(row)
             rl.setContentsMargins(10, 6, 10, 6)
             rl.setSpacing(0)
 
-            def _cell(text, color=TXT, bold=False, stretch=0, align=Qt.AlignmentFlag.AlignCenter):
+            def _cell(text, color=TEXT_SECONDARY, bold=False, stretch=0, align=Qt.AlignmentFlag.AlignCenter):
                 l = QLabel(text)
                 l.setFont(mono(9, bold=bold))
                 l.setStyleSheet(f'color: {color};')
@@ -3180,13 +2374,13 @@ class TelemetryApp(QMainWindow):
                 rl.addWidget(l, stretch)
                 return l
 
-            lap_color = C_PURPLE if is_best else TXT2
+            lap_color = C_PURPLE if is_best else TEXT_MUTED
             _cell(str(lap['lap_number']), color=lap_color, bold=is_best)
-            _cell(_fmt(t), color=C_PURPLE if is_best else TXT, bold=is_best, stretch=2)
+            _cell(_fmt(t), color=C_PURPLE if is_best else TEXT_SECONDARY, bold=is_best, stretch=2)
 
             for si, sec_t in enumerate(secs):
                 if sec_t is None:
-                    _cell('—', color=TXT2, stretch=1)
+                    _cell('—', color=TEXT_MUTED, stretch=1)
                 elif not lap_valid:
                     _cell(f'{sec_t:.3f}', color=C_BRAKE, stretch=1)
                 else:
@@ -3197,7 +2391,7 @@ class TelemetryApp(QMainWindow):
                     else:
                         _cell(f'{sec_t:.3f}', color=C_THROTTLE, stretch=1)
 
-            _cell(str(samples), color=TXT2, stretch=1)
+            _cell(str(samples), color=TEXT_MUTED, stretch=1)
             valid_lbl = QLabel('✓' if valid else '✗')
             valid_lbl.setFont(sans(9, bold=True))
             valid_lbl.setStyleSheet(
@@ -3212,7 +2406,7 @@ class TelemetryApp(QMainWindow):
             export_btn.setFixedSize(32, 24)
             export_btn.setToolTip('Export this lap as JSON')
             export_btn.setStyleSheet(
-                f'QPushButton {{ background: transparent; color: {TXT2}; border: 1px solid {BORDER2};'
+                f'QPushButton {{ background: transparent; color: {TEXT_MUTED}; border: 1px solid {BORDER_STRONG};'
                 f' border-radius: 3px; }}'
                 f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}')
             _lap_ref = lap  # capture for lambda
@@ -3332,7 +2526,7 @@ class TelemetryApp(QMainWindow):
         history = self._fuel_per_lap_history
         if not history:
             self.strategy_tab._fs_result_lbl.setText('Complete a lap first.')
-            self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
+            self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {TEXT_MUTED};')
             return
         avg = sum(history[-5:]) / len(history[-5:])
         fuel = self._last_known_fuel
@@ -3367,7 +2561,7 @@ class TelemetryApp(QMainWindow):
                 uc_col = C_BRAKE
         else:
             uc_text = 'UNDERCUT: no car ahead data'
-            uc_col = TXT2
+            uc_col = TEXT_MUTED
         self.strategy_tab._uco_undercut_lbl.setText(uc_text)
         self.strategy_tab._uco_undercut_lbl.setStyleSheet(f'color: {uc_col};')
 
@@ -3382,7 +2576,7 @@ class TelemetryApp(QMainWindow):
                 oc_col = C_THROTTLE
         else:
             oc_text = 'OVERCUT: no car behind data'
-            oc_col = TXT2
+            oc_col = TEXT_MUTED
         self.strategy_tab._uco_overcut_lbl.setText(oc_text)
         self.strategy_tab._uco_overcut_lbl.setStyleSheet(f'color: {oc_col};')
 
@@ -3869,7 +3063,7 @@ class TelemetryApp(QMainWindow):
             if self.current_reader is None:
                 self.connection_dot.setStyleSheet('color: #444;')
                 self.connection_label.setText('DISCONNECTED')
-                self.connection_label.setStyleSheet(f'color: {TXT2}; letter-spacing: 0.5px;')
+                self.connection_label.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 0.5px;')
                 self._reset_display()
                 return
 
@@ -3888,7 +3082,7 @@ class TelemetryApp(QMainWindow):
             game_type = 'ACC'
         self.connection_dot.setStyleSheet(f'color: {C_THROTTLE};')
         self.connection_label.setText(f'CONNECTED  ·  {game_type}')
-        self.connection_label.setStyleSheet(f'color: {TXT}; letter-spacing: 0.5px;')
+        self.connection_label.setStyleSheet(f'color: {TEXT_SECONDARY}; letter-spacing: 0.5px;')
 
         # Gear text  (all readers normalise to: 0=R, 1=N, 2+=1st,2nd,…)
         gear = data.get('gear', 1)
@@ -4130,9 +3324,9 @@ class TelemetryApp(QMainWindow):
         axs = axs.flatten()
 
         def style_export_ax(ax, title):
-            ax.set_facecolor(BG1)
-            ax.set_title(title, color=TXT2, fontsize=10, pad=4)
-            ax.tick_params(colors=TXT2, labelsize=7)
+            ax.set_facecolor(SURFACE)
+            ax.set_title(title, color=TEXT_MUTED, fontsize=10, pad=4)
+            ax.tick_params(colors=TEXT_MUTED, labelsize=7)
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
             ax.spines['left'].set_color('#303030')
@@ -4141,34 +3335,34 @@ class TelemetryApp(QMainWindow):
 
         style_export_ax(axs[0], 'Speed')
         axs[0].plot(x_values, data_dict['speed'], color=C_SPEED, linewidth=1.0)
-        axs[0].set_ylabel('km/h', color=TXT2, fontsize=8)
+        axs[0].set_ylabel('km/h', color=TEXT_MUTED, fontsize=8)
 
         style_export_ax(axs[1], 'Throttle & Brake')
         axs[1].plot(x_values, data_dict['throttle'], color=C_THROTTLE, linewidth=1.0, label='Throttle')
         axs[1].plot(x_values, data_dict['brake'], color=C_BRAKE, linewidth=1.0, label='Brake')
-        axs[1].set_ylabel('%', color=TXT2, fontsize=8)
-        axs[1].legend(loc='upper right', fontsize=7, framealpha=0, labelcolor=TXT2)
+        axs[1].set_ylabel('%', color=TEXT_MUTED, fontsize=8)
+        axs[1].legend(loc='upper right', fontsize=7, framealpha=0, labelcolor=TEXT_MUTED)
 
         style_export_ax(axs[2], 'Steering Angle')
         axs[2].plot(x_values, data_dict['steer_deg'], color=C_STEER, linewidth=1.0)
-        axs[2].set_ylabel('°', color=TXT2, fontsize=8)
+        axs[2].set_ylabel('°', color=TEXT_MUTED, fontsize=8)
 
         style_export_ax(axs[3], 'RPM')
         axs[3].plot(x_values, data_dict['rpm'], color=C_RPM, linewidth=1.0)
-        axs[3].set_ylabel('rpm', color=TXT2, fontsize=8)
+        axs[3].set_ylabel('rpm', color=TEXT_MUTED, fontsize=8)
 
         style_export_ax(axs[4], 'Gear')
         axs[4].step(x_values, data_dict['gear'], color=C_GEAR, linewidth=1.0, where='post')
-        axs[4].set_ylabel('gear', color=TXT2, fontsize=8)
+        axs[4].set_ylabel('gear', color=TEXT_MUTED, fontsize=8)
 
         style_export_ax(axs[5], 'ABS & TC Activity')
         axs[5].plot(x_values, data_dict['abs'], color=C_ABS, linewidth=1.0, label='ABS')
         axs[5].plot(x_values, data_dict['tc'], color=C_TC, linewidth=1.0, label='TC')
-        axs[5].set_ylabel('activity', color=TXT2, fontsize=8)
-        axs[5].legend(loc='upper right', fontsize=7, framealpha=0, labelcolor=TXT2)
+        axs[5].set_ylabel('activity', color=TEXT_MUTED, fontsize=8)
+        axs[5].legend(loc='upper right', fontsize=7, framealpha=0, labelcolor=TEXT_MUTED)
 
         for ax in axs[4:]:
-            ax.set_xlabel(x_label, color=TXT2, fontsize=8)
+            ax.set_xlabel(x_label, color=TEXT_MUTED, fontsize=8)
 
         export_fig.tight_layout(pad=0.5)
         export_fig.savefig(file_path, dpi=150, facecolor=BG)
@@ -4196,17 +3390,17 @@ class TelemetryApp(QMainWindow):
         self.race_tab.update_tick(None)
         self.tyres_tab.update_tick(None)
         self.strategy_tab._pit_rec_lbl.setText('—')
-        self.strategy_tab._pit_rec_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        self.strategy_tab._pit_rec_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
         self.strategy_tab._pit_fuel_laps_lbl.setText('—')
         self.strategy_tab._pit_tyre_stint_lbl.setText('—')
         self.strategy_tab._pit_tyre_cond_lbl.setText('—')
         self.strategy_tab._pit_no_data_lbl.setVisible(True)
         self.strategy_tab._fs_result_lbl.setText('—')
-        self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {TXT2};')
+        self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {TEXT_MUTED};')
         self.strategy_tab._uco_undercut_lbl.setText('UNDERCUT: —')
-        self.strategy_tab._uco_undercut_lbl.setStyleSheet(f'color: {TXT2};')
+        self.strategy_tab._uco_undercut_lbl.setStyleSheet(f'color: {TEXT_MUTED};')
         self.strategy_tab._uco_overcut_lbl.setText('OVERCUT: —')
-        self.strategy_tab._uco_overcut_lbl.setStyleSheet(f'color: {TXT2};')
+        self.strategy_tab._uco_overcut_lbl.setStyleSheet(f'color: {TEXT_MUTED};')
         self._reset_analysis_graphs()
         self.track_map.reset()
 
