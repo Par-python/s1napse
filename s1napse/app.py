@@ -1242,70 +1242,66 @@ class TelemetryApp(QMainWindow):
             self._real_rpm_canvas.draw_idle()
 
     def _build_connection_strip_controls(self) -> list:
-        """Return the inner controls of the (now-deprecated) connection strip,
-        without the wrapping frame. Each widget is the same instance the strip
-        used to embed, with all signal wiring preserved."""
+        """Return the trailing-slot controls for the title bar.
+
+        After the UI revamp (tasks 12–13) the title bar replaces the legacy
+        connection strip. To keep the bar uncluttered, only the minimal set of
+        live controls is exposed here; the rest of the legacy widgets
+        (connection_label, car_label, track_label, header_lap_label) are kept
+        as off-screen state holders so existing setText() call sites continue
+        to work — their information is now surfaced via the title bar's source
+        pill and session block.
+        """
         out: list = []
 
-        # Status indicator
+        # Status indicator (just the dot — pulses green when connected,
+        # grey when disconnected). The accompanying "DISCONNECTED" /
+        # "CONNECTED · ACC" text is redundant with the source pill.
         self.connection_dot = QLabel('●')
-        self.connection_dot.setFont(sans(10))
-        self.connection_dot.setStyleSheet('color: #444;')
-
-        self.connection_label = QLabel('DISCONNECTED')
-        self.connection_label.setFont(sans(9))
-        self.connection_label.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 0.5px;')
-
+        self.connection_dot.setFont(sans(12))
+        self.connection_dot.setStyleSheet(
+            f'color: {TEXT_MUTED}; background: transparent; border: none;'
+        )
+        self.connection_dot.setToolTip('Disconnected')
         out.append(self.connection_dot)
-        out.append(self.connection_label)
 
-        # Game selector
-        game_lbl = QLabel('SOURCE')
-        game_lbl.setFont(sans(8))
-        game_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
+        # Game source combo (no label — combo is self-explanatory)
         self.game_combo = QComboBox()
         self.game_combo.addItems([
             'Auto-Detect', 'ACC (Shared Memory)', 'AC (UDP)', 'iRacing (SDK)',
             'ELM327 (OBD-II)',
         ])
-        self.game_combo.setFixedWidth(170)
+        self.game_combo.setFixedWidth(150)
+        self.game_combo.setToolTip('Telemetry source')
         self.game_combo.currentTextChanged.connect(self._on_game_changed)
-        out.append(game_lbl)
         out.append(self.game_combo)
 
-        # Track selector
-        track_lbl = QLabel('TRACK')
-        track_lbl.setFont(sans(8))
-        track_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
+        # Track combo (no label)
         self.track_combo = QComboBox()
         self.track_combo.addItem('Auto-Detect', userData=None)
         for key, td in TRACKS.items():
             self.track_combo.addItem(td['name'], userData=key)
-        self.track_combo.setFixedWidth(155)
+        self.track_combo.setFixedWidth(140)
+        self.track_combo.setToolTip('Track override')
         self.track_combo.currentIndexChanged.connect(self._on_track_changed)
-        out.append(track_lbl)
         out.append(self.track_combo)
 
-        # UDP settings
-        host_lbl = QLabel('HOST')
-        host_lbl.setFont(sans(8))
-        host_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
+        # UDP host/port — kept off-screen as state holders. They're only
+        # relevant to AC UDP; defaults are 127.0.0.1:9996. If a user needs
+        # to change them, AC has its own settings; we don't need to expose
+        # them in the chrome on every screen.
         self.udp_host = QLineEdit('127.0.0.1')
         self.udp_host.setFixedWidth(110)
-        port_lbl = QLabel('PORT')
-        port_lbl.setFont(sans(8))
-        port_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
+        self.udp_host.hide()
         self.udp_port = QLineEdit('9996')
         self.udp_port.setFixedWidth(55)
-        out.append(host_lbl)
-        out.append(self.udp_host)
-        out.append(port_lbl)
-        out.append(self.udp_port)
+        self.udp_port.hide()
 
         # Track recorder
-        self.rec_btn = QPushButton('⏺  REC')
-        self.rec_btn.setFixedSize(72, 22)
+        self.rec_btn = QPushButton('● REC')
+        self.rec_btn.setFixedSize(64, 22)
         self.rec_btn.setCheckable(True)
+        self.rec_btn.setToolTip('Record track map')
         self.rec_btn.setStyleSheet(
             f'QPushButton {{ background: {SURFACE_HOVER}; color: {TEXT_MUTED}; border: 1px solid {BORDER_STRONG};'
             f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
@@ -1313,15 +1309,15 @@ class TelemetryApp(QMainWindow):
             f' border-color: {C_BRAKE}; }}'
         )
         self.rec_btn.toggled.connect(self._on_rec_toggled)
+        # rec_label kept as state holder, hidden
         self.rec_label = QLabel('')
-        self.rec_label.setFont(sans(8))
-        self.rec_label.setStyleSheet(f'color: {TEXT_MUTED};')
+        self.rec_label.hide()
         out.append(self.rec_btn)
-        out.append(self.rec_label)
 
         # Import track map from JSON
-        self.import_track_btn = QPushButton('⬆  IMPORT MAP')
-        self.import_track_btn.setFixedSize(100, 22)
+        self.import_track_btn = QPushButton('⬆ MAP')
+        self.import_track_btn.setFixedSize(72, 22)
+        self.import_track_btn.setToolTip('Import track map JSON')
         self.import_track_btn.setStyleSheet(
             f'QPushButton {{ background: {SURFACE_HOVER}; color: {TEXT_MUTED}; border: 1px solid {BORDER_STRONG};'
             f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
@@ -1341,7 +1337,7 @@ class TelemetryApp(QMainWindow):
             f'QPushButton:hover {{ background: #0f3322; }}'
             f'QPushButton:pressed {{ background: #061a10; }}'
         )
-        self._manual_lap_btn.setToolTip('Complete current lap and start next (shortcut: L)')
+        self._manual_lap_btn.setToolTip('Complete current lap (shortcut: L)')
         self._manual_lap_btn.clicked.connect(self._on_manual_lap)
         self._manual_lap_btn.setVisible(False)
         out.append(self._manual_lap_btn)
@@ -1351,175 +1347,19 @@ class TelemetryApp(QMainWindow):
         self._lap_shortcut.activated.connect(self._on_manual_lap)
         self._lap_shortcut.setEnabled(False)
 
-        # Car / Track / Lap info labels
+        # Off-screen state holders. These widgets exist so legacy setText()
+        # call sites keep working; their information is surfaced via the
+        # title bar's source pill (car/track) and session block (lap).
+        self.connection_label = QLabel('DISCONNECTED')
+        self.connection_label.hide()
         self.car_label = QLabel('—')
-        self.car_label.setFont(mono(10))
-        self.car_label.setStyleSheet(f'color: {TEXT_SECONDARY};')
-        self.car_label.setMaximumWidth(200)
-        self.car_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.car_label.hide()
         self.track_label = QLabel('—')
-        self.track_label.setFont(mono(10))
-        self.track_label.setStyleSheet(f'color: {TEXT_SECONDARY};')
-        self.track_label.setMaximumWidth(240)
-        self.track_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.track_label.hide()
         self.header_lap_label = QLabel('LAP —')
-        self.header_lap_label.setFont(mono(10, bold=True))
-        self.header_lap_label.setStyleSheet(f'color: {C_SPEED};')
-        self.header_lap_label.setMaximumWidth(80)
-        out.append(self.car_label)
-        out.append(self.track_label)
-        out.append(self.header_lap_label)
+        self.header_lap_label.hide()
 
         return out
-
-    def _build_connection_strip(self) -> QWidget:
-        strip = QWidget()
-        strip.setFixedHeight(38)
-        strip.setStyleSheet(f'background: {SURFACE_RAISED}; border-bottom: 1px solid {BORDER_STRONG};')
-        layout = QHBoxLayout(strip)
-        layout.setContentsMargins(12, 0, 12, 0)
-        layout.setSpacing(18)
-
-        # Status indicator
-        self.connection_dot = QLabel('●')
-        self.connection_dot.setFont(sans(10))
-        self.connection_dot.setStyleSheet('color: #444;')
-
-        self.connection_label = QLabel('DISCONNECTED')
-        self.connection_label.setFont(sans(9))
-        self.connection_label.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 0.5px;')
-
-        layout.addWidget(self.connection_dot)
-        layout.addWidget(self.connection_label)
-        layout.addWidget(_vsep())
-
-        # Game selector
-        game_lbl = QLabel('SOURCE')
-        game_lbl.setFont(sans(8))
-        game_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
-        self.game_combo = QComboBox()
-        self.game_combo.addItems([
-            'Auto-Detect', 'ACC (Shared Memory)', 'AC (UDP)', 'iRacing (SDK)',
-            'ELM327 (OBD-II)',
-        ])
-        self.game_combo.setFixedWidth(170)
-        self.game_combo.currentTextChanged.connect(self._on_game_changed)
-        layout.addWidget(game_lbl)
-        layout.addWidget(self.game_combo)
-
-        layout.addWidget(_vsep())
-
-        # Track selector
-        track_lbl = QLabel('TRACK')
-        track_lbl.setFont(sans(8))
-        track_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
-        self.track_combo = QComboBox()
-        self.track_combo.addItem('Auto-Detect', userData=None)
-        for key, td in TRACKS.items():
-            self.track_combo.addItem(td['name'], userData=key)
-        self.track_combo.setFixedWidth(155)
-        self.track_combo.currentIndexChanged.connect(self._on_track_changed)
-        layout.addWidget(track_lbl)
-        layout.addWidget(self.track_combo)
-
-        layout.addWidget(_vsep())
-
-        # UDP settings
-        host_lbl = QLabel('HOST')
-        host_lbl.setFont(sans(8))
-        host_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
-        self.udp_host = QLineEdit('127.0.0.1')
-        self.udp_host.setFixedWidth(110)
-        port_lbl = QLabel('PORT')
-        port_lbl.setFont(sans(8))
-        port_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
-        self.udp_port = QLineEdit('9996')
-        self.udp_port.setFixedWidth(55)
-        layout.addWidget(host_lbl)
-        layout.addWidget(self.udp_host)
-        layout.addWidget(port_lbl)
-        layout.addWidget(self.udp_port)
-
-        layout.addWidget(_vsep())
-
-        # Track recorder
-        self.rec_btn = QPushButton('⏺  REC')
-        self.rec_btn.setFixedSize(72, 22)
-        self.rec_btn.setCheckable(True)
-        self.rec_btn.setStyleSheet(
-            f'QPushButton {{ background: {SURFACE_HOVER}; color: {TEXT_MUTED}; border: 1px solid {BORDER_STRONG};'
-            f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
-            f'QPushButton:checked {{ background: #5a0000; color: {C_BRAKE};'
-            f' border-color: {C_BRAKE}; }}'
-        )
-        self.rec_btn.toggled.connect(self._on_rec_toggled)
-        self.rec_label = QLabel('')
-        self.rec_label.setFont(sans(8))
-        self.rec_label.setStyleSheet(f'color: {TEXT_MUTED};')
-        layout.addWidget(self.rec_btn)
-        layout.addWidget(self.rec_label)
-
-        layout.addWidget(_vsep())
-
-        # Import track map from JSON
-        self.import_track_btn = QPushButton('⬆  IMPORT MAP')
-        self.import_track_btn.setFixedSize(100, 22)
-        self.import_track_btn.setStyleSheet(
-            f'QPushButton {{ background: {SURFACE_HOVER}; color: {TEXT_MUTED}; border: 1px solid {BORDER_STRONG};'
-            f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
-            f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
-        )
-        self.import_track_btn.clicked.connect(self._import_trackmap)
-        layout.addWidget(self.import_track_btn)
-
-        layout.addWidget(_vsep())
-
-        # Manual lap trigger (visible only in real racing mode)
-        self._manual_lap_btn = QPushButton('LAP')
-        self._manual_lap_btn.setFixedSize(55, 22)
-        self._manual_lap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._manual_lap_btn.setStyleSheet(
-            f'QPushButton {{ background: #0a2218; color: {C_THROTTLE};'
-            f' border: 1px solid {C_THROTTLE}; border-radius: 3px;'
-            f' font-size: 10px; font-weight: bold; letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ background: #0f3322; }}'
-            f'QPushButton:pressed {{ background: #061a10; }}'
-        )
-        self._manual_lap_btn.setToolTip('Complete current lap and start next (shortcut: L)')
-        self._manual_lap_btn.clicked.connect(self._on_manual_lap)
-        self._manual_lap_btn.setVisible(False)
-        layout.addWidget(self._manual_lap_btn)
-
-        # Keyboard shortcut for lap trigger
-        self._lap_shortcut = QShortcut(QKeySequence('L'), self)
-        self._lap_shortcut.activated.connect(self._on_manual_lap)
-        self._lap_shortcut.setEnabled(False)
-
-        layout.addStretch()
-
-        # Car / Track / Lap info
-        self.car_label = QLabel('—')
-        self.car_label.setFont(mono(10))
-        self.car_label.setStyleSheet(f'color: {TEXT_SECONDARY};')
-        self.car_label.setMaximumWidth(200)
-        self.car_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.track_label = QLabel('—')
-        self.track_label.setFont(mono(10))
-        self.track_label.setStyleSheet(f'color: {TEXT_SECONDARY};')
-        self.track_label.setMaximumWidth(240)
-        self.track_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.header_lap_label = QLabel('LAP —')
-        self.header_lap_label.setFont(mono(10, bold=True))
-        self.header_lap_label.setStyleSheet(f'color: {C_SPEED};')
-        self.header_lap_label.setMaximumWidth(80)
-
-        layout.addWidget(self.car_label)
-        layout.addWidget(_vsep())
-        layout.addWidget(self.track_label)
-        layout.addWidget(_vsep())
-        layout.addWidget(self.header_lap_label)
-
-        return strip
 
     # ------------------------------------------------------------------
     # DATA MANAGEMENT
