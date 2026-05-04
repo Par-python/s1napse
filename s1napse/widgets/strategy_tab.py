@@ -18,7 +18,10 @@ def _chip_lbl(text: str, font_size: int = 8, bold: bool = True,
     lbl_color = color if color is not None else theme.TEXT_MUTED
     l = QLabel(text)
     l.setFont(theme.ui_font(font_size, bold=bold))
-    l.setStyleSheet(f'color: {lbl_color}; letter-spacing: {letter_spacing};')
+    l.setStyleSheet(
+        f'color: {lbl_color}; letter-spacing: {letter_spacing};'
+        f' background: transparent; border: none;'
+    )
     return l
 
 
@@ -132,7 +135,9 @@ class StrategyTab(QWidget):
         card = Card(label='FUEL-SAVE COST', dense=True)
         self._fsc_status = QLabel('—')
         self._fsc_status.setFont(theme.mono_font(13))
-        self._fsc_status.setStyleSheet(f'color: {theme.TEXT_MUTED};')
+        self._fsc_status.setStyleSheet(
+            f'color: {theme.TEXT_MUTED}; background: transparent; border: none;'
+        )
         self._fsc_status.setWordWrap(True)
         card.body().addWidget(self._fsc_status)
         return card
@@ -143,11 +148,15 @@ class StrategyTab(QWidget):
         self._rw_behind = QLabel('Behind: stable')
         for lbl in (self._rw_ahead, self._rw_behind):
             lbl.setFont(theme.mono_font(13))
-            lbl.setStyleSheet(f'color: {theme.TEXT_SECONDARY};')
+            lbl.setStyleSheet(
+                f'color: {theme.TEXT_SECONDARY}; background: transparent; border: none;'
+            )
             card.body().addWidget(lbl)
         sub = QLabel('Inferred from gap delta. May fire on rival crash/spin.')
         sub.setFont(theme.ui_font(8))
-        sub.setStyleSheet(f'color: {theme.TEXT_MUTED};')
+        sub.setStyleSheet(
+            f'color: {theme.TEXT_MUTED}; background: transparent; border: none;'
+        )
         sub.setWordWrap(True)
         card.body().addWidget(sub)
         return card
@@ -156,7 +165,9 @@ class StrategyTab(QWidget):
         card = Card(label='WEATHER / TRACK TEMP', dense=True)
         self._tw_status = QLabel('—')
         self._tw_status.setFont(theme.mono_font(13))
-        self._tw_status.setStyleSheet(f'color: {theme.TEXT_PRIMARY};')
+        self._tw_status.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; background: transparent; border: none;'
+        )
         self._tw_status.setWordWrap(True)
         card.body().addWidget(self._tw_status)
         return card
@@ -182,7 +193,9 @@ class StrategyTab(QWidget):
             col.addWidget(_chip_lbl(title, font_size=7))
             v = QLabel('—')
             v.setFont(theme.mono_font(theme.FONT_NUMERIC_LG, bold=True))
-            v.setStyleSheet(f'color: {theme.TEXT_PRIMARY};')
+            v.setStyleSheet(
+                f'color: {theme.TEXT_PRIMARY}; background: transparent; border: none;'
+            )
             col.addWidget(v)
             setattr(self, attr, v)
             return col
@@ -198,7 +211,9 @@ class StrategyTab(QWidget):
         self._pit_rec_lbl = QLabel('—')
         self._pit_rec_lbl.setFont(theme.ui_font(11, bold=True))
         self._pit_rec_lbl.setStyleSheet(
-            f'color: {theme.TEXT_MUTED}; letter-spacing: 1px;')
+            f'color: {theme.TEXT_MUTED}; letter-spacing: 1px;'
+            f' background: transparent; border: none;'
+        )
         self._pit_rec_lbl.setWordWrap(True)
         card.body().addWidget(self._pit_rec_lbl)
 
@@ -220,7 +235,9 @@ class StrategyTab(QWidget):
 
         self._fs_result_lbl = QLabel('—')
         self._fs_result_lbl.setFont(theme.mono_font(13, bold=True))
-        self._fs_result_lbl.setStyleSheet(f'color: {theme.TEXT_PRIMARY};')
+        self._fs_result_lbl.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; background: transparent; border: none;'
+        )
         self._fs_result_lbl.setWordWrap(True)
         card.body().addWidget(self._fs_result_lbl)
         return card
@@ -255,10 +272,14 @@ class StrategyTab(QWidget):
 
         self._uco_undercut_lbl = QLabel('UNDERCUT: —')
         self._uco_undercut_lbl.setFont(theme.mono_font(13, bold=True))
-        self._uco_undercut_lbl.setStyleSheet(f'color: {theme.TEXT_PRIMARY};')
+        self._uco_undercut_lbl.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; background: transparent; border: none;'
+        )
         self._uco_overcut_lbl = QLabel('OVERCUT: —')
         self._uco_overcut_lbl.setFont(theme.mono_font(13, bold=True))
-        self._uco_overcut_lbl.setStyleSheet(f'color: {theme.TEXT_PRIMARY};')
+        self._uco_overcut_lbl.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; background: transparent; border: none;'
+        )
         card.body().addWidget(self._uco_undercut_lbl)
         card.body().addWidget(self._uco_overcut_lbl)
         return card
@@ -354,9 +375,13 @@ class StrategyTab(QWidget):
             (self._rw_behind, state.rival_behind_pitted_at),
         ):
             if pitted_at is not None and (now - pitted_at) <= 30.0:
-                lbl.setStyleSheet(f'color: {theme.WARN};')
+                lbl.setStyleSheet(
+                    f'color: {theme.WARN}; background: transparent; border: none;'
+                )
             else:
-                lbl.setStyleSheet(f'color: {theme.TEXT_SECONDARY};')
+                lbl.setStyleSheet(
+                    f'color: {theme.TEXT_SECONDARY}; background: transparent; border: none;'
+                )
 
         # Card 5 — weather/track-temp watch
         if state.track_temp_c is None:
