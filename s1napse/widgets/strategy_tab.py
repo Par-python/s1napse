@@ -195,13 +195,6 @@ class StrategyTab(QWidget):
         stats_row.addStretch()
         card.body().addLayout(stats_row)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(
-            f'color: {theme.BORDER_STRONG}; background: {theme.BORDER_STRONG};')
-        sep.setFixedHeight(1)
-        card.body().addWidget(sep)
-
         self._pit_rec_lbl = QLabel('—')
         self._pit_rec_lbl.setFont(theme.ui_font(11, bold=True))
         self._pit_rec_lbl.setStyleSheet(
@@ -259,13 +252,6 @@ class StrategyTab(QWidget):
             _spin_col('PACE DELTA (s/lap)', '_uco_pace_delta_spin', 0.8, 0.0, 5.0, 0.1, 1))
         inputs_row.addStretch()
         card.body().addLayout(inputs_row)
-
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(
-            f'color: {theme.BORDER_STRONG}; background: {theme.BORDER_STRONG};')
-        sep.setFixedHeight(1)
-        card.body().addWidget(sep)
 
         self._uco_undercut_lbl = QLabel('UNDERCUT: —')
         self._uco_undercut_lbl.setFont(theme.mono_font(13, bold=True))
