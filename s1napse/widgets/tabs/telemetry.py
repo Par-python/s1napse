@@ -7,6 +7,7 @@ clicking a pill toggles its tone between 'neutral' (off) and 'violet' (on).
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QSplitter, QPushButton,
+    QSizePolicy,
 )
 
 from ... import theme
@@ -71,6 +72,9 @@ class TelemetryTab(QWidget):
 
         # ── Top action row: math-channel toggle + export buttons ─────────
         controls_card = Card(dense=True)
+        controls_card.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         btn_row = QHBoxLayout()
         btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.setSpacing(8)
@@ -128,7 +132,7 @@ class TelemetryTab(QWidget):
         btn_row.addWidget(export_json_btn)
         btn_row.addWidget(export_full_btn)
         controls_card.body().addLayout(btn_row)
-        outer.addWidget(controls_card)
+        outer.addWidget(controls_card, 0)  # no stretch — natural height
 
         # Mirror export buttons on app so legacy export code keeps working
         app.export_last_lap_button = self.export_last_lap_button
@@ -151,7 +155,7 @@ class TelemetryTab(QWidget):
         scroll.setWidget(container)
 
         self._graphs_splitter.addWidget(scroll)
-        outer.addWidget(self._graphs_splitter)
+        outer.addWidget(self._graphs_splitter, 1)  # take all remaining space
 
         # ── Speed graph ─────────────────────────────────────────────────
         self.speed_graph_title = _channel_header(C_SPEED, 'SPEED', 'km/h')
