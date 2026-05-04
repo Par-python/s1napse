@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout
 from ... import theme
 from ..primitives import Card, Stat
 from ..gauges import RevBar, PedalBar, SteeringBar
+from ..panels import LapHistoryPanel
 from ...constants import C_THROTTLE, C_BRAKE
 
 
@@ -57,6 +58,13 @@ class DashboardTab(QWidget):
             c = Card(label=label, dense=True)
             c.body().addWidget(stat)
             grid.addWidget(c, i // 2, i % 2)
+
+        # Lap history panel — recent laps table
+        self.lap_history = LapHistoryPanel()
+        outer.addWidget(self.lap_history, stretch=1)
+
+        # Mirror onto app so existing references work (bridge pattern)
+        app.lap_history = self.lap_history
 
         outer.addStretch(0)
 

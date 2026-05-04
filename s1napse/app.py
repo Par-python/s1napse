@@ -279,16 +279,6 @@ class TelemetryApp(QMainWindow):
         self.strategy_tab._uco_pit_loss_spin.valueChanged.connect(self._update_undercut)
         self.strategy_tab._uco_pace_delta_spin.valueChanged.connect(self._update_undercut)
 
-        # Legacy dashboard widgets are still referenced by _render_telemetry,
-        # _anim_tick, and _reset_display. Construct them but don't register the
-        # legacy tab — DashboardTab below replaces it visually. Task 27 cleans up.
-        # NOTE: We do NOT deleteLater() the returned widget because _build_dashboard_tab
-        # assigns self.<name> child widgets; deleting the parent would destroy those
-        # children and leave dangling C++ references. The orphan widget tree is kept
-        # alive (hidden) so all cross-cutting self.* references remain valid.
-        self._legacy_dashboard_widget = self._build_dashboard_tab()
-        self._legacy_dashboard_widget.setVisible(False)
-
         self.dashboard_tab = DashboardTab(self)
         self.tabs.addTab(self.dashboard_tab, 'DASHBOARD')
         self.telemetry_tab = TelemetryTab(self)
@@ -1540,307 +1530,6 @@ class TelemetryApp(QMainWindow):
         layout.addWidget(self.header_lap_label)
 
         return strip
-
-    def _build_dashboard_tab(self) -> QWidget:
-        tab = QWidget()
-        main = QVBoxLayout(tab)
-        main.setContentsMargins(10, 10, 10, 10)
-        main.setSpacing(8)
-
-        # ══════════════════════════════════════════════════════════════════
-        # ROW 1 — Instrument cluster (single full-width card)
-        # ══════════════════════════════════════════════════════════════════
-        cluster = QFrame()
-        cluster.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
-        cluster_vbox = QVBoxLayout(cluster)
-        cluster_vbox.setContentsMargins(0, 0, 0, 0)
-        cluster_vbox.setSpacing(0)
-
-        # ── RPM bar flush at top, full width ──────────────────────────
-        self.rev_bar = RevBar()
-        self.rev_bar.setFixedHeight(44)
-        cluster_vbox.addWidget(self.rev_bar)
-
-        # ── RPM numbers + ABS/TC row ──────────────────────────────────
-        rpm_strip = QHBoxLayout()
-        rpm_strip.setContentsMargins(14, 4, 14, 4)
-        rpm_strip.setSpacing(8)
-
-        rpm_lbl = QLabel('RPM')
-        rpm_lbl.setFont(sans(7))
-        rpm_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        self.rpm_numbers = QLabel('0 / 8000')
-        self.rpm_numbers.setFont(mono(8))
-        self.rpm_numbers.setStyleSheet(f'color: {TXT2};')
-        self.rpm_numbers.setMaximumWidth(130)
-        self.rpm_numbers.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-
-        self.abs_badge = AidBadge('ABS')
-        self.tc_badge  = AidBadge('TC')
-        for b in (self.abs_badge, self.tc_badge):
-            b.setFixedHeight(20)
-
-        rpm_strip.addWidget(rpm_lbl)
-        rpm_strip.addWidget(self.rpm_numbers)
-        rpm_strip.addStretch()
-        rpm_strip.addWidget(self.abs_badge)
-        rpm_strip.addWidget(self.tc_badge)
-        cluster_vbox.addLayout(rpm_strip)
-
-        # ── Divider ───────────────────────────────────────────────────
-        div = QFrame()
-        div.setFrameShape(QFrame.Shape.HLine)
-        div.setFixedHeight(1)
-        div.setStyleSheet(f'background: {BORDER}; border: none;')
-        cluster_vbox.addWidget(div)
-
-        # ── Three-column inner section ────────────────────────────────
-        inner = QHBoxLayout()
-        inner.setContentsMargins(0, 0, 0, 0)
-        inner.setSpacing(0)
-
-        def _vsep():
-            s = QFrame()
-            s.setFrameShape(QFrame.Shape.VLine)
-            s.setFixedWidth(1)
-            s.setStyleSheet(f'background: {BORDER}; border: none;')
-            return s
-
-        # ── COLUMN A: Pedals ─────────────────────────────────────────
-        ped_widget = QWidget()
-        ped_widget.setStyleSheet('background: transparent;')
-        ped_widget.setFixedWidth(96)
-        ped_vbox = QVBoxLayout(ped_widget)
-        ped_vbox.setContentsMargins(10, 14, 10, 14)
-        ped_vbox.setSpacing(6)
-
-        ped_title = QLabel('INPUTS')
-        ped_title.setFont(sans(7))
-        ped_title.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        ped_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ped_vbox.addWidget(ped_title)
-
-        ped_bars = QHBoxLayout()
-        ped_bars.setSpacing(10)
-        ped_bars.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        for color, attr, txt in [
-            (C_THROTTLE, 'throttle_bar', 'THR'),
-            (C_BRAKE,    'brake_bar',    'BRK'),
-        ]:
-            col = QVBoxLayout()
-            col.setSpacing(4)
-            col.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-            bar = PedalBar(color, txt)
-            bar.setFixedWidth(30)
-            bar.setMinimumHeight(110)
-            setattr(self, attr, bar)
-            lbl = QLabel(txt)
-            lbl.setFont(sans(6))
-            lbl.setStyleSheet(f'color: {color}; letter-spacing: 0.5px;')
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            col.addWidget(bar)
-            col.addWidget(lbl)
-            ped_bars.addLayout(col)
-        ped_vbox.addLayout(ped_bars, stretch=1)
-
-        inner.addWidget(ped_widget)
-        inner.addWidget(_vsep())
-
-        # ── COLUMN B: Hero — Gear + Speed + Steering ──────────────────
-        hero_widget = QWidget()
-        hero_widget.setStyleSheet('background: transparent;')
-        hero_widget.setMinimumWidth(280)
-        hero_widget.setMaximumWidth(620)
-        hero_vbox = QVBoxLayout(hero_widget)
-        hero_vbox.setContentsMargins(28, 14, 28, 14)
-        hero_vbox.setSpacing(8)
-
-        # Gear + Speed side by side
-        gs_row = QHBoxLayout()
-        gs_row.setSpacing(24)
-        gs_row.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter)
-
-        for num_color, title_txt, attr, fsize in [
-            (C_GEAR,  'GEAR',  'gear_value',  72),
-            (C_SPEED, 'SPEED', 'speed_value', 72),
-        ]:
-            blk = QVBoxLayout()
-            blk.setSpacing(0)
-            blk.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-            t = QLabel(title_txt)
-            t.setFont(sans(7))
-            t.setStyleSheet(f'color: {TXT2}; letter-spacing: 2px;')
-            t.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-            v = QLabel('N' if attr == 'gear_value' else '0')
-            v.setFont(mono(fsize, bold=True))
-            v.setStyleSheet(f'color: {num_color};')
-            v.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            # Pin to widest possible text so layout never drifts when text changes
-            _fm = QFontMetrics(v.font())
-            _max_txt = '8' if attr == 'gear_value' else '299'
-            v.setFixedWidth(_fm.horizontalAdvance(_max_txt) + 12)
-            setattr(self, attr, v)
-
-            blk.addWidget(t)
-            blk.addWidget(v)
-            gs_row.addLayout(blk)
-
-        # km/h unit label under speed
-        unit_row = QHBoxLayout()
-        unit_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        unit_lbl = QLabel('km/h')
-        unit_lbl.setFont(sans(10))
-        unit_lbl.setStyleSheet(f'color: {TXT2};')
-        unit_row.addSpacing(96 + 24)   # align under speed column
-        unit_row.addWidget(unit_lbl)
-        unit_row.addStretch()
-
-        hero_vbox.addLayout(gs_row, stretch=1)
-        hero_vbox.addLayout(unit_row)
-
-        # Steering bar at bottom of hero
-        steer_row = QHBoxLayout()
-        steer_row.setSpacing(8)
-        steer_lbl = QLabel('STEER')
-        steer_lbl.setFont(sans(7))
-        steer_lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        self.steering_widget = SteeringBar()
-        steer_row.addWidget(steer_lbl)
-        steer_row.addWidget(self.steering_widget, stretch=1)
-        hero_vbox.addLayout(steer_row)
-
-        inner.addWidget(hero_widget, stretch=1)
-        inner.addWidget(_vsep())
-
-        # ── COLUMN C: Info — Fuel / Position / Lap ───────────────────
-        info_widget = QWidget()
-        info_widget.setStyleSheet('background: transparent;')
-        info_widget.setFixedWidth(200)
-        info_vbox = QVBoxLayout(info_widget)
-        info_vbox.setContentsMargins(16, 14, 16, 14)
-        info_vbox.setSpacing(10)
-
-        def _stat(dot_color, title, attr, fsize=20, unit=''):
-            row = QVBoxLayout()
-            row.setSpacing(1)
-            hdr = QHBoxLayout()
-            hdr.setSpacing(5)
-            dot = QLabel('●')
-            dot.setFont(sans(6))
-            dot.setStyleSheet(f'color: {dot_color};')
-            lbl = QLabel(title)
-            lbl.setFont(sans(7))
-            lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-            hdr.addWidget(dot)
-            hdr.addWidget(lbl)
-            hdr.addStretch()
-            val_row = QHBoxLayout()
-            val_row.setSpacing(5)
-            val = QLabel('—')
-            val.setFont(mono(fsize, bold=True))
-            val.setStyleSheet(f'color: {WHITE};')
-            val.setMaximumWidth(164)
-            val.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-            val_row.addWidget(val)
-            if unit:
-                u = QLabel(unit)
-                u.setFont(sans(9))
-                u.setStyleSheet(f'color: {TXT2};')
-                val_row.addWidget(u)
-            val_row.addStretch()
-            row.addLayout(hdr)
-            row.addLayout(val_row)
-            setattr(self, attr, val)
-            return row
-
-        # Fuel block — value + strategy sub-labels
-        fuel_block = QVBoxLayout()
-        fuel_block.setSpacing(2)
-        fuel_hdr = QHBoxLayout()
-        fuel_hdr.setSpacing(5)
-        _fd = QLabel('●')
-        _fd.setFont(sans(6))
-        _fd.setStyleSheet(f'color: {C_RPM};')
-        _fl = QLabel('FUEL')
-        _fl.setFont(sans(7))
-        _fl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        fuel_hdr.addWidget(_fd)
-        fuel_hdr.addWidget(_fl)
-        fuel_hdr.addStretch()
-        fuel_val_row = QHBoxLayout()
-        fuel_val_row.setSpacing(5)
-        self._fuel_lbl = QLabel('—')
-        self._fuel_lbl.setFont(mono(24, bold=True))
-        self._fuel_lbl.setStyleSheet(f'color: {WHITE};')
-        self._fuel_lbl.setMaximumWidth(164)
-        self._fuel_lbl.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        fuel_val_row.addWidget(self._fuel_lbl)
-        _fu = QLabel('L')
-        _fu.setFont(sans(9))
-        _fu.setStyleSheet(f'color: {TXT2};')
-        fuel_val_row.addWidget(_fu)
-        fuel_val_row.addStretch()
-        self._fuel_avg_lbl = QLabel('')
-        self._fuel_avg_lbl.setFont(mono(8))
-        self._fuel_avg_lbl.setStyleSheet(f'color: {TXT2};')
-        self._fuel_laps_lbl = QLabel('')
-        self._fuel_laps_lbl.setFont(mono(9, bold=True))
-        self._fuel_laps_lbl.setStyleSheet(f'color: {C_RPM};')
-        fuel_block.addLayout(fuel_hdr)
-        fuel_block.addLayout(fuel_val_row)
-        fuel_block.addWidget(self._fuel_avg_lbl)
-        fuel_block.addWidget(self._fuel_laps_lbl)
-        info_vbox.addLayout(fuel_block)
-
-        # ── Brake bias ────────────────────────────────────────────────
-        _bb_hdr = QHBoxLayout()
-        _bb_hdr.setSpacing(5)
-        _bb_dot = QLabel('●')
-        _bb_dot.setFont(sans(6))
-        _bb_dot.setStyleSheet(f'color: {C_SPEED};')
-        _bb_title = QLabel('BRAKE BIAS')
-        _bb_title.setFont(sans(7))
-        _bb_title.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        _bb_hdr.addWidget(_bb_dot)
-        _bb_hdr.addWidget(_bb_title)
-        _bb_hdr.addStretch()
-        self._brake_bias_lbl = QLabel('—')
-        self._brake_bias_lbl.setFont(mono(16, bold=True))
-        self._brake_bias_lbl.setStyleSheet(f'color: {TXT2};')
-
-        # Track frame for split bar
-        self._bias_track = QFrame()
-        self._bias_track.setFixedHeight(6)
-        self._bias_track.setStyleSheet(
-            f'background: {BG3}; border-radius: 3px; border: none;')
-        self._bias_front_fill = QFrame(self._bias_track)
-        self._bias_front_fill.setFixedHeight(6)
-        self._bias_front_fill.setFixedWidth(0)
-        self._bias_front_fill.setStyleSheet(
-            f'background: {C_SPEED}; border-radius: 3px; border: none;')
-
-        info_vbox.addLayout(_bb_hdr)
-        info_vbox.addWidget(self._brake_bias_lbl)
-        info_vbox.addWidget(self._bias_track)
-
-        info_vbox.addLayout(_stat(C_GEAR, 'POSITION',  '_position_lbl', 24))
-        info_vbox.addLayout(_stat(C_REF,  'LAST LAP',  '_laptime_lbl',  16))
-        info_vbox.addStretch()
-
-        inner.addWidget(info_widget)
-        cluster_vbox.addLayout(inner, stretch=1)
-        main.addWidget(cluster)
-
-        # ══════════════════════════════════════════════════════════════════
-        # ROW 2 — Session laps
-        # ══════════════════════════════════════════════════════════════════
-        self.lap_history = LapHistoryPanel()
-        main.addWidget(self.lap_history, stretch=1)
-
-        return tab
 
     def _build_graphs_tab(self) -> QWidget:
         tab = QWidget()
@@ -3952,7 +3641,6 @@ class TelemetryApp(QMainWindow):
         """60 fps animation tick — smooth lerp for car dot, steering, and replay."""
         self.track_map.tick_lerp()
         self._rpl_map.tick_lerp()
-        self.steering_widget.tick_lerp()
         self._rpl_steer.tick_lerp()
 
         # Replay: advance using wall-clock delta for smooth playback
@@ -4213,28 +3901,15 @@ class TelemetryApp(QMainWindow):
         else:
             gear_text = str(gear - 1)  # 2→1st, 3→2nd, …
 
-        # ── Dashboard updates ────────────────────────────────────────────
+        # ── Variables used by graph updates and tab update_tick below ───────
         speed = data.get('speed', 0.0) or 0.0
-        self.speed_value.setText(f"{int(speed)}")
-        self.gear_value.setText(gear_text)
-
         rpm = data.get('rpm', 0.0) or 0.0
-        max_rpm = data.get('max_rpm', 8000.0) or 8000.0
-        self.rev_bar.set_value(rpm, max_rpm)
-        self.rpm_numbers.setText(f"{int(rpm):,} / {int(max_rpm):,}")
-
         throttle = data.get('throttle', 0.0) or 0.0
         brake = data.get('brake', 0.0) or 0.0
-        self.throttle_bar.set_value(throttle)
-        self.brake_bar.set_value(brake)
-
         steer_angle = data.get('steer_angle', 0.0) or 0.0
-        self.steering_widget.set_angle(steer_angle)
-
         abs_val = data.get('abs', 0.0) or 0.0
         tc_val = data.get('tc', 0.0) or 0.0
-        self.abs_badge.set_active(abs_val > 0, f"{abs_val:.1f}")
-        self.tc_badge.set_active(tc_val > 0, f"{tc_val:.1f}")
+        fuel = data.get('fuel', 0.0)
 
         car_name = data.get('car_name', '') or ''
         track_name = data.get('track_name', '') or ''
@@ -4245,49 +3920,6 @@ class TelemetryApp(QMainWindow):
             QFontMetrics(self.track_label.font()).elidedText(
                 track_name, Qt.TextElideMode.ElideRight, 236))
         self._auto_detect_track(track_name)
-
-        fuel = data.get('fuel', 0.0)
-        self._fuel_lbl.setText(f"{fuel:.1f}")
-
-        # Fuel strategy sub-labels
-        if self._fuel_per_lap_history:
-            recent = self._fuel_per_lap_history[-5:]  # last 5 laps
-            avg_use = sum(recent) / len(recent)
-            laps_left = (fuel / avg_use) if avg_use > 0 else 0
-            self._fuel_avg_lbl.setText(f'{avg_use:.2f} L/lap')
-            color = C_THROTTLE if laps_left >= 3 else (C_RPM if laps_left >= 1 else C_BRAKE)
-            self._fuel_laps_lbl.setText(f'~{laps_left:.1f} laps')
-            self._fuel_laps_lbl.setStyleSheet(f'color: {color};')
-        elif fuel > 0:
-            self._fuel_avg_lbl.setText('avg after lap 1')
-            self._fuel_laps_lbl.setText('')
-
-        # ── Brake bias ────────────────────────────────────────────────────
-        raw_bias = data.get('brake_bias', 0.0)
-        if 0.0 < raw_bias <= 1.0:
-            bias_pct = raw_bias * 100
-        elif 50.0 <= raw_bias <= 80.0:
-            bias_pct = raw_bias
-        else:
-            bias_pct = 0.0
-        if bias_pct > 0:
-            col = C_THROTTLE if 54 <= bias_pct <= 64 else C_RPM
-            self._brake_bias_lbl.setText(f'{bias_pct:.1f}% F')
-            self._brake_bias_lbl.setStyleSheet(f'color: {col};')
-            self._bias_front_fill.setFixedWidth(
-                int(self._bias_track.width() * bias_pct / 100))
-            self._bias_front_fill.setStyleSheet(
-                f'background: {col}; border-radius: 3px; border: none;')
-
-        position = data.get('position', 0) or 0
-        self._position_lbl.setText(str(position))
-
-        lap_time = data.get('lap_time', 0) or 0
-        if lap_time > 0:
-            lt = lap_time
-            m = int(lt // 60)
-            s = lt % 60
-            self._laptime_lbl.setText(f'{m}:{s:06.3f}')
 
         self.dashboard_tab.update_tick(self._last_data)
         self.race_tab.update_tick(self._last_data)
@@ -4558,25 +4190,8 @@ class TelemetryApp(QMainWindow):
     # ------------------------------------------------------------------
 
     def _reset_display(self):
-        self.speed_value.setText('0')
-        self.gear_value.setText('N')
-        self.rev_bar.set_value(0, 8000)
-        self.rpm_numbers.setText('0 / 8000')
-        self.throttle_bar.set_value(0)
-        self.brake_bar.set_value(0)
-        self.steering_widget.set_angle(0)
-        self.abs_badge.set_active(False)
-        self.tc_badge.set_active(False)
         self.car_label.setText('—')
         self.track_label.setText('—')
-        self._fuel_lbl.setText('—')
-        self._fuel_avg_lbl.setText('')
-        self._fuel_laps_lbl.setText('')
-        self._brake_bias_lbl.setText('—')
-        self._brake_bias_lbl.setStyleSheet(f'color: {TXT2};')
-        self._bias_front_fill.setFixedWidth(0)
-        self._position_lbl.setText('—')
-        self._laptime_lbl.setText('—')
         self.dashboard_tab.update_tick(None)
         self.race_tab.update_tick(None)
         self.tyres_tab.update_tick(None)
