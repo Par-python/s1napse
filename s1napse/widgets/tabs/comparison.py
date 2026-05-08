@@ -150,8 +150,8 @@ class LapComparisonTab(QWidget):
         graphs_vbox = graphs_card.body()
         graphs_vbox.setSpacing(4)
 
-        COLOR_A = C_SPEED
-        COLOR_B = C_STEER
+        COLOR_A = '#00d4ff'  # cyan — Lap A
+        COLOR_B = '#ffb020'  # amber — Lap B (high contrast vs cyan)
 
         self._app._cmp_speed = ComparisonGraph(
             'Speed km/h', COLOR_A, COLOR_B, ylim=(0, 320))
