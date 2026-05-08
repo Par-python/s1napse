@@ -54,11 +54,10 @@ from .widgets import (
     TimeDeltaGraph, ComparisonGraph, ComparisonDeltaGraph,
     RacePaceChart, ReplayGraph, ReplayMultiGraph,
     SectorTimesPanel, SectorScrubWidget, LapHistoryPanel,
-    AidBadge, StrategyTab, LiveTabBar,
+    AidBadge, LiveTabBar,
 )
 from .widgets.title_bar import TitleBar
 from .widgets.graphs import _style_ax
-from .widgets.coach_tab import CoachTab
 from .widgets.math_channel_panel import MathChannelPanel
 from .widgets.tabs import RaceTab, TyresTab, DashboardTab, LapAnalysisTab, TelemetryTab, LapComparisonTab, SessionTab, ReplayTab
 from .coaching.lap_coach import LapCoach
@@ -263,12 +262,10 @@ class TelemetryApp(QMainWindow):
         self.tabs.setTabBar(LiveTabBar(self.tabs))
         main_layout.addWidget(self.tabs)
 
-        # Instantiate StrategyTab before RaceTab so its labels are ready.
-        self.strategy_tab = StrategyTab()
-        self.strategy_tab._fs_laps_spin.valueChanged.connect(self._update_fuel_save)
-        self.strategy_tab._uco_pit_loss_spin.valueChanged.connect(self._update_undercut)
-        self.strategy_tab._uco_pace_delta_spin.valueChanged.connect(self._update_undercut)
-
+        # The merged Race tab owns the Strategy data (pit window, deg, rivals,
+        # fuel-save / undercut calculators). The legacy Strategy tab is gone;
+        # `self.strategy_tab` aliases the Race tab so existing back-end calls
+        # (e.g. self.strategy_tab._fs_laps_spin.value()) keep working.
         self.dashboard_tab = DashboardTab(self)
         self.tabs.addTab(self.dashboard_tab, 'DASHBOARD')
         self.telemetry_tab = TelemetryTab(self)
@@ -276,8 +273,11 @@ class TelemetryApp(QMainWindow):
         self.lap_analysis_tab = LapAnalysisTab(self)
         self.tabs.addTab(self.lap_analysis_tab, 'LAP ANALYSIS')
         self.race_tab = RaceTab(self)
+        self.strategy_tab = self.race_tab  # alias for legacy back-end handlers
+        self.race_tab._fs_laps_spin.valueChanged.connect(self._update_fuel_save)
+        self.race_tab._uco_pit_loss_spin.valueChanged.connect(self._update_undercut)
+        self.race_tab._uco_pace_delta_spin.valueChanged.connect(self._update_undercut)
         self.tabs.addTab(self.race_tab, 'RACE')
-        self.tabs.addTab(self.strategy_tab, 'STRATEGY')
         self.tyres_tab = TyresTab(self)
         self.tabs.addTab(self.tyres_tab, 'TYRES')
         self.comparison_tab = LapComparisonTab(self)
@@ -286,9 +286,6 @@ class TelemetryApp(QMainWindow):
         self.tabs.addTab(self.session_tab, 'SESSION')
         self.replay_tab = ReplayTab(self)
         self.tabs.addTab(self.replay_tab, 'REPLAY')
-
-        self.coach_tab = CoachTab()
-        self.tabs.addTab(self.coach_tab, 'COACH')
 
         # Math channel panel (side panel on graphs tab, initialized after UI)
         self._math_panel = MathChannelPanel(self._math_engine)
@@ -724,11 +721,8 @@ class TelemetryApp(QMainWindow):
             # Enable lap keyboard shortcut
             if hasattr(self, '_lap_shortcut'):
                 self._lap_shortcut.setEnabled(True)
-            # Select ELM327 in game combo if available
-            if hasattr(self, 'game_combo'):
-                idx = self.game_combo.findText('ELM327 (OBD-II)')
-                if idx >= 0:
-                    self.game_combo.setCurrentIndex(idx)
+            # Real racing has its own dedicated UI page; we no longer offer
+            # ELM327 in the sim source combo. Just kick off the real UI.
             self._start_real_racing_ui()
             QTimer.singleShot(600, lambda: self._stack.setCurrentIndex(3))
         else:
@@ -1265,13 +1259,13 @@ class TelemetryApp(QMainWindow):
         self.connection_dot.setToolTip('Disconnected')
         out.append(self.connection_dot)
 
-        # Game source combo (no label — combo is self-explanatory)
+        # Game source combo — short acronyms only. ELM327/OBD-II is a real-
+        # racing reader and lives on its own setup page; offering it here
+        # would let users pick OBD-II from the sim chrome which makes no
+        # sense.
         self.game_combo = QComboBox()
-        self.game_combo.addItems([
-            'Auto-Detect', 'ACC (Shared Memory)', 'AC (UDP)', 'iRacing (SDK)',
-            'ELM327 (OBD-II)',
-        ])
-        self.game_combo.setFixedWidth(150)
+        self.game_combo.addItems(['Auto-Detect', 'ACC', 'AC', 'iRacing'])
+        self.game_combo.setFixedWidth(120)
         self.game_combo.setToolTip('Telemetry source')
         self.game_combo.currentTextChanged.connect(self._on_game_changed)
         out.append(self.game_combo)
@@ -1455,17 +1449,8 @@ class TelemetryApp(QMainWindow):
         self._populate_replay_combo()
         self._refresh_session_tab()
 
-        # ── Coaching analysis ────────────────────────────────────────
-        try:
-            report = self._lap_coach.analyze(self.session_laps[-1])
-            if report is not None:
-                self.coach_tab.set_report(report)
-                self.coach_tab.set_corners_on_map(
-                    self._lap_coach.corners,
-                    report.trail_brake_analyses,
-                    self.track_map)
-        except Exception as e:
-            print(f'Coaching analysis error: {e}')
+        # Coach tab was removed (raw-data focus). LapCoach engine still
+        # runs for any internal use, but no UI consumer needs it now.
 
         # Promote this lap to the reference for delta / sector comparison
         if len(dists) > 0 and len(dists) == len(times):
@@ -2363,33 +2348,35 @@ class TelemetryApp(QMainWindow):
                                 f'Saved {len(self.session_laps)} laps to:\n{path}')
 
     def _update_fuel_save(self):
+        _RESET = 'background: transparent; border: none;'
         history = self._fuel_per_lap_history
         if not history:
-            self.strategy_tab._fs_result_lbl.setText('Complete a lap first.')
-            self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {TEXT_MUTED};')
+            self.race_tab._fs_result_lbl.setText('Complete a lap first.')
+            self.race_tab._fs_result_lbl.setStyleSheet(f'color: {TEXT_MUTED}; {_RESET}')
             return
         avg = sum(history[-5:]) / len(history[-5:])
         fuel = self._last_known_fuel
-        laps_to_go = self.strategy_tab._fs_laps_spin.value()
+        laps_to_go = self.race_tab._fs_laps_spin.value()
         needed = avg * laps_to_go
         delta = fuel - needed
         if delta >= 0:
             save_per_lap = delta / laps_to_go
-            self.strategy_tab._fs_result_lbl.setText(
+            self.race_tab._fs_result_lbl.setText(
                 f'Buffer  +{delta:.1f} L   ({save_per_lap:.2f} L/lap spare)')
-            self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {C_THROTTLE};')
+            self.race_tab._fs_result_lbl.setStyleSheet(f'color: {C_THROTTLE}; {_RESET}')
         else:
             save_per_lap = abs(delta) / laps_to_go
-            self.strategy_tab._fs_result_lbl.setText(
+            self.race_tab._fs_result_lbl.setText(
                 f'SAVE  {save_per_lap:.2f} L/lap   (need {needed:.1f} L, have {fuel:.1f} L)')
             col = C_RPM if save_per_lap < 0.5 else C_BRAKE
-            self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {col};')
+            self.race_tab._fs_result_lbl.setStyleSheet(f'color: {col}; {_RESET}')
 
     def _update_undercut(self):
+        _RESET = 'background: transparent; border: none;'
         gap_a = abs(self._last_gap_ahead) / 1000.0
         gap_b = abs(self._last_gap_behind) / 1000.0
-        pit_loss = self.strategy_tab._uco_pit_loss_spin.value()
-        pace_delta = self.strategy_tab._uco_pace_delta_spin.value()
+        pit_loss = self.race_tab._uco_pit_loss_spin.value()
+        pace_delta = self.race_tab._uco_pace_delta_spin.value()
 
         if pace_delta > 0 and gap_a > 0:
             laps_to_catch = (gap_a + pit_loss) / pace_delta
@@ -2402,8 +2389,8 @@ class TelemetryApp(QMainWindow):
         else:
             uc_text = 'UNDERCUT: no car ahead data'
             uc_col = TEXT_MUTED
-        self.strategy_tab._uco_undercut_lbl.setText(uc_text)
-        self.strategy_tab._uco_undercut_lbl.setStyleSheet(f'color: {uc_col};')
+        self.race_tab._uco_undercut_lbl.setText(uc_text)
+        self.race_tab._uco_undercut_lbl.setStyleSheet(f'color: {uc_col}; {_RESET}')
 
         if gap_b > 0:
             margin = pit_loss - gap_b
@@ -2417,8 +2404,8 @@ class TelemetryApp(QMainWindow):
         else:
             oc_text = 'OVERCUT: no car behind data'
             oc_col = TEXT_MUTED
-        self.strategy_tab._uco_overcut_lbl.setText(oc_text)
-        self.strategy_tab._uco_overcut_lbl.setStyleSheet(f'color: {oc_col};')
+        self.race_tab._uco_overcut_lbl.setText(oc_text)
+        self.race_tab._uco_overcut_lbl.setStyleSheet(f'color: {oc_col}; {_RESET}')
 
     # ------------------------------------------------------------------
     # GAME SELECTION / AUTO-DETECT
@@ -2429,16 +2416,11 @@ class TelemetryApp(QMainWindow):
         if game == 'Auto-Detect':
             self.auto_detect = True
             self.current_reader = None
-        elif game == 'ACC (Shared Memory)':
+        elif game == 'ACC':
             self.current_reader = self.acc_reader
-        elif game == 'iRacing (SDK)':
+        elif game == 'iRacing':
             self.current_reader = self.ir_reader
-        elif game == 'ELM327 (OBD-II)':
-            if self.elm_reader and self.elm_reader.is_connected():
-                self.current_reader = self.elm_reader
-            else:
-                self.current_reader = None
-        else:  # 'AC (UDP)'
+        else:  # 'AC'
             if self.ac_reader:
                 self.ac_reader.disconnect()
             self.ac_reader = ACUDPReader(self.udp_host.text(), int(self.udp_port.text()))
@@ -2883,11 +2865,8 @@ class TelemetryApp(QMainWindow):
         for s in samples:
             self._process_sample(s)
 
-        # Strategy tab — re-render from latest engine snapshot
-        try:
-            self.strategy_tab.refresh(self._strategy_engine.state)
-        except Exception:
-            pass
+        # The merged Race tab reads engine.state directly inside its
+        # update_tick (called below via race_tab.update_tick).
 
         # ── Phase 2: Connection hysteresis ──
         if samples:
@@ -3228,25 +3207,43 @@ class TelemetryApp(QMainWindow):
     # ------------------------------------------------------------------
 
     def _reset_display(self):
-        self.car_label.setText('—')
-        self.track_label.setText('—')
-        self.dashboard_tab.update_tick(None)
-        self.race_tab.update_tick(None)
-        self.tyres_tab.update_tick(None)
-        self.strategy_tab._pit_rec_lbl.setText('—')
-        self.strategy_tab._pit_rec_lbl.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 1px;')
-        self.strategy_tab._pit_fuel_laps_lbl.setText('—')
-        self.strategy_tab._pit_tyre_stint_lbl.setText('—')
-        self.strategy_tab._pit_tyre_cond_lbl.setText('—')
-        self.strategy_tab._pit_no_data_lbl.setVisible(True)
-        self.strategy_tab._fs_result_lbl.setText('—')
-        self.strategy_tab._fs_result_lbl.setStyleSheet(f'color: {TEXT_MUTED};')
-        self.strategy_tab._uco_undercut_lbl.setText('UNDERCUT: —')
-        self.strategy_tab._uco_undercut_lbl.setStyleSheet(f'color: {TEXT_MUTED};')
-        self.strategy_tab._uco_overcut_lbl.setText('OVERCUT: —')
-        self.strategy_tab._uco_overcut_lbl.setStyleSheet(f'color: {TEXT_MUTED};')
-        self._reset_analysis_graphs()
-        self.track_map.reset()
+        # Each block is wrapped so a single missing-attribute on a stale
+        # widget tree (e.g. mid-refactor binary running against new
+        # app.py) does not abort the whole render tick.
+        _RESET = 'background: transparent; border: none;'
+        try:
+            self.car_label.setText('—')
+            self.track_label.setText('—')
+        except AttributeError:
+            pass
+        try:
+            self.dashboard_tab.update_tick(None)
+        except AttributeError:
+            pass
+        try:
+            # The merged Race tab handles its own reset via update_tick(None);
+            # the calculator labels live on race_tab and are reset explicitly.
+            self.race_tab.update_tick(None)
+            self.race_tab._fs_result_lbl.setText('—')
+            self.race_tab._fs_result_lbl.setStyleSheet(f'color: {TEXT_MUTED}; {_RESET}')
+            self.race_tab._uco_undercut_lbl.setText('UNDERCUT: —')
+            self.race_tab._uco_undercut_lbl.setStyleSheet(f'color: {TEXT_MUTED}; {_RESET}')
+            self.race_tab._uco_overcut_lbl.setText('OVERCUT: —')
+            self.race_tab._uco_overcut_lbl.setStyleSheet(f'color: {TEXT_MUTED}; {_RESET}')
+        except AttributeError:
+            pass
+        try:
+            self.tyres_tab.update_tick(None)
+        except AttributeError:
+            pass
+        try:
+            self._reset_analysis_graphs()
+        except AttributeError:
+            pass
+        try:
+            self.track_map.reset()
+        except AttributeError:
+            pass
 
 
 # ---------------------------------------------------------------------------

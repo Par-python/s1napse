@@ -23,29 +23,19 @@ Six cards + Race-tab headline banner. See [v1 design spec](./2026-04-25-strategy
 
 ## v2 — July 2026 (~3-4 weeks)
 
-The "real data" upgrade. Replaces the gap-jump heuristic in card #4 with the ACC broadcasting API, and adds the higher-effort cards that v1 deferred.
+The accuracy + planner upgrade. Adds the higher-effort cards that v1 deferred.
 
-### v2.1 — ACC broadcasting integration (highest priority)
+**Removed from scope (formerly v2.1): ACC broadcasting integration.** The v1 gap-jump heuristic for rival-watch stands permanently — card #4 keeps its "(inferred)" label. Rationale: undocumented protocol, unmaintained wrappers, and the live-coaching relay (post-v1.0 candidate, see release roadmap) covers most of the value broadcasting would have unlocked since a coach can read full-field data from their own ACC client. See release roadmap risk section history for the full reasoning.
 
-Wire the ACC broadcasting UDP API as a separate connection alongside `ACCReader`. This unlocks full-field rival data: every car's lap count, position, last lap time, and pit status.
-
-- Pick a wrapper (probable: `accapi` (Apache-2.0, EmperorCookie) or fork it). Verify the data fields it exposes by reading the source.
-- Add `s1napse/readers/acc_broadcast.py` as a third reader running in parallel with `ACCReader`. Handles its own UDP socket, handshake, heartbeat, and reconnection.
-- Surface rival entries into a new `data['rivals']` list keyed by car number.
-- Replace card #4's gap-jump inference with real "rival pitted" events. Drop the "(inferred)" label.
-- Document the user-side setup (ACC's `broadcasting.json` configuration) in the README.
-
-**Risk.** Undocumented protocol, unmaintained wrappers. Plan for ~50% schedule buffer.
-
-### v2.2 — What-if pit planner card
+### v2.1 — What-if pit planner card
 
 A separate card that lets the user simulate pit decisions: "if I pit lap N with compound X, what's my projected finish vs. staying out?" Used between stints or under yellow flag, not during driving.
 
 - Inputs: pit-on-lap dropdown, compound dropdown, target stint length.
-- Output: projected finish time vs. baseline, gap to current rivals at finish.
-- Reuses `StrategyEngine`'s degradation model and rival data from v2.1.
+- Output: projected finish time vs. baseline, projected gap to the car ahead/behind at finish (using the v1 gap-jump heuristic + own-car pace projection — no full-field data).
+- Reuses `StrategyEngine`'s degradation model.
 
-### v2.3 — Two-phase warmup-then-degradation model
+### v2.2 — Two-phase warmup-then-degradation model
 
 Improves card #1's accuracy by detecting tyre warmup phase (first 1-2 laps) before fitting the linear degradation. Optional: fall back to the v1 single-line fit if the warmup detection is uncertain.
 
@@ -55,13 +45,11 @@ Polish and trust-building work to ship the Strategy tab as a release-quality fea
 
 - **Per-compound learned curves.** Persist degradation slopes per (track, compound) across sessions. After 3+ stints on the same combo, use the historical curve as a prior, with the live regression as a confidence-weighted update.
 - **Per-car/track fuel-save calibration.** Replace the 0.7 s/L hardcoded constant in card #3 with per-(car, track) values learned from session history.
-- **iRacing parity.** Wire iRacing's full-field API into the rival-watch card so card #4 works on both sims.
 - **Telemetry replay support.** When the user opens a saved lap in the replay tab, also reconstruct that lap's `StrategyState` for after-the-fact review.
-- **Documentation.** README section explaining each card, the model assumptions, and the broadcasting setup.
+- **Documentation.** README section explaining each card and the model assumptions.
 
 ## Long-term (post-release, no committed date)
 
-- AC support for rival-watch (no broadcasting API exists; would need a different approach or staying inferred).
 - Mobile companion that surfaces the headline banner remotely (paired with the website product).
 - Setup-influence card: correlate setup changes with degradation slope changes across sessions.
 - Multi-stint planner for endurance racing.

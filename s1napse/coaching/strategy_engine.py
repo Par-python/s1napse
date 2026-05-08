@@ -193,27 +193,43 @@ class StrategyEngine:
         s = self._state
         fuel_now = sample.get('fuel', 0.0)
 
-        # Open edge: fuel-driven
+        # The pit window has two edges:
+        #   open  = earliest lap you can pit and still safely finish
+        #           (assume tyres are ready ~3 laps in — heat them up first)
+        #   close = latest lap you must pit by (fuel-driven hard limit, OR
+        #           tyre-cliff projection, whichever comes first)
         if self._fuel_per_lap_history and fuel_now > 0:
             avg_fuel = sum(self._fuel_per_lap_history[-3:]) / len(
                 self._fuel_per_lap_history[-3:])
             if avg_fuel > 0:
                 laps_left = fuel_now / avg_fuel
                 s.fuel_laps_left = round(laps_left, 1)
-                s.pit_window_open_lap = s.current_lap_count + int(laps_left)
+                # Fuel hard limit: must pit by this lap (or run out)
+                fuel_hard_limit_lap = s.current_lap_count + int(laps_left)
             else:
                 s.fuel_laps_left = None
-                s.pit_window_open_lap = None
+                fuel_hard_limit_lap = None
         else:
             s.fuel_laps_left = None
+            fuel_hard_limit_lap = None
+
+        # Open edge: 3 laps from now (warmup heuristic) OR now if past mid-stint
+        if fuel_hard_limit_lap is not None:
+            mid_stint = s.current_lap_count + max(
+                1, (fuel_hard_limit_lap - s.current_lap_count) // 2
+            )
+            s.pit_window_open_lap = mid_stint
+        else:
             s.pit_window_open_lap = None
 
-        # Close edge: tyre cliff
+        # Close edge: tyre cliff OR fuel hard limit, whichever comes first
+        tyre_close_lap = None
         if s.deg_slope_s_per_lap and s.deg_slope_s_per_lap > 0:
             cliff_laps_ahead = self._tyre_cliff_threshold_s / s.deg_slope_s_per_lap
-            s.pit_window_close_lap = s.current_lap_count + int(cliff_laps_ahead)
-        else:
-            s.pit_window_close_lap = None
+            tyre_close_lap = s.current_lap_count + int(cliff_laps_ahead)
+
+        candidates = [c for c in (fuel_hard_limit_lap, tyre_close_lap) if c is not None]
+        s.pit_window_close_lap = min(candidates) if candidates else None
 
     def _recompute_rival_watch(self, sample: dict) -> None:
         """Detect rival pit by sudden gap jump (>= pit_loss * 0.7 within ~5 s)."""

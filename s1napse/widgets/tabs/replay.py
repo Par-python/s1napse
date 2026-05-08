@@ -1,11 +1,10 @@
-"""Replay tab — playback controls + telemetry graphs + mini dashboard.
+"""Replay tab — 50/50 split: data on the left, track map on the right.
 
-Roomy bucket (dense=False). Layout:
-  - Top strip : lap selector + import/load + play/pause + speed (Card, dense=True)
-  - Middle    : sector scrubber + horizontal splitter
-                  left  → mini dashboard (sector, speed, gear, RPM, steering, pedals, ABS/TC)
-                  right → track map + sector times
-  - Bottom    : scrollable telemetry graphs (speed, T/B, steer, RPM, gear)
+Layout:
+  - Top strip      : lap selector + import/load + play/pause + speed
+  - Sector scrub   : full-width
+  - Body splitter  : LEFT 50% = mini-dashboard on top + scrollable telemetry
+                     graphs below; RIGHT 50% = track map taking full height.
 
 All ``self._rpl_*``, ``self._replay_*`` widget attributes are mirrored onto
 ``self._app`` so that the legacy replay timer / scrub handlers in app.py keep
@@ -142,17 +141,23 @@ class ReplayTab(QWidget):
         self._replay_scrub.valueChanged.connect(self._app._replay_scrubber_moved)
         outer.addWidget(self._replay_scrub)
 
-        # ── Main content (left dashboard + right track map) ───────────
+        # ── Main content: 50/50 horizontal split ──────────────────────
+        # LEFT  = dashboard on top, scrollable telemetry graphs below.
+        # RIGHT = track map taking full vertical height.
         content_splitter = QSplitter(Qt.Orientation.Horizontal)
         content_splitter.setHandleWidth(4)
         content_splitter.setStyleSheet(f'QSplitter::handle {{ background: {BORDER2}; }}')
 
-        # ── Left: mini dashboard ──────────────────────────────────────
+        # Outer container for the LEFT side (dashboard stacked over graphs)
+        left_container = QWidget()
+        left_outer = QVBoxLayout(left_container)
+        left_outer.setContentsMargins(0, 0, 0, 0)
+        left_outer.setSpacing(8)
+
+        # ── Left top: mini dashboard ──────────────────────────────────
         left_panel = QFrame()
         left_panel.setStyleSheet(
             f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
-        left_panel.setMinimumWidth(270)
-        left_panel.setMaximumWidth(370)
         ll = QVBoxLayout(left_panel)
         ll.setContentsMargins(12, 10, 12, 10)
         ll.setSpacing(6)
@@ -266,45 +271,10 @@ class ReplayTab(QWidget):
         body_row.addLayout(side_col)
         ll.addLayout(body_row, stretch=1)
 
-        content_splitter.addWidget(left_panel)
+        # Add the dashboard panel to the left container (top, no stretch).
+        left_outer.addWidget(left_panel, 0)
 
-        # ── Right: track map ──────────────────────────────────────────
-        right_panel = QFrame()
-        right_panel.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
-        rl = QVBoxLayout(right_panel)
-        rl.setContentsMargins(8, 8, 8, 8)
-        rl.setSpacing(4)
-
-        map_hdr_row = QHBoxLayout()
-        map_title = QLabel('TRACK POSITION')
-        map_title.setFont(sans(7, bold=True))
-        map_title.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
-        map_hdr_row.addWidget(map_title)
-        map_hdr_row.addStretch()
-
-        self._rpl_s1_lbl = QLabel('S1: —')
-        self._rpl_s2_lbl = QLabel('S2: —')
-        self._rpl_s3_lbl = QLabel('S3: —')
-        for i, lbl in enumerate((self._rpl_s1_lbl, self._rpl_s2_lbl, self._rpl_s3_lbl)):
-            colors = [C_DELTA, C_STEER, C_RPM]
-            lbl.setFont(mono(8, bold=True))
-            lbl.setStyleSheet(f'color: {colors[i]};')
-            map_hdr_row.addWidget(lbl)
-            map_hdr_row.addSpacing(8)
-
-        rl.addLayout(map_hdr_row)
-
-        self._rpl_map = TrackMapWidget()
-        self._rpl_map.setMinimumSize(180, 150)
-        rl.addWidget(self._rpl_map, stretch=1)
-
-        content_splitter.addWidget(right_panel)
-        content_splitter.setSizes([310, 500])
-
-        outer.addWidget(content_splitter, stretch=1)
-
-        # ── Bottom: scrollable telemetry graphs ───────────────────────
+        # ── Left bottom: scrollable telemetry graphs ──────────────────
         graphs_container = QWidget()
         graphs_container.setStyleSheet(f'background: {BG};')
         gv = QVBoxLayout(graphs_container)
@@ -339,9 +309,50 @@ class ReplayTab(QWidget):
         graphs_scroll.setWidget(graphs_container)
         graphs_scroll.setStyleSheet(
             f'QScrollArea {{ border: none; background: transparent; }}')
-        graphs_scroll.setFixedHeight(240)
+        # Graphs take the rest of the left column.
+        left_outer.addWidget(graphs_scroll, 1)
 
-        outer.addWidget(graphs_scroll)
+        content_splitter.addWidget(left_container)
+
+        # ── Right: track map ──────────────────────────────────────────
+        right_panel = QFrame()
+        right_panel.setStyleSheet(
+            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
+        rl = QVBoxLayout(right_panel)
+        rl.setContentsMargins(8, 8, 8, 8)
+        rl.setSpacing(4)
+
+        map_hdr_row = QHBoxLayout()
+        map_title = QLabel('TRACK POSITION')
+        map_title.setFont(sans(7, bold=True))
+        map_title.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
+        map_hdr_row.addWidget(map_title)
+        map_hdr_row.addStretch()
+
+        self._rpl_s1_lbl = QLabel('S1: —')
+        self._rpl_s2_lbl = QLabel('S2: —')
+        self._rpl_s3_lbl = QLabel('S3: —')
+        for i, lbl in enumerate((self._rpl_s1_lbl, self._rpl_s2_lbl, self._rpl_s3_lbl)):
+            colors = [C_DELTA, C_STEER, C_RPM]
+            lbl.setFont(mono(8, bold=True))
+            lbl.setStyleSheet(f'color: {colors[i]};')
+            map_hdr_row.addWidget(lbl)
+            map_hdr_row.addSpacing(8)
+
+        rl.addLayout(map_hdr_row)
+
+        self._rpl_map = TrackMapWidget()
+        self._rpl_map.setMinimumSize(180, 150)
+        rl.addWidget(self._rpl_map, stretch=1)
+
+        content_splitter.addWidget(right_panel)
+        # 50/50 split — the actual ratio is enforced by the stretch factors
+        # on each child, but we set initial sizes equal too.
+        content_splitter.setStretchFactor(0, 1)
+        content_splitter.setStretchFactor(1, 1)
+        content_splitter.setSizes([800, 800])
+
+        outer.addWidget(content_splitter, stretch=1)
 
         # ── Mirror all widget attrs onto app so legacy handlers keep working ──
         self._mirror_to_app()

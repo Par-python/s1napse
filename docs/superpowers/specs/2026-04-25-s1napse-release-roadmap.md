@@ -38,13 +38,12 @@ The next big chunk. See [Strategy tab v1 design](./2026-04-25-strategy-tab-v1-de
 
 ### Phase 2 — Strategy tab v2 (June-July 2026, ~3-4 weeks)
 
-The "real data" upgrade. See [Strategy tab roadmap v2](./2026-04-25-strategy-tab-roadmap.md#v2--july-2026-3-4-weeks).
+The accuracy + planner upgrade. See [Strategy tab roadmap v2](./2026-04-25-strategy-tab-roadmap.md#v2--july-2026-3-4-weeks).
 
-- Wire ACC broadcasting API as a third reader. Drop the "(inferred)" label on rival-watch.
-- Add what-if pit planner card.
+- Add what-if pit planner card (works off own-car projections + the v1 gap-jump heuristic; no full-field data needed).
 - Two-phase warmup-then-degradation model in card #1.
 
-**Risk.** Broadcasting protocol is undocumented. Plan ~50% schedule buffer.
+**Note.** ACC broadcasting integration was previously the headline of this phase and has been removed as a non-goal — the v1 gap-jump heuristic for rival-watch stands. Rationale: undocumented protocol, unmaintained wrappers, and a coach watching a live relay covers most of the value broadcasting would have unlocked. Rival-watch keeps its "(inferred)" label permanently.
 
 ### Phase 3 — Companion website MVP (July-August 2026, ~4-5 weeks)
 
@@ -101,13 +100,18 @@ These are real opportunities the [market validation](./2026-04-25-market-validat
 - **iRacing-specific deep features** (BoP changes, full-field rival data via iRacing API beyond what's needed for parity with ACC) to compete with Garage 61 on its turf.
 - **Niche-down to ACC + iRacing only** as a positioning shift (option B from market validation; would mean dropping AC/AC-UDP/OBD-II — not happening for v1.0).
 - **Real-car (OBD-II) deep features** beyond what already exists. The wedge is unproven (per market validation) and OBD-II's latency is a real product constraint.
+- **Live coaching / teams (post-v1.0 candidate).** Host opens a session, peers connect with a 6-char room code, server fans out telemetry frames so a coach can watch the driver's overlays in real time. Stays free (fits the app-is-free principle); the website's value remains *recorded* sessions, history, comparison.
+    - **Architecture constraint:** thin WebSocket relay only. In-memory `Map<roomCode, Set<socket>>`, no DB, no auth, no telemetry persistence. Binary frame format (not JSON) for the telemetry stream; small JSON message type for coach→driver annotations (track-map pointer, flagged corner, text note). No history, no replay — if you missed it, it's gone. That constraint is what keeps it free-shaped.
+    - **Room lifecycle:** room lives as long as the host's ACC session is active + 5 min grace (so a quick game restart doesn't kill the room); hard ceiling 4h to catch zombie rooms; max 8 peers per room; no public room list.
+    - **Rate limits (all per-IP):** room creation ~5/hour (anti-spam), connection attempts ~30/min (anti brute-force on room codes — this is the most important one), message rate ~100/sec/socket (anti-flood). Bump room codes to 8 chars; near-zero UX cost, ~1000× harder to guess than 6.
+    - **Slippery slope to watch:** first feature request will be "can we record the session?" That's the website product, not the relay. Hold the line in-app or the free/paid split collapses.
+    - **Pairs naturally with Phase 3** (website MVP brings the first server infra), but is explicitly not part of v1.0 launch — revisit for v1.1.
 
 ## Risks (release-level)
 
 1. **RaceData AI keeps shipping monthly.** Six months from now they'll have shipped six more releases. Counter: stay focused on the live-experience moat; don't try to match their feature breadth.
 2. **Website MVP is harder than estimated.** Phase 3 is the most uncertain in scope. If it slips, Strategy tab v2 (Phase 2) could be parallelized rather than serialized to keep momentum.
-3. **ACC broadcasting integration (Phase 2) blows up.** Undocumented protocol, unmaintained wrappers. If it turns out to be 2 months instead of 1, drop it and ship without — Strategy tab v1's heuristic is "good enough" for v1.0.
-4. **Solo-dev burnout.** Six months of nights-and-weekends work on a free product is hard to sustain. Plan rest weeks. Don't compound by stacking phases.
+3. **Solo-dev burnout.** Six months of nights-and-weekends work on a free product is hard to sustain. Plan rest weeks. Don't compound by stacking phases.
 
 ## Status check cadence
 

@@ -100,7 +100,11 @@
       "Bash(git -C /Users/jjpardo/Documents/acc-telemetry commit -m 'feat: RaceTab — pace/position/car columns + headline strip')",
       "Bash(git -C /Users/jjpardo/Documents/acc-telemetry add s1napse/widgets/tabs/tyres.py s1napse/widgets/tabs/__init__.py s1napse/app.py)",
       "Bash(git -C /Users/jjpardo/Documents/acc-telemetry commit -m 'feat: TyresTab — quad + pressure/wear/IMO cards')",
-      "Bash(git -C /Users/jjpardo/Documents/acc-telemetry add s1napse/widgets/strategy_tab.py)"
+      "Bash(git -C /Users/jjpardo/Documents/acc-telemetry add s1napse/widgets/strategy_tab.py)",
+      "Bash(git rm *)",
+      "Bash(pytest tests/ -q)",
+      "Bash(git -C /Users/jjpardo/Documents/acc-telemetry log --oneline -8)",
+      "Bash(git -C /Users/jjpardo/Documents/acc-telemetry branch --show-current)"
     ]
   }
 }
