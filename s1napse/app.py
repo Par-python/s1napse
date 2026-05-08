@@ -2288,7 +2288,9 @@ class TelemetryApp(QMainWindow):
             self._sess_rows_layout.insertWidget(0, row)
 
     def _export_csv(self):
-        """Export all session lap data to a CSV file chosen by the user."""
+        """Export all session lap data as two CSVs: a per-lap summary and the
+        full per-sample telemetry. Two files keep each sheet tidy and avoid
+        Excel/Sheets misreading section banners as formulas."""
         if not self.session_laps:
             QMessageBox.information(self, 'Export CSV',
                                     'No completed laps to export.')
@@ -2299,34 +2301,58 @@ class TelemetryApp(QMainWindow):
             Path(save_dir).mkdir(parents=True, exist_ok=True)
         except OSError:
             save_dir = str(Path.home())
-        default_path = str(Path(save_dir) / 'session.csv')
+
+        import csv, datetime
+
+        # Detect the active sim for the filename prefix.
+        if self.current_reader is self.acc_reader:    sim_name = 'acc'
+        elif self.current_reader is self.ir_reader:   sim_name = 'iracing'
+        elif self.current_reader is self.ac_reader:   sim_name = 'ac'
+        elif self.current_reader is self.elm_reader:  sim_name = 'obd'
+        else:                                         sim_name = 'sim'
+
+        ts = datetime.datetime.now().strftime('%Y-%m-%d-%H%M')
+        base = f'{sim_name}-{ts}'
+        default_path = str(Path(save_dir) / f'{base}-summary.csv')
         path, _ = QFileDialog.getSaveFileName(
-            self, 'Export Session CSV', default_path,
+            self, 'Export Session CSV (summary + telemetry)', default_path,
             'CSV files (*.csv);;All files (*)')
         if not path:
             return
 
-        import csv
+        # The user picks one path; we derive the telemetry sibling alongside it.
+        # Honor whatever they renamed it to: '<stem>-summary.csv' →
+        # '<stem>-telemetry.csv'; otherwise just append '-telemetry'.
+        summary_path = Path(path)
+        if summary_path.stem.endswith('-summary'):
+            telemetry_path = summary_path.with_name(
+                summary_path.stem[:-len('-summary')] + '-telemetry' + summary_path.suffix)
+        elif summary_path.stem.endswith('_summary'):
+            telemetry_path = summary_path.with_name(
+                summary_path.stem[:-len('_summary')] + '-telemetry' + summary_path.suffix)
+        else:
+            telemetry_path = summary_path.with_name(
+                summary_path.stem + '-telemetry' + summary_path.suffix)
 
         def _fmt_time(seconds: float) -> str:
-            if seconds <= 0:
-                return '--:--.---'
+            if seconds is None or seconds <= 0:
+                return ''
             m = int(seconds // 60)
             s = seconds - m * 60
             return f'{m}:{s:06.3f}'
 
-        def _sector_str(val) -> str:
-            if val is None or val <= 0:
-                return '--:--.---'
-            return _fmt_time(val)
+        def _round(v, places=1):
+            return round(v, places) if isinstance(v, (int, float)) else ''
 
-        with open(path, 'w', newline='') as f:
+        # ── File 1: per-lap summary ───────────────────────────────────────
+        with open(summary_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-
-            # ── SECTION 1: Lap Summary ────────────────────────────────────
-            writer.writerow(['=== LAP SUMMARY ==='])
             writer.writerow([
-                'Lap', 'Lap Time', 'Sector 1', 'Sector 2', 'Sector 3',
+                'Lap',
+                'Lap Time', 'Lap Time (s)',
+                'Sector 1', 'Sector 1 (s)',
+                'Sector 2', 'Sector 2 (s)',
+                'Sector 3', 'Sector 3 (s)',
                 'Max Speed (km/h)', 'Avg Speed (km/h)',
                 'Max Throttle (%)', 'Max Brake (%)',
                 'Max RPM', 'Avg RPM',
@@ -2334,45 +2360,44 @@ class TelemetryApp(QMainWindow):
             ])
             for lap in self.session_laps:
                 d = lap['data']
-                speeds   = [v for v in d.get('speed', []) if v > 0]
+                speeds    = [v for v in d.get('speed', []) if v > 0]
                 throttles = d.get('throttle', [])
-                brakes   = d.get('brake', [])
-                rpms     = [v for v in d.get('rpm', []) if v > 0]
-                abs_vals = d.get('abs', [])
-                tc_vals  = d.get('tc', [])
+                brakes    = d.get('brake', [])
+                rpms      = [v for v in d.get('rpm', []) if v > 0]
+                abs_vals  = d.get('abs', [])
+                tc_vals   = d.get('tc', [])
 
-                max_spd  = round(max(speeds),   1) if speeds   else ''
-                avg_spd  = round(sum(speeds) / len(speeds), 1) if speeds else ''
-                max_thr  = round(max(throttles), 1) if throttles else ''
-                max_brk  = round(max(brakes),    1) if brakes   else ''
-                max_rpm  = round(max(rpms))         if rpms     else ''
-                avg_rpm  = round(sum(rpms) / len(rpms)) if rpms else ''
-                abs_evts = sum(1 for v in abs_vals if v > 0)
-                tc_evts  = sum(1 for v in tc_vals  if v > 0)
-
+                lap_s = lap.get('total_time_s', 0) or 0
                 sects = lap.get('sectors', [None, None, None]) or [None, None, None]
+                s1 = sects[0] if len(sects) > 0 else None
+                s2 = sects[1] if len(sects) > 1 else None
+                s3 = sects[2] if len(sects) > 2 else None
+
                 writer.writerow([
                     lap['lap_number'],
-                    _fmt_time(lap.get('total_time_s', 0)),
-                    _sector_str(sects[0] if len(sects) > 0 else None),
-                    _sector_str(sects[1] if len(sects) > 1 else None),
-                    _sector_str(sects[2] if len(sects) > 2 else None),
-                    max_spd, avg_spd,
-                    max_thr, max_brk,
-                    max_rpm, avg_rpm,
-                    abs_evts, tc_evts,
+                    _fmt_time(lap_s),       round(lap_s, 3) if lap_s else '',
+                    _fmt_time(s1 or 0),     round(s1, 3) if s1 else '',
+                    _fmt_time(s2 or 0),     round(s2, 3) if s2 else '',
+                    _fmt_time(s3 or 0),     round(s3, 3) if s3 else '',
+                    round(max(speeds), 1) if speeds else '',
+                    round(sum(speeds) / len(speeds), 1) if speeds else '',
+                    round(max(throttles), 1) if throttles else '',
+                    round(max(brakes), 1) if brakes else '',
+                    round(max(rpms)) if rpms else '',
+                    round(sum(rpms) / len(rpms)) if rpms else '',
+                    sum(1 for v in abs_vals if v > 0),
+                    sum(1 for v in tc_vals if v > 0),
                 ])
 
-            writer.writerow([])
-            writer.writerow([])
-
-            # ── SECTION 2: Raw Telemetry ──────────────────────────────────
-            writer.writerow(['=== RAW TELEMETRY ==='])
+        # ── File 2: per-sample telemetry ──────────────────────────────────
+        with open(telemetry_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
             writer.writerow([
-                'lap', 'dist_m', 'lap_time',
-                'speed_kmh', 'throttle_%', 'brake_%',
-                'steer_deg', 'rpm', 'gear',
-                'abs_%', 'tc_%',
+                'Lap', 'Distance (m)',
+                'Lap Time', 'Lap Time (s)',
+                'Speed (km/h)', 'Throttle (%)', 'Brake (%)',
+                'Steering (deg)', 'RPM', 'Gear',
+                'ABS (%)', 'TC (%)',
             ])
             for lap in self.session_laps:
                 d = lap['data']
@@ -2382,23 +2407,28 @@ class TelemetryApp(QMainWindow):
                         arr = d.get(key, [])
                         return arr[idx] if idx < len(arr) else ''
                     time_ms = _v('time_ms')
-                    lap_time_str = _fmt_time(time_ms / 1000.0) if time_ms != '' else ''
+                    t_s = (time_ms / 1000.0) if isinstance(time_ms, (int, float)) else None
                     writer.writerow([
                         lap['lap_number'],
-                        round(_v('dist_m'), 1) if _v('dist_m') != '' else '',
-                        lap_time_str,
-                        round(_v('speed'), 1) if _v('speed') != '' else '',
-                        round(_v('throttle'), 1) if _v('throttle') != '' else '',
-                        round(_v('brake'), 1) if _v('brake') != '' else '',
-                        round(_v('steer_deg'), 2) if _v('steer_deg') != '' else '',
-                        round(_v('rpm')) if _v('rpm') != '' else '',
-                        int(_v('gear')) if _v('gear') != '' else '',
-                        round(_v('abs'), 1) if _v('abs') != '' else '',
-                        round(_v('tc'), 1) if _v('tc') != '' else '',
+                        _round(_v('dist_m'), 1),
+                        _fmt_time(t_s) if t_s is not None else '',
+                        round(t_s, 3) if t_s is not None else '',
+                        _round(_v('speed'), 1),
+                        _round(_v('throttle'), 1),
+                        _round(_v('brake'), 1),
+                        _round(_v('steer_deg'), 2),
+                        round(_v('rpm')) if isinstance(_v('rpm'), (int, float)) else '',
+                        int(_v('gear')) if isinstance(_v('gear'), (int, float)) else '',
+                        _round(_v('abs'), 1),
+                        _round(_v('tc'), 1),
                     ])
 
-        QMessageBox.information(self, 'Export CSV',
-                                f'Saved {len(self.session_laps)} laps to:\n{path}')
+        QMessageBox.information(
+            self, 'Export CSV',
+            f'Saved {len(self.session_laps)} laps:\n'
+            f'• {summary_path.name}\n'
+            f'• {telemetry_path.name}\n\n'
+            f'In: {summary_path.parent}')
 
     def _update_fuel_save(self):
         _RESET = 'background: transparent; border: none;'
