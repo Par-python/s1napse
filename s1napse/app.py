@@ -3215,27 +3215,43 @@ class TelemetryApp(QMainWindow):
     # ------------------------------------------------------------------
 
     def _reset_display(self):
-        self.car_label.setText('—')
-        self.track_label.setText('—')
-        self.dashboard_tab.update_tick(None)
-        # The merged Race tab handles its own reset via update_tick(None);
-        # the calculator labels live on race_tab and are reset explicitly.
-        self.race_tab.update_tick(None)
-        self.tyres_tab.update_tick(None)
-        self.race_tab._fs_result_lbl.setText('—')
-        self.race_tab._fs_result_lbl.setStyleSheet(
-            f'color: {TEXT_MUTED}; background: transparent; border: none;'
-        )
-        self.race_tab._uco_undercut_lbl.setText('UNDERCUT: —')
-        self.race_tab._uco_undercut_lbl.setStyleSheet(
-            f'color: {TEXT_MUTED}; background: transparent; border: none;'
-        )
-        self.race_tab._uco_overcut_lbl.setText('OVERCUT: —')
-        self.race_tab._uco_overcut_lbl.setStyleSheet(
-            f'color: {TEXT_MUTED}; background: transparent; border: none;'
-        )
-        self._reset_analysis_graphs()
-        self.track_map.reset()
+        # Each block is wrapped so a single missing-attribute on a stale
+        # widget tree (e.g. mid-refactor binary running against new
+        # app.py) does not abort the whole render tick.
+        _RESET = 'background: transparent; border: none;'
+        try:
+            self.car_label.setText('—')
+            self.track_label.setText('—')
+        except AttributeError:
+            pass
+        try:
+            self.dashboard_tab.update_tick(None)
+        except AttributeError:
+            pass
+        try:
+            # The merged Race tab handles its own reset via update_tick(None);
+            # the calculator labels live on race_tab and are reset explicitly.
+            self.race_tab.update_tick(None)
+            self.race_tab._fs_result_lbl.setText('—')
+            self.race_tab._fs_result_lbl.setStyleSheet(f'color: {TEXT_MUTED}; {_RESET}')
+            self.race_tab._uco_undercut_lbl.setText('UNDERCUT: —')
+            self.race_tab._uco_undercut_lbl.setStyleSheet(f'color: {TEXT_MUTED}; {_RESET}')
+            self.race_tab._uco_overcut_lbl.setText('OVERCUT: —')
+            self.race_tab._uco_overcut_lbl.setStyleSheet(f'color: {TEXT_MUTED}; {_RESET}')
+        except AttributeError:
+            pass
+        try:
+            self.tyres_tab.update_tick(None)
+        except AttributeError:
+            pass
+        try:
+            self._reset_analysis_graphs()
+        except AttributeError:
+            pass
+        try:
+            self.track_map.reset()
+        except AttributeError:
+            pass
 
 
 # ---------------------------------------------------------------------------
