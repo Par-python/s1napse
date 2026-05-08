@@ -139,27 +139,40 @@ class RaceTab(QWidget):
         last_card.body().addWidget(self._last_lap_spark)
         col.addWidget(last_card)
 
-        # Sectors card
+        # Sectors card — uppercase keys (left), big mono values (right)
         sectors_card = Card(label='Sectors (last)', dense=True)
         self._sector_rows = []
         for label_text in ('S1', 'S2', 'S3'):
             r = QHBoxLayout()
             r.setContentsMargins(0, 0, 0, 0)
-            k = _label(label_text, font=theme.ui_font(11), color=theme.TEXT_MUTED)
-            v = _label('—', font=theme.mono_font(13), color=theme.TEXT_PRIMARY)
-            r.addWidget(k); r.addStretch(1); r.addWidget(v)
+            r.setSpacing(8)
+            k = _label(label_text, font=theme.label_font(), color=theme.TEXT_MUTED)
+            v = _label(
+                '—', font=theme.mono_font(theme.FONT_NUMERIC_LG, bold=True),
+                color=theme.TEXT_PRIMARY,
+            )
+            r.addWidget(k, 0, Qt.AlignmentFlag.AlignBaseline)
+            r.addStretch(1)
+            r.addWidget(v, 0, Qt.AlignmentFlag.AlignBaseline)
             sectors_card.body().addLayout(r)
             self._sector_rows.append(v)
         col.addWidget(sectors_card)
 
-        # Stint card
+        # Stint card — same key/value rhythm as Sectors
         stint_card = Card(label='Stint', dense=True)
         self._stint_rows = {}
         for k_text in ('Lap', 'Stint avg', 'Best stint'):
             r = QHBoxLayout()
-            kl = _label(k_text, font=theme.ui_font(11), color=theme.TEXT_MUTED)
-            v = _label('—', font=theme.mono_font(12), color=theme.TEXT_PRIMARY)
-            r.addWidget(kl); r.addStretch(1); r.addWidget(v)
+            r.setContentsMargins(0, 0, 0, 0)
+            r.setSpacing(8)
+            kl = _label(k_text.upper(), font=theme.label_font(), color=theme.TEXT_MUTED)
+            v = _label(
+                '—', font=theme.mono_font(theme.FONT_NUMERIC_MD, bold=True),
+                color=theme.TEXT_PRIMARY,
+            )
+            r.addWidget(kl, 0, Qt.AlignmentFlag.AlignBaseline)
+            r.addStretch(1)
+            r.addWidget(v, 0, Qt.AlignmentFlag.AlignBaseline)
             stint_card.body().addLayout(r)
             self._stint_rows[k_text] = v
         col.addWidget(stint_card)
@@ -197,22 +210,24 @@ class RaceTab(QWidget):
         gaps_card.body().addWidget(self._gap_trend)
         col.addWidget(gaps_card)
 
-        # Rival watch (from engine)
+        # Rival watch (prose — ui_font, not mono)
         rival_card = Card(label='Rival watch', dense=True)
         self._rw_ahead = _label(
-            'Ahead: —', font=theme.mono_font(12), color=theme.TEXT_SECONDARY,
+            'Ahead: —', font=theme.ui_font(12), color=theme.TEXT_SECONDARY,
         )
         self._rw_behind = _label(
-            'Behind: —', font=theme.mono_font(12), color=theme.TEXT_SECONDARY,
+            'Behind: —', font=theme.ui_font(12), color=theme.TEXT_SECONDARY,
         )
+        self._rw_ahead.setWordWrap(True)
+        self._rw_behind.setWordWrap(True)
         rival_card.body().addWidget(self._rw_ahead)
         rival_card.body().addWidget(self._rw_behind)
         col.addWidget(rival_card)
 
-        # Weather watch (from engine)
+        # Weather watch (prose with one mono temperature reading)
         weather_card = Card(label='Weather / track temp', dense=True)
         self._weather_lbl = _label(
-            '—', font=theme.mono_font(12), color=theme.TEXT_PRIMARY,
+            '—', font=theme.ui_font(12), color=theme.TEXT_PRIMARY,
         )
         self._weather_lbl.setWordWrap(True)
         weather_card.body().addWidget(self._weather_lbl)
@@ -269,22 +284,22 @@ class RaceTab(QWidget):
         fuel_row.addStretch(1)
         fuel_card.body().addLayout(fuel_row)
         self._fuel_sub = _label(
-            '—', font=theme.mono_font(11), color=theme.TEXT_MUTED,
+            '—', font=theme.ui_font(11), color=theme.TEXT_MUTED,
         )
         self._fuel_sub.setWordWrap(True)
         fuel_card.body().addWidget(self._fuel_sub)
         col.addWidget(fuel_card)
 
-        # Pit window card
+        # Pit window card — big number, prose sub
         pit_card = Card(label='Pit window', dense=True)
         self._pit_window_lbl = _label(
-            '—', font=theme.mono_font(theme.FONT_NUMERIC_LG, bold=True),
+            '—', font=theme.mono_font(theme.FONT_DISPLAY, bold=True),
             color=theme.TEXT_PRIMARY,
         )
         pit_card.body().addWidget(self._pit_window_lbl)
         self._pit_sub = _label(
             'Complete a lap to estimate.',
-            font=theme.mono_font(11), color=theme.TEXT_MUTED,
+            font=theme.ui_font(11), color=theme.TEXT_MUTED,
         )
         self._pit_sub.setWordWrap(True)
         pit_card.body().addWidget(self._pit_sub)
@@ -313,10 +328,11 @@ class RaceTab(QWidget):
         fs_input_row.addStretch(1)
         fs_card.body().addLayout(fs_input_row)
         self._fs_result_lbl = _label(
-            '—', font=theme.mono_font(13, bold=True),
+            '—', font=theme.mono_font(theme.FONT_NUMERIC_MD, bold=True),
             color=theme.TEXT_PRIMARY,
         )
         self._fs_result_lbl.setWordWrap(True)
+        fs_card.body().addSpacing(4)
         fs_card.body().addWidget(self._fs_result_lbl)
         row.addWidget(fs_card, 1)
 
@@ -346,14 +362,17 @@ class RaceTab(QWidget):
                                         0.8, 0.0, 5.0, 0.1, 1))
         uco_inputs.addStretch(1)
         uco_card.body().addLayout(uco_inputs)
+        uco_card.body().addSpacing(4)
         self._uco_undercut_lbl = _label(
-            'UNDERCUT: —', font=theme.mono_font(12, bold=True),
+            'UNDERCUT: —', font=theme.ui_font(12, bold=True),
             color=theme.TEXT_SECONDARY,
         )
+        self._uco_undercut_lbl.setWordWrap(True)
         self._uco_overcut_lbl = _label(
-            'OVERCUT: —', font=theme.mono_font(12, bold=True),
+            'OVERCUT: —', font=theme.ui_font(12, bold=True),
             color=theme.TEXT_SECONDARY,
         )
+        self._uco_overcut_lbl.setWordWrap(True)
         uco_card.body().addWidget(self._uco_undercut_lbl)
         uco_card.body().addWidget(self._uco_overcut_lbl)
         row.addWidget(uco_card, 1)

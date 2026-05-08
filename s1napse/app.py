@@ -721,11 +721,8 @@ class TelemetryApp(QMainWindow):
             # Enable lap keyboard shortcut
             if hasattr(self, '_lap_shortcut'):
                 self._lap_shortcut.setEnabled(True)
-            # Select ELM327 in game combo if available
-            if hasattr(self, 'game_combo'):
-                idx = self.game_combo.findText('ELM327 (OBD-II)')
-                if idx >= 0:
-                    self.game_combo.setCurrentIndex(idx)
+            # Real racing has its own dedicated UI page; we no longer offer
+            # ELM327 in the sim source combo. Just kick off the real UI.
             self._start_real_racing_ui()
             QTimer.singleShot(600, lambda: self._stack.setCurrentIndex(3))
         else:
@@ -1262,13 +1259,13 @@ class TelemetryApp(QMainWindow):
         self.connection_dot.setToolTip('Disconnected')
         out.append(self.connection_dot)
 
-        # Game source combo (no label — combo is self-explanatory)
+        # Game source combo — short acronyms only. ELM327/OBD-II is a real-
+        # racing reader and lives on its own setup page; offering it here
+        # would let users pick OBD-II from the sim chrome which makes no
+        # sense.
         self.game_combo = QComboBox()
-        self.game_combo.addItems([
-            'Auto-Detect', 'ACC (Shared Memory)', 'AC (UDP)', 'iRacing (SDK)',
-            'ELM327 (OBD-II)',
-        ])
-        self.game_combo.setFixedWidth(150)
+        self.game_combo.addItems(['Auto-Detect', 'ACC', 'AC', 'iRacing'])
+        self.game_combo.setFixedWidth(120)
         self.game_combo.setToolTip('Telemetry source')
         self.game_combo.currentTextChanged.connect(self._on_game_changed)
         out.append(self.game_combo)
@@ -2419,16 +2416,11 @@ class TelemetryApp(QMainWindow):
         if game == 'Auto-Detect':
             self.auto_detect = True
             self.current_reader = None
-        elif game == 'ACC (Shared Memory)':
+        elif game == 'ACC':
             self.current_reader = self.acc_reader
-        elif game == 'iRacing (SDK)':
+        elif game == 'iRacing':
             self.current_reader = self.ir_reader
-        elif game == 'ELM327 (OBD-II)':
-            if self.elm_reader and self.elm_reader.is_connected():
-                self.current_reader = self.elm_reader
-            else:
-                self.current_reader = None
-        else:  # 'AC (UDP)'
+        else:  # 'AC'
             if self.ac_reader:
                 self.ac_reader.disconnect()
             self.ac_reader = ACUDPReader(self.udp_host.text(), int(self.udp_port.text()))
