@@ -16,9 +16,9 @@ from PyQt6.QtWidgets import (
     QLabel, QComboBox, QPushButton, QLineEdit, QSlider,
     QTabWidget, QFileDialog, QMessageBox, QSplitter, QScrollArea,
     QFrame, QGridLayout, QSizePolicy, QSpinBox, QDoubleSpinBox,
-    QStackedWidget, QButtonGroup, QRadioButton, QCheckBox,
+    QStackedWidget, QCheckBox,
 )
-from PyQt6.QtCore import QTimer, Qt, QRectF, QPointF
+from PyQt6.QtCore import QTimer, Qt, QRectF, QPointF, QSettings, QStandardPaths
 from PyQt6.QtGui import (QFont, QPainter, QColor, QPen, QBrush, QFontMetrics,
                          QRadialGradient, QShortcut, QKeySequence)
 
@@ -305,7 +305,12 @@ class TelemetryApp(QMainWindow):
         # --- Page 3: Real racing dashboard ---
         self._stack.addWidget(self._build_real_racing_page())
 
-        self._stack.setCurrentIndex(0)
+        # Skip welcome if user already accepted the terms in a prior launch.
+        if self._settings().value('tos/accepted', False, type=bool):
+            self._app_mode = 'sim'
+            self._stack.setCurrentIndex(1)
+        else:
+            self._stack.setCurrentIndex(0)
 
         self._set_graph_title_suffix('Lap 1')
 
@@ -313,82 +318,188 @@ class TelemetryApp(QMainWindow):
     # WELCOME SCREEN
     # ------------------------------------------------------------------
 
+    def _settings(self) -> QSettings:
+        return QSettings('s1napse', 's1napse')
+
+    def _default_csv_dir(self) -> str:
+        saved = self._settings().value('paths/csv_dir', '', type=str)
+        if saved:
+            return saved
+        docs = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
+        path = str(Path(docs) / 's1napse') if docs else str(Path.home() / 'Documents' / 's1napse')
+        return path
+
     def _build_welcome_screen(self) -> QWidget:
         page = QWidget()
         page.setStyleSheet(f'background: {BG};')
         outer = QVBoxLayout(page)
         outer.setContentsMargins(0, 0, 0, 0)
+        outer.addStretch(2)
 
-        # Centred content wrapper
-        outer.addStretch(3)
-
-        # Title: s1napse
+        # Title
         title = QLabel('s1napse')
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setFont(sans(48, bold=True))
         title.setStyleSheet(f'color: {TEXT_PRIMARY}; background: transparent; letter-spacing: 6px;')
         outer.addWidget(title)
 
-        # Accent line under title
+        # Accent line
         line_w = QWidget()
         line_w.setFixedSize(60, 3)
-        line_w.setStyleSheet(f'background: {C_SPEED}; border-radius: 1px;')
-        line_container = QHBoxLayout()
-        line_container.setContentsMargins(0, 8, 0, 0)
-        line_container.addStretch()
-        line_container.addWidget(line_w)
-        line_container.addStretch()
-        lc_widget = QWidget()
-        lc_widget.setLayout(line_container)
+        line_w.setStyleSheet(f'background: {ACCENT}; border-radius: 1px;')
+        lc = QHBoxLayout()
+        lc.setContentsMargins(0, 8, 0, 0)
+        lc.addStretch(); lc.addWidget(line_w); lc.addStretch()
+        lc_widget = QWidget(); lc_widget.setLayout(lc)
         lc_widget.setStyleSheet('background: transparent;')
         outer.addWidget(lc_widget)
 
-        outer.addSpacing(40)
+        # Subtitle
+        subtitle = QLabel('Real-time telemetry analysis and lap replay')
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtitle.setFont(sans(10))
+        subtitle.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; padding-top: 10px;')
+        outer.addWidget(subtitle)
 
-        # Mode selection cards
-        cards_row = QHBoxLayout()
-        cards_row.setContentsMargins(0, 0, 0, 0)
-        cards_row.setSpacing(24)
-        cards_row.addStretch()
+        outer.addSpacing(28)
 
-        self._mode_group = QButtonGroup(page)
-        self._mode_group.setExclusive(True)
+        # Centered card panel
+        panel = QWidget()
+        panel.setFixedWidth(560)
+        panel.setStyleSheet(f"""
+            QWidget {{
+                background: {SURFACE_RAISED};
+                border: 1px solid {BORDER_STRONG};
+                border-radius: 10px;
+            }}
+        """)
+        pl = QVBoxLayout(panel)
+        pl.setContentsMargins(28, 24, 28, 24)
+        pl.setSpacing(14)
 
-        # --- Sim Racing card ---
-        sim_card, sim_radio = self._make_mode_card(
-            'SIM RACING',
-            'ACC, iRacing, Assetto Corsa\nReal-time telemetry from simulators',
-            checked=True,
-        )
-        self._mode_group.addButton(sim_radio, 0)
-        cards_row.addWidget(sim_card)
+        # ---- SAVE LOCATION section ----
+        sec1 = QLabel('CSV SAVE LOCATION')
+        sec1.setFont(sans(10, bold=True))
+        sec1.setStyleSheet(f'color: {TEXT_PRIMARY}; background: transparent; border: none; letter-spacing: 2px;')
+        pl.addWidget(sec1)
 
-        # --- Real Racing card ---
-        real_card, real_radio = self._make_mode_card(
-            'REAL RACING',
-            'On-track data acquisition\nELM327 OBD-II adapter',
-        )
-        self._mode_group.addButton(real_radio, 1)
-        cards_row.addWidget(real_card)
-
-        cards_row.addStretch()
-        cards_container = QWidget()
-        cards_container.setLayout(cards_row)
-        cards_container.setStyleSheet('background: transparent;')
-        outer.addWidget(cards_container)
-
-        outer.addSpacing(36)
-
-        # Next button
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        next_btn = QPushButton('NEXT')
-        next_btn.setFont(sans(11, bold=True))
-        next_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        next_btn.setFixedSize(160, 44)
-        next_btn.setStyleSheet(f"""
+        path_row = QHBoxLayout()
+        path_row.setSpacing(8)
+        self._csv_dir_edit = QLineEdit(self._default_csv_dir())
+        self._csv_dir_edit.setReadOnly(True)
+        self._csv_dir_edit.setFont(sans(10))
+        self._csv_dir_edit.setStyleSheet(f"""
+            QLineEdit {{
+                background: {SURFACE_HOVER}; color: {TEXT_SECONDARY};
+                border: 1px solid {BORDER_STRONG}; border-radius: 4px;
+                padding: 6px 10px;
+            }}
+        """)
+        browse_btn = QPushButton('BROWSE')
+        browse_btn.setFont(sans(9, bold=True))
+        browse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        browse_btn.setFixedHeight(32)
+        browse_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {C_SPEED};
+                background: {SURFACE_HOVER}; color: {TEXT_SECONDARY};
+                border: 1px solid {BORDER_STRONG}; border-radius: 4px;
+                padding: 0 14px; letter-spacing: 1.5px;
+            }}
+            QPushButton:hover {{ border-color: {ACCENT}; color: {TEXT_PRIMARY}; }}
+        """)
+        browse_btn.clicked.connect(self._on_browse_csv_dir)
+        path_row.addWidget(self._csv_dir_edit, 1)
+        path_row.addWidget(browse_btn)
+        pr_widget = QWidget(); pr_widget.setLayout(path_row)
+        pr_widget.setStyleSheet('background: transparent; border: none;')
+        pl.addWidget(pr_widget)
+
+        hint = QLabel('Future CSV exports will default to this folder.')
+        hint.setFont(sans(9))
+        hint.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; border: none;')
+        pl.addWidget(hint)
+
+        pl.addSpacing(8)
+
+        # ---- REQUIREMENTS section ----
+        sec2 = QLabel('REQUIREMENTS')
+        sec2.setFont(sans(10, bold=True))
+        sec2.setStyleSheet(f'color: {TEXT_PRIMARY}; background: transparent; border: none; letter-spacing: 2px;')
+        pl.addWidget(sec2)
+
+        req_text = (
+            '•  Windows 10 or 11 (64-bit)\n'
+            '•  CPU: quad-core 3 GHz or better\n'
+            '•  RAM: 8 GB minimum\n'
+            '•  GPU: dedicated, OpenGL 3.3+\n'
+            '•  A supported sim: ACC, iRacing, or Assetto Corsa\n'
+            '•  UDP / shared-memory telemetry enabled in the sim\n'
+            '•  Sim must run on the same machine or LAN'
+        )
+        reqs = QLabel(req_text)
+        reqs.setFont(sans(10))
+        reqs.setStyleSheet(f'color: {TEXT_SECONDARY}; background: transparent; border: none;')
+        pl.addWidget(reqs)
+
+        pl.addSpacing(8)
+
+        # ---- TERMS section ----
+        sec3 = QLabel('TERMS')
+        sec3.setFont(sans(10, bold=True))
+        sec3.setStyleSheet(f'color: {TEXT_PRIMARY}; background: transparent; border: none; letter-spacing: 2px;')
+        pl.addWidget(sec3)
+
+        tos_text = (
+            's1napse is in open beta. Everything is free during the beta '
+            'period. The software is provided as-is, without warranty of any '
+            'kind. Telemetry data stays on your machine — nothing is uploaded.'
+        )
+        tos = QLabel(tos_text)
+        tos.setFont(sans(9))
+        tos.setWordWrap(True)
+        tos.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; border: none;')
+        pl.addWidget(tos)
+
+        self._tos_check = QCheckBox('I agree to the terms above')
+        self._tos_check.setFont(sans(10))
+        self._tos_check.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._tos_check.setStyleSheet(f"""
+            QCheckBox {{
+                background: transparent; color: {TEXT_SECONDARY};
+                border: none; spacing: 8px;
+            }}
+            QCheckBox::indicator {{
+                width: 14px; height: 14px;
+                border: 2px solid {BORDER_STRONG};
+                border-radius: 3px;
+                background: {SURFACE_HOVER};
+            }}
+            QCheckBox::indicator:checked {{
+                background: {ACCENT};
+                border-color: {ACCENT};
+            }}
+        """)
+        self._tos_check.toggled.connect(self._on_tos_toggled)
+        pl.addWidget(self._tos_check)
+
+        # Center the panel horizontally
+        panel_row = QHBoxLayout()
+        panel_row.addStretch(); panel_row.addWidget(panel); panel_row.addStretch()
+        panel_wrap = QWidget(); panel_wrap.setLayout(panel_row)
+        panel_wrap.setStyleSheet('background: transparent;')
+        outer.addWidget(panel_wrap)
+
+        outer.addSpacing(24)
+
+        # ---- NEXT button ----
+        self._welcome_next_btn = QPushButton('NEXT')
+        self._welcome_next_btn.setFont(sans(11, bold=True))
+        self._welcome_next_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._welcome_next_btn.setFixedSize(160, 44)
+        self._welcome_next_btn.setEnabled(False)
+        self._welcome_next_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {ACCENT};
                 color: {BG};
                 border: none;
                 border-radius: 6px;
@@ -396,113 +507,49 @@ class TelemetryApp(QMainWindow):
                 font-weight: bold;
                 letter-spacing: 2px;
             }}
-            QPushButton:hover {{
-                background: #33e0ff;
-            }}
-            QPushButton:pressed {{
-                background: #00a8cc;
+            QPushButton:hover {{ background: #A78BFA; }}
+            QPushButton:pressed {{ background: #7C3AED; }}
+            QPushButton:disabled {{
+                background: {SURFACE_HOVER};
+                color: {TEXT_MUTED};
             }}
         """)
-        next_btn.clicked.connect(self._on_welcome_next)
-        btn_row.addWidget(next_btn)
-        btn_row.addStretch()
-        btn_widget = QWidget()
-        btn_widget.setLayout(btn_row)
+        self._welcome_next_btn.clicked.connect(self._on_welcome_next)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(); btn_row.addWidget(self._welcome_next_btn); btn_row.addStretch()
+        btn_widget = QWidget(); btn_widget.setLayout(btn_row)
         btn_widget.setStyleSheet('background: transparent;')
         outer.addWidget(btn_widget)
 
         outer.addStretch(2)
-
-        # Description at the bottom
-        desc = QLabel('Real-time telemetry analysis and lap replay')
-        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        desc.setFont(sans(10))
-        desc.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; padding-bottom: 24px;')
-        outer.addWidget(desc)
-
         return page
 
-    def _make_mode_card(self, title: str, subtitle: str,
-                        checked: bool = False, enabled: bool = True):
-        """Build a selectable mode card with a radio button. Returns (card_widget, radio)."""
-        card = QWidget()
-        card.setFixedSize(240, 150)
-        card.setEnabled(enabled)
+    def _on_browse_csv_dir(self):
+        current = self._csv_dir_edit.text() or self._default_csv_dir()
+        # Ensure the seed directory exists so the dialog opens somewhere sensible.
+        try:
+            Path(current).mkdir(parents=True, exist_ok=True)
+        except OSError:
+            current = str(Path.home())
+        chosen = QFileDialog.getExistingDirectory(
+            self, 'Choose CSV save folder', current)
+        if chosen:
+            self._csv_dir_edit.setText(chosen)
 
-        border_col = BORDER_STRONG if enabled else '#1a1a1a'
-        text_col = TEXT_SECONDARY if enabled else TEXT_MUTED
-        sub_col = TEXT_MUTED if enabled else '#3a3a3a'
-
-        card.setStyleSheet(f"""
-            QWidget {{
-                background: {SURFACE_RAISED};
-                border: 1px solid {border_col};
-                border-radius: 10px;
-            }}
-            QWidget:hover {{
-                border-color: {C_SPEED if enabled else border_col};
-            }}
-        """)
-
-        vl = QVBoxLayout(card)
-        vl.setContentsMargins(20, 18, 20, 18)
-        vl.setSpacing(8)
-
-        radio = QRadioButton()
-        radio.setChecked(checked)
-        radio.setEnabled(enabled)
-        radio.setStyleSheet(f"""
-            QRadioButton {{
-                background: transparent;
-                border: none;
-                color: {text_col};
-                spacing: 6px;
-            }}
-            QRadioButton::indicator {{
-                width: 14px; height: 14px;
-                border-radius: 7px;
-                border: 2px solid {BORDER_STRONG if enabled else '#1a1a1a'};
-                background: {SURFACE_HOVER};
-            }}
-            QRadioButton::indicator:checked {{
-                background: {C_SPEED};
-                border-color: {C_SPEED};
-            }}
-        """)
-        vl.addWidget(radio)
-
-        lbl = QLabel(title)
-        lbl.setFont(sans(14, bold=True))
-        lbl.setStyleSheet(f'color: {text_col}; background: transparent; border: none;'
-                          f' letter-spacing: 1.5px;')
-        vl.addWidget(lbl)
-
-        sub = QLabel(subtitle)
-        sub.setFont(sans(9))
-        sub.setWordWrap(True)
-        sub.setStyleSheet(f'color: {sub_col}; background: transparent; border: none;')
-        vl.addWidget(sub)
-
-        vl.addStretch()
-
-        if not enabled:
-            tag = QLabel('COMING SOON')
-            tag.setFont(sans(7, bold=True))
-            tag.setAlignment(Qt.AlignmentFlag.AlignRight)
-            tag.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; border: none;'
-                              f' letter-spacing: 1px;')
-            vl.addWidget(tag)
-
-        return card, radio
+    def _on_tos_toggled(self, checked: bool):
+        self._welcome_next_btn.setEnabled(bool(checked))
 
     def _on_welcome_next(self):
-        mode_id = self._mode_group.checkedId()
-        if mode_id == 1:
-            # Real racing — OBD setup page
-            self._app_mode = 'real'
-            self._stack.setCurrentIndex(2)
-            return
-        # Sim racing — show main app
+        # Persist the chosen CSV folder and the ToS acceptance.
+        chosen = self._csv_dir_edit.text().strip() or self._default_csv_dir()
+        try:
+            Path(chosen).mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        s = self._settings()
+        s.setValue('paths/csv_dir', chosen)
+        s.setValue('tos/accepted', True)
+        s.setValue('tos/version', 1)
         self._app_mode = 'sim'
         self._stack.setCurrentIndex(1)
 
@@ -2247,8 +2294,14 @@ class TelemetryApp(QMainWindow):
                                     'No completed laps to export.')
             return
 
+        save_dir = self._settings().value('paths/csv_dir', '', type=str) or self._default_csv_dir()
+        try:
+            Path(save_dir).mkdir(parents=True, exist_ok=True)
+        except OSError:
+            save_dir = str(Path.home())
+        default_path = str(Path(save_dir) / 'session.csv')
         path, _ = QFileDialog.getSaveFileName(
-            self, 'Export Session CSV', 'session.csv',
+            self, 'Export Session CSV', default_path,
             'CSV files (*.csv);;All files (*)')
         if not path:
             return
