@@ -54,11 +54,10 @@ from .widgets import (
     TimeDeltaGraph, ComparisonGraph, ComparisonDeltaGraph,
     RacePaceChart, ReplayGraph, ReplayMultiGraph,
     SectorTimesPanel, SectorScrubWidget, LapHistoryPanel,
-    AidBadge, StrategyTab, LiveTabBar,
+    AidBadge, LiveTabBar,
 )
 from .widgets.title_bar import TitleBar
 from .widgets.graphs import _style_ax
-from .widgets.coach_tab import CoachTab
 from .widgets.math_channel_panel import MathChannelPanel
 from .widgets.tabs import RaceTab, TyresTab, DashboardTab, LapAnalysisTab, TelemetryTab, LapComparisonTab, SessionTab, ReplayTab
 from .coaching.lap_coach import LapCoach
@@ -263,12 +262,10 @@ class TelemetryApp(QMainWindow):
         self.tabs.setTabBar(LiveTabBar(self.tabs))
         main_layout.addWidget(self.tabs)
 
-        # Instantiate StrategyTab before RaceTab so its labels are ready.
-        self.strategy_tab = StrategyTab()
-        self.strategy_tab._fs_laps_spin.valueChanged.connect(self._update_fuel_save)
-        self.strategy_tab._uco_pit_loss_spin.valueChanged.connect(self._update_undercut)
-        self.strategy_tab._uco_pace_delta_spin.valueChanged.connect(self._update_undercut)
-
+        # The merged Race tab owns the Strategy data (pit window, deg, rivals,
+        # fuel-save / undercut calculators). The legacy Strategy tab is gone;
+        # `self.strategy_tab` aliases the Race tab so existing back-end calls
+        # (e.g. self.strategy_tab._fs_laps_spin.value()) keep working.
         self.dashboard_tab = DashboardTab(self)
         self.tabs.addTab(self.dashboard_tab, 'DASHBOARD')
         self.telemetry_tab = TelemetryTab(self)
@@ -276,8 +273,11 @@ class TelemetryApp(QMainWindow):
         self.lap_analysis_tab = LapAnalysisTab(self)
         self.tabs.addTab(self.lap_analysis_tab, 'LAP ANALYSIS')
         self.race_tab = RaceTab(self)
+        self.strategy_tab = self.race_tab  # alias for legacy back-end handlers
+        self.race_tab._fs_laps_spin.valueChanged.connect(self._update_fuel_save)
+        self.race_tab._uco_pit_loss_spin.valueChanged.connect(self._update_undercut)
+        self.race_tab._uco_pace_delta_spin.valueChanged.connect(self._update_undercut)
         self.tabs.addTab(self.race_tab, 'RACE')
-        self.tabs.addTab(self.strategy_tab, 'STRATEGY')
         self.tyres_tab = TyresTab(self)
         self.tabs.addTab(self.tyres_tab, 'TYRES')
         self.comparison_tab = LapComparisonTab(self)
@@ -286,9 +286,6 @@ class TelemetryApp(QMainWindow):
         self.tabs.addTab(self.session_tab, 'SESSION')
         self.replay_tab = ReplayTab(self)
         self.tabs.addTab(self.replay_tab, 'REPLAY')
-
-        self.coach_tab = CoachTab()
-        self.tabs.addTab(self.coach_tab, 'COACH')
 
         # Math channel panel (side panel on graphs tab, initialized after UI)
         self._math_panel = MathChannelPanel(self._math_engine)
@@ -1455,17 +1452,8 @@ class TelemetryApp(QMainWindow):
         self._populate_replay_combo()
         self._refresh_session_tab()
 
-        # ── Coaching analysis ────────────────────────────────────────
-        try:
-            report = self._lap_coach.analyze(self.session_laps[-1])
-            if report is not None:
-                self.coach_tab.set_report(report)
-                self.coach_tab.set_corners_on_map(
-                    self._lap_coach.corners,
-                    report.trail_brake_analyses,
-                    self.track_map)
-        except Exception as e:
-            print(f'Coaching analysis error: {e}')
+        # Coach tab was removed (raw-data focus). LapCoach engine still
+        # runs for any internal use, but no UI consumer needs it now.
 
         # Promote this lap to the reference for delta / sector comparison
         if len(dists) > 0 and len(dists) == len(times):
@@ -2883,11 +2871,8 @@ class TelemetryApp(QMainWindow):
         for s in samples:
             self._process_sample(s)
 
-        # Strategy tab — re-render from latest engine snapshot
-        try:
-            self.strategy_tab.refresh(self._strategy_engine.state)
-        except Exception:
-            pass
+        # The merged Race tab reads engine.state directly inside its
+        # update_tick (called below via race_tab.update_tick).
 
         # ── Phase 2: Connection hysteresis ──
         if samples:

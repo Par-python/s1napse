@@ -11,10 +11,8 @@ from .graphs import (
 )
 from .panels import SectorTimesPanel, SectorScrubWidget, LapHistoryPanel
 from .badges import AidBadge
-from .coach_tab import CoachTab
 from .math_formula_editor import FormulaEditorWidget
 from .math_channel_panel import MathChannelPanel
-from .strategy_tab import StrategyTab
 from .primitives import Card, Pill, Stat, Sparkline, GapBar
 from .title_bar import TitleBar
 from .tab_bar import LiveTabBar
@@ -28,9 +26,8 @@ __all__ = [
     'TimeDeltaGraph', 'ComparisonGraph', 'ComparisonDeltaGraph',
     'RacePaceChart', 'ReplayGraph', 'ReplayMultiGraph',
     'SectorTimesPanel', 'SectorScrubWidget', 'LapHistoryPanel',
-    'AidBadge', 'CoachTab',
+    'AidBadge',
     'FormulaEditorWidget', 'MathChannelPanel',
-    'StrategyTab',
     'Card', 'Pill', 'Stat', 'Sparkline', 'GapBar',
     'TitleBar',
     'LiveTabBar',
