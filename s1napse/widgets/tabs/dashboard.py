@@ -1,11 +1,17 @@
-"""Dashboard tab — selective gauges + summary card grid.
+"""Dashboard tab — 30/70 horizontal split.
 
-Gauges keep their place because they're visual by nature.
-Numeric values move into Stat-cards.
+Layout:
+  - LEFT (~30%) : gauges card on top, then 4 stat cards stacked
+                  (Speed / Gear / Last lap / Fuel).
+  - RIGHT (~70%): LapHistoryPanel, full vertical height — the
+                  session lap table is now visible at a glance
+                  while driving.
 """
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy,
+)
 
 from ... import theme
 from ..primitives import Card, Stat
@@ -19,14 +25,19 @@ class DashboardTab(QWidget):
         super().__init__(parent)
         self._app = app
 
-        outer = QVBoxLayout(self)
+        outer = QHBoxLayout(self)
         outer.setContentsMargins(12, 12, 12, 12)
         outer.setSpacing(12)
 
-        # Gauges row
+        # ── LEFT column (~30%) — gauges + stacked stat cards ────────────
+        left = QVBoxLayout()
+        left.setSpacing(12)
+
+        # Gauges card on top
         gauges = Card(label='Inputs', dense=True)
-        row = QHBoxLayout()
-        row.setSpacing(16)
+        gauges.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        gauges_row = QHBoxLayout()
+        gauges_row.setSpacing(12)
 
         self._rev = RevBar()
         self._throttle = PedalBar(C_THROTTLE, 'THR')
@@ -34,39 +45,42 @@ class DashboardTab(QWidget):
         self._steer = SteeringBar()
 
         for w in (self._rev, self._throttle, self._brake, self._steer):
-            row.addWidget(w)
-        gauges.body().addLayout(row)
-        outer.addWidget(gauges)
+            gauges_row.addWidget(w)
+        gauges.body().addLayout(gauges_row)
+        left.addWidget(gauges, 0)
 
-        # 2x2 Stat grid
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(12)
-        grid.setVerticalSpacing(12)
-        outer.addLayout(grid, 1)
-
+        # Stat cards stacked
         self._speed = Stat(value='—', unit='km/h', size='xl')
         self._gear = Stat(value='—', size='xl')
         self._lap = Stat(value='—', sub='—')
         self._fuel = Stat(value='—', unit='L', sub='—')
 
-        for i, (label, stat) in enumerate([
+        for label, stat in (
             ('Speed', self._speed),
             ('Gear', self._gear),
             ('Last lap', self._lap),
             ('Fuel', self._fuel),
-        ]):
+        ):
             c = Card(label=label, dense=True)
+            c.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
             c.body().addWidget(stat)
-            grid.addWidget(c, i // 2, i % 2)
+            left.addWidget(c, 0)
 
-        # Lap history panel — recent laps table
+        left.addStretch(1)
+
+        # Wrap left column so we can stretch-control it
+        left_container = QWidget()
+        left_container.setLayout(left)
+        outer.addWidget(left_container, 3)  # 30% via stretch ratio 3:7
+
+        # ── RIGHT column (~70%) — Session laps ──────────────────────────
+        laps_card = Card(label='Session laps', dense=False)
         self.lap_history = LapHistoryPanel()
-        outer.addWidget(self.lap_history, stretch=1)
+        laps_card.body().addWidget(self.lap_history)
+        outer.addWidget(laps_card, 7)
 
         # Mirror onto app so existing references work (bridge pattern)
         app.lap_history = self.lap_history
-
-        outer.addStretch(0)
 
     def update_tick(self, data: dict | None) -> None:
         d = data or {}
