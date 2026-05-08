@@ -63,7 +63,7 @@ class TyresTab(QWidget):
         wear.body().addWidget(self._wear_stat)
         right.addWidget(wear)
 
-        imo = Card(label='IMO temp distribution', dense=True)
+        self._imo_card = Card(label='IMO temp distribution', dense=True)
         self._imo_rows = {}
         for pos in _POS_ORDER:
             r = QHBoxLayout()
@@ -76,9 +76,12 @@ class TyresTab(QWidget):
             r.addWidget(k)
             r.addStretch(1)
             r.addWidget(v)
-            imo.body().addLayout(r)
+            self._imo_card.body().addLayout(r)
             self._imo_rows[pos] = v
-        right.addWidget(imo)
+        # IMO is only fed by iRacing today; hide until the active reader
+        # actually populates tyre_imo data.
+        self._imo_card.setVisible(False)
+        right.addWidget(self._imo_card)
 
         right.addStretch(1)
         row.addLayout(right, 1)
@@ -91,7 +94,7 @@ class TyresTab(QWidget):
           - tyre_pressure: list[float]  [FL, FR, RL, RR] in PSI
           - brake_temp:    list[float]  [FL, FR, RL, RR] in °C
           - tyre_wear:     list[float]  [FL, FR, RL, RR] as 0–1 fractions
-          - tyre_imo:      dict  {pos: [inner, middle, outer]} (ACC only, optional)
+          - tyre_imo:      dict  {pos: [inner, middle, outer]} (iRacing only, optional)
         """
         if not data:
             for pos, tc in self._tyre_cards.items():
@@ -101,6 +104,7 @@ class TyresTab(QWidget):
             self._wear_stat.valueLabel().setText('—')
             for v in self._imo_rows.values():
                 v.setText('I —  ·  M —  ·  O —')
+            self._imo_card.setVisible(False)
             return
 
         t_temps  = data.get('tyre_temp',     [0.0, 0.0, 0.0, 0.0])
@@ -130,10 +134,19 @@ class TyresTab(QWidget):
         else:
             self._wear_stat.valueLabel().setText('—')
 
-        # IMO rows (ACC-only; if absent, leave placeholder)
-        for pos, v in self._imo_rows.items():
-            imo = t_imo.get(pos) if isinstance(t_imo, dict) else None
-            if imo and len(imo) >= 3:
-                v.setText(f'I {imo[0]:.0f}  ·  M {imo[1]:.0f}  ·  O {imo[2]:.0f}')
-            else:
-                v.setText('I —  ·  M —  ·  O —')
+        # IMO rows — only iRacing populates tyre_imo. Show the card when at
+        # least one tyre reports a real IMO triplet; hide it otherwise.
+        has_imo = False
+        if isinstance(t_imo, dict):
+            for triplet in t_imo.values():
+                if triplet and len(triplet) >= 3 and any(v > 0 for v in triplet[:3]):
+                    has_imo = True
+                    break
+        self._imo_card.setVisible(has_imo)
+        if has_imo:
+            for pos, v in self._imo_rows.items():
+                imo = t_imo.get(pos) if isinstance(t_imo, dict) else None
+                if imo and len(imo) >= 3:
+                    v.setText(f'I {imo[0]:.0f}  ·  M {imo[1]:.0f}  ·  O {imo[2]:.0f}')
+                else:
+                    v.setText('I —  ·  M —  ·  O —')

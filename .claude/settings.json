@@ -108,7 +108,8 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\('s1napse/app.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
       "Bash(python -c \"from s1napse import app; print\\('import OK'\\)\")",
       "Bash(python -c \"from s1napse import app; print\\('OK'\\)\")",
-      "Bash(python -c \"from s1napse.widgets.tabs.comparison import LapComparisonTab; print\\('OK'\\)\")"
+      "Bash(python -c \"from s1napse.widgets.tabs.comparison import LapComparisonTab; print\\('OK'\\)\")",
+      "Bash(python -c \"from s1napse.readers import IRacingReader; from s1napse.widgets.tabs.tyres import TyresTab; print\\('OK'\\)\")"
     ]
   }
 }
