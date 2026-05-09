@@ -39,6 +39,12 @@ class TrackMapWidget(QWidget):
         self._raw_min_x = self._raw_max_x = 0.0
         self._raw_min_z = self._raw_max_z = 0.0
         self._bounds_set = False
+        # Cached live world->norm transform (recomputed when bbox grows).
+        self._world_scale: float = 0.0
+        self._world_offset_x: float = 0.0
+        self._world_offset_z: float = 0.0
+        # Latest live world position (set by feed_world_pos).
+        self._live_world: tuple[float, float] | None = None
 
         self._norm:       list[tuple[float, float]] = []
         self._turns:      list = []
@@ -109,6 +115,10 @@ class TrackMapWidget(QWidget):
             self._right_norm = [tuple(p) for p in td.get('right_edge', [])]
             self._world_buckets = {}
             self._bounds_set = False
+            self._world_scale = 0.0
+            self._world_offset_x = 0.0
+            self._world_offset_z = 0.0
+            self._live_world = None
             # Saved track already has its shape — don't let live samples rebuild it.
             self._shape_locked = True
         else:
@@ -145,6 +155,10 @@ class TrackMapWidget(QWidget):
         self._raw_min_x = self._raw_max_x = 0.0
         self._raw_min_z = self._raw_max_z = 0.0
         self._bounds_set = False
+        self._world_scale = 0.0
+        self._world_offset_x = 0.0
+        self._world_offset_z = 0.0
+        self._live_world = None
         self._norm = []
         self._turns = []
         self._track_name = display_name
@@ -166,14 +180,15 @@ class TrackMapWidget(QWidget):
 
     def feed_world_pos(self, pct: float, world_x: float, world_z: float):
         """Add a live world-coord sample."""
-        if self._shape_locked:
-            return
         if world_x == 0.0 and world_z == 0.0:
             return
-        bucket = int(pct * N_TRACK_SEG) % N_TRACK_SEG
-        is_new = bucket not in self._world_buckets
-        self._world_buckets[bucket] = (world_x, world_z)
 
+        # Always stash the latest live world coord so the car dot and trail
+        # can be drawn at the actual lateral position (not the centerline).
+        self._live_world = (world_x, world_z)
+
+        # Grow the live world bbox regardless of shape lock so the live->norm
+        # transform stays valid for projecting the car dot.
         bounds_changed = False
         if not self._bounds_set:
             self._raw_min_x = self._raw_max_x = world_x
@@ -194,23 +209,56 @@ class TrackMapWidget(QWidget):
                 self._raw_max_z = world_z
                 bounds_changed = True
 
+        if self._shape_locked:
+            # Saved tracks own their centerline — refresh only the
+            # world->norm transform, leave _norm alone.
+            if bounds_changed:
+                self._refresh_world_transform()
+            return
+
+        bucket = int(pct * N_TRACK_SEG) % N_TRACK_SEG
+        is_new = bucket not in self._world_buckets
+        self._world_buckets[bucket] = (world_x, world_z)
+
         if (is_new or bounds_changed) and len(self._world_buckets) >= self.MIN_DRAW:
             self._recompute_norm()
 
-    def _recompute_norm(self):
-        if not self._world_buckets or not self._bounds_set:
-            return
+    def _refresh_world_transform(self) -> bool:
+        """Recompute scale/offset for the live world->norm projection.
+        Returns True if the cached transform was updated."""
+        if not self._bounds_set:
+            return False
         span_x = self._raw_max_x - self._raw_min_x
         span_z = self._raw_max_z - self._raw_min_z
         span = max(span_x, span_z)
         if span < 1.0:
+            return False
+        scale = 0.90 / span
+        self._world_scale = scale
+        self._world_offset_x = (1.0 - span_x * scale) / 2.0
+        self._world_offset_z = (1.0 - span_z * scale) / 2.0
+        return True
+
+    def _world_to_norm(self, world_x: float, world_z: float) -> tuple[float, float] | None:
+        """Project a live world coord to the same 0..1 space as self._norm.
+        Returns None if the transform isn't ready yet."""
+        if self._world_scale <= 0.0:
+            return None
+        nx = (world_x - self._raw_min_x) * self._world_scale + self._world_offset_x
+        # Flip Z: ACC world-Z increases northward, Qt screen-Y increases downward.
+        ny = 1.0 - ((world_z - self._raw_min_z) * self._world_scale + self._world_offset_z)
+        return (nx, ny)
+
+    def _recompute_norm(self):
+        if not self._world_buckets or not self._bounds_set:
+            return
+        if not self._refresh_world_transform():
             return
 
-        scale = 0.90 / span
-        offset_x = (1.0 - span_x * scale) / 2.0
-        offset_z = (1.0 - span_z * scale) / 2.0
+        scale = self._world_scale
+        offset_x = self._world_offset_x
+        offset_z = self._world_offset_z
 
-        # Flip Z: ACC world-Z increases northward, Qt screen-Y increases downward.
         self._norm = [
             (round((x - self._raw_min_x) * scale + offset_x, 4),
              round(1.0 - ((z - self._raw_min_z) * scale + offset_z), 4))
@@ -245,8 +293,24 @@ class TrackMapWidget(QWidget):
         if abs(diff) < 1e-5 and self._trail:
             return  # no visible change, skip repaint
         self._car_smooth = (self._car_smooth + diff * 0.35) % 1.0
-        self._trail.append(
-            (self._car_smooth, self._cur_throttle, self._cur_brake))
+
+        # Trail sample shape:
+        #   (kind, a, b, throttle, brake)
+        # where kind == 'w' (world-aligned, a/b are normalized x/y in [0,1])
+        # or    kind == 's' (legacy, a is _car_smooth progress, b is unused).
+        # Renderer handles both — we only emit 'w' once the live world->norm
+        # transform is ready, so the trail mirrors the actual line driven.
+        live_norm = None
+        if self._live_world is not None:
+            live_norm = self._world_to_norm(*self._live_world)
+        if live_norm is not None:
+            self._trail.append(
+                ('w', live_norm[0], live_norm[1],
+                 self._cur_throttle, self._cur_brake))
+        else:
+            self._trail.append(
+                ('s', self._car_smooth, 0.0,
+                 self._cur_throttle, self._cur_brake))
         self.update()
 
     def reset(self):
@@ -760,13 +824,30 @@ class TrackMapWidget(QWidget):
             join = Qt.PenJoinStyle.BevelJoin
             width = 0  # cosmetic
 
+            pad = self._pad
+            inner_w = max(1, w_px - 2 * pad)
+            inner_h = max(1, h_px - 2 * pad)
+
+            def _norm_to_screen(nx: float, ny: float) -> tuple[float, float]:
+                return (pad + nx * inner_w, pad + ny * inner_h)
+
             coords: list[tuple[float, float, tuple[int, int, int]]] = []
-            for s, thr, brk in trail_list:
-                lo = int(s * n) % n
-                hi = (lo + 1) % n
-                f = (s * n) - int(s * n)
-                x = pts[lo][0] + f * (pts[hi][0] - pts[lo][0])
-                y = pts[lo][1] + f * (pts[hi][1] - pts[lo][1])
+            for sample in trail_list:
+                if len(sample) == 5 and sample[0] == 'w':
+                    # World-aligned sample: project norm coord directly.
+                    _, nx, ny, thr, brk = sample
+                    x, y = _norm_to_screen(nx, ny)
+                else:
+                    # Legacy progress-based sample: walk the centerline.
+                    if len(sample) == 5:
+                        _, s, _b, thr, brk = sample
+                    else:
+                        s, thr, brk = sample
+                    lo = int(s * n) % n
+                    hi = (lo + 1) % n
+                    f = (s * n) - int(s * n)
+                    x = pts[lo][0] + f * (pts[hi][0] - pts[lo][0])
+                    y = pts[lo][1] + f * (pts[hi][1] - pts[lo][1])
                 coords.append((x, y, self._trail_color(thr, brk)))
 
             # Group consecutive samples that share a color into runs.
@@ -789,14 +870,18 @@ class TrackMapWidget(QWidget):
                 tp.setBrush(Qt.BrushStyle.NoBrush)
                 tp.drawPath(path)
 
+            # Wrap detection: large screen-space jump between consecutive
+            # samples (start/finish crossover, or sim teleport). Uses screen
+            # distance so it works for both world-aligned and progress-based
+            # samples uniformly.
+            wrap_px2 = (max(inner_w, inner_h) * 0.4) ** 2
             for i in range(1, tn):
-                s_prev = trail_list[i - 1][0]
-                s_cur = trail_list[i][0]
+                px, py, _ = coords[i - 1]
                 x, y, c = coords[i]
                 pt = QPointF(x, y)
 
-                # S/F wrap: close out the current run, start fresh.
-                if abs(s_cur - s_prev) > 0.5:
+                dx, dy = x - px, y - py
+                if dx * dx + dy * dy > wrap_px2:
                     flush_run(run_pts, run_color)
                     run_color = c
                     run_pts = [pt]
@@ -817,15 +902,25 @@ class TrackMapWidget(QWidget):
             tp.end()
             painter.drawPixmap(0, 0, tpm)
 
-        # --- Car head dot.
-        smooth = self._car_smooth
-        lo_idx = int(smooth * n) % n
-        hi_idx = (lo_idx + 1) % n
-        frac = (smooth * n) - int(smooth * n)
-        lx, ly = pts[lo_idx]
-        hx, hy = pts[hi_idx]
-        cx = lx + frac * (hx - lx)
-        cy = ly + frac * (hy - ly)
+        # --- Car head dot. Prefer the live world position so the car sits
+        # at the actual lateral location (showing the real driving line);
+        # fall back to walking the centerline when no world coord is ready.
+        live_norm = None
+        if self._live_world is not None:
+            live_norm = self._world_to_norm(*self._live_world)
+        if live_norm is not None:
+            pad = self._pad
+            cx = pad + live_norm[0] * max(1, self.width() - 2 * pad)
+            cy = pad + live_norm[1] * max(1, self.height() - 2 * pad)
+        else:
+            smooth = self._car_smooth
+            lo_idx = int(smooth * n) % n
+            hi_idx = (lo_idx + 1) % n
+            frac = (smooth * n) - int(smooth * n)
+            lx, ly = pts[lo_idx]
+            hx, hy = pts[hi_idx]
+            cx = lx + frac * (hx - lx)
+            cy = ly + frac * (hy - ly)
         cp = QPointF(cx, cy)
 
         # Glow color matches current state (green throttle / red brake).
