@@ -334,3 +334,26 @@ def test_is_connected_caches_last_read_state():
     assert reader.is_connected() is False  # nothing read yet
     reader.read()
     assert reader.is_connected() is True
+
+
+def test_lmu_dict_keys_match_acc_dict_keys():
+    """LMUReader.read() must return the same key set as ACCReader.read().
+    This guarantees existing widgets work unchanged."""
+    # Reference key set from ACCReader.read() — extracted from
+    # s1napse/readers/acc.py. Update this set if ACCReader's shape changes.
+    acc_keys = {
+        'speed', 'rpm', 'max_rpm', 'gear', 'throttle', 'brake', 'steer_angle',
+        'abs', 'tc', 'fuel', 'max_fuel', 'lap_time', 'position', 'car_name',
+        'track_name', 'lap_count', 'current_time', 'lap_dist_pct', 'world_x',
+        'world_z', 'lap_valid', 'is_in_pit_lane', 'tyre_temp', 'tyre_pressure',
+        'brake_temp', 'tyre_compound', 'air_temp', 'road_temp', 'session_type',
+        'gap_ahead', 'gap_behind', 'stint_time_left', 'delta_lap_time',
+        'estimated_lap', 'tyre_wear', 'brake_bias',
+    }
+    reader = _build_reader_with_fakes(_make_fake_telemetry(), _make_fake_scoring())
+    data = reader.read()
+    lmu_keys = set(data.keys())
+    missing = acc_keys - lmu_keys
+    extra = lmu_keys - acc_keys
+    assert not missing, f"LMU dict missing ACC keys: {missing}"
+    assert not extra, f"LMU dict has unexpected keys: {extra}"
