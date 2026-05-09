@@ -6,29 +6,26 @@ Built around a violet/dark design system with two density modes — dense, glanc
 
 ---
 
-## Download & Install
+## Download & Install (Beta — Windows)
 
-### Step 1 — Download S1napse
+### Step 1 — Download the installer
 
-1. Go to the [**Releases**](../../releases) page (top right of this GitHub page, or click the "Releases" link on the right sidebar)
-2. Click the latest release (e.g. `v1.0.0`)
-3. Under **Assets**, click **`S1napsse.exe`** to download it
-
-> The file is about 150–200 MB. This is normal — it includes everything the app needs to run.
+1. Open the [latest release](https://github.com/Par-python/s1napse/releases/latest).
+2. Under **Assets**, download **`Synapse-Setup-<version>.exe`** (about 150–200 MB).
 
 ---
 
-### Step 2 — Run it
+### Step 2 — Run the installer
 
-1. Move `S1napsse.exe` to a folder of your choice (e.g. `Documents\S1napsse\`)
-2. Double-click `S1napsse.exe`
-
-> **Windows SmartScreen warning?** This is normal for unsigned apps.
-> Click **"More info"** → **"Run anyway"** to proceed.
+1. Double-click `Synapse-Setup-<version>.exe`.
+2. **Windows may show "Windows protected your PC."** Click **More info** → **Run anyway**. This is normal for an unsigned beta build; the warning will go away once SmartScreen has seen enough installs.
+3. Pick a Start Menu group (default `Synapse`) and optionally a desktop shortcut, then finish the wizard.
 
 > **Antivirus warning?** Some antivirus tools flag PyInstaller executables as suspicious. The app is safe — you can add it as an exception or check the source code in this repo.
 
-That's it. No Python, no installation, no setup.
+Synapse will check for new beta releases on startup and show a small banner at the top of the window when one is available — click **Download** to jump straight to the release page.
+
+To uninstall: **Settings → Apps → Synapse → Uninstall**.
 
 ---
 
