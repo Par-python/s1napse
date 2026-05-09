@@ -44,7 +44,7 @@ from .utils import (
     _safe_list, h_line, _channel_header, _vsep,
     _interp_time_at_dist, _compute_sector_times,
 )
-from .readers import ACUDPReader, ACCReader, IRacingReader, ELM327Reader
+from .readers import ACUDPReader, ACCReader, IRacingReader, LMUReader, ELM327Reader
 from .track_recorder import TrackRecorder, TRACKS, TRACK_NAME_MAP, load_saved_tracks, _get_tracks_dir
 from .widgets import (
     RevBar, PedalBar, ValueDisplay, SteeringWidget, SteeringBar,
@@ -136,6 +136,7 @@ class TelemetryApp(QMainWindow):
         self.ac_reader  = None
         self.acc_reader = ACCReader()
         self.ir_reader  = IRacingReader()
+        self.lmu_reader = LMUReader()
         self.elm_reader = None
         self.current_reader = None
         self.auto_detect = True
@@ -1324,7 +1325,7 @@ class TelemetryApp(QMainWindow):
         # would let users pick OBD-II from the sim chrome which makes no
         # sense.
         self.game_combo = QComboBox()
-        self.game_combo.addItems(['Auto-Detect', 'ACC', 'AC', 'iRacing'])
+        self.game_combo.addItems(['Auto-Detect', 'ACC', 'AC', 'iRacing', 'LMU'])
         self.game_combo.setFixedWidth(120)
         self.game_combo.setToolTip('Telemetry source')
         self.game_combo.currentTextChanged.connect(self._on_game_changed)
@@ -2794,6 +2795,8 @@ class TelemetryApp(QMainWindow):
             self.current_reader = self.acc_reader
         elif game == 'iRacing':
             self.current_reader = self.ir_reader
+        elif game == 'LMU':
+            self.current_reader = self.lmu_reader
         else:  # 'AC'
             if self.ac_reader:
                 self.ac_reader.disconnect()
@@ -2812,6 +2815,8 @@ class TelemetryApp(QMainWindow):
             return self.acc_reader
         if self.ir_reader.is_connected():
             return self.ir_reader
+        if self.lmu_reader.is_connected():
+            return self.lmu_reader
         if not self.ac_reader:
             self.ac_reader = ACUDPReader(self.udp_host.text(), int(self.udp_port.text()))
         if self.ac_reader.is_connected():
@@ -3271,6 +3276,8 @@ class TelemetryApp(QMainWindow):
             game_type = 'AC'
         elif isinstance(self.current_reader, IRacingReader):
             game_type = 'iRacing'
+        elif isinstance(self.current_reader, LMUReader):
+            game_type = 'LMU'
         else:
             game_type = 'ACC'
         self.connection_dot.setStyleSheet(f'color: {C_THROTTLE};')
