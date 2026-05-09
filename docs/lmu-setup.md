@@ -22,13 +22,17 @@ games.
    **Note the leading space before `Enabled`** — this is required by the
    game and is not a typo.
 
-## 2. Install the Python dependency
+## 2. Python dependencies
 
-```bash
-pip install pyRfactor2SharedMemory
-```
+The rF2 Python bindings (`pyRfactor2SharedMemory`) are not published on
+PyPI, so they are vendored into this repo at
+`s1napse/vendor/pyRfactor2SharedMemory/` (MIT licensed, copied verbatim
+from [TonyWhitley's repo](https://github.com/TonyWhitley/pyRfactor2SharedMemory)).
+You do not need to install them separately.
 
-This package only works on Windows.
+The only extra runtime dep is `psutil`, already pinned in
+`requirements.txt`. If you have already run
+`pip install -r requirements.txt`, you are done.
 
 ## 3. Verify
 

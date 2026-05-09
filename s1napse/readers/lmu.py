@@ -1,10 +1,10 @@
 """Le Mans Ultimate via the rFactor 2 Shared Memory Plugin.
 
-Requires:
-    - pip install pyRfactor2SharedMemory
-    - rFactor2SharedMemoryMapPlugin64.dll installed in LMU's Plugins folder
-      and enabled in CustomPluginVariables.JSON (note the leading-space
-      ' Enabled' key — required by the game).
+Uses the vendored pyRfactor2SharedMemory bindings under
+``s1napse/vendor/pyRfactor2SharedMemory/`` (the upstream library is not on
+PyPI). Requires that ``rFactor2SharedMemoryMapPlugin64.dll`` is installed
+in LMU's Plugins folder and enabled in ``CustomPluginVariables.JSON``
+(note the leading-space ' Enabled' key — required by the game).
 """
 
 from .base import TelemetryReader
@@ -29,7 +29,7 @@ class LMUReader(TelemetryReader):
         self.info = None
         self._cbytestring = None
         try:
-            from pyRfactor2SharedMemory.sharedMemoryAPI import (
+            from ..vendor.pyRfactor2SharedMemory.sharedMemoryAPI import (
                 Cbytestring2Python,
                 SimInfoAPI,
             )
@@ -38,10 +38,10 @@ class LMUReader(TelemetryReader):
             self.available = True
         except Exception as e:
             print(f"LMU Reader initialization failed: {e}")
-            print("Install with: pip install pyRfactor2SharedMemory")
             print(
-                "Also: install rFactor2SharedMemoryMapPlugin64.dll into "
-                "LMU's Plugins folder and enable it in CustomPluginVariables.JSON"
+                "Install rFactor2SharedMemoryMapPlugin64.dll into LMU's "
+                "Plugins folder and enable it in CustomPluginVariables.JSON. "
+                "Also ensure psutil is installed (pip install psutil)."
             )
             self.available = False
 
