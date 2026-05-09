@@ -53,6 +53,12 @@ class LMUReader(TelemetryReader):
             # Gear: rF2 (-1=R, 0=N, 1+=fwd) → ACC (0=R, 1=N, 2+=fwd)
             gear = telem.mGear + 1
 
+            wheels = telem.mWheels
+            tyre_temp = [float(w.mTireCarcassTemperature) - 273.15 for w in wheels]
+            tyre_pressure = [float(w.mPressure) for w in wheels]
+            brake_temp = [float(w.mBrakeTemp) - 273.15 for w in wheels]
+            tyre_wear = [float(w.mWear) * 100.0 for w in wheels]
+
             self._last_read_ok = True
             return {
                 'speed':       speed_kmh,
@@ -67,6 +73,10 @@ class LMUReader(TelemetryReader):
                 'fuel':        telem.mFuel,
                 'max_fuel':    telem.mFuelCapacity,
                 'brake_bias':  float(telem.mRearBrakeBias),
+                'tyre_temp':     tyre_temp,
+                'tyre_pressure': tyre_pressure,
+                'brake_temp':    brake_temp,
+                'tyre_wear':     tyre_wear,
             }
         except Exception as e:
             print(f"LMU read error: {e}")

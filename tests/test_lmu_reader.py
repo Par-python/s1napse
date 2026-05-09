@@ -137,3 +137,63 @@ def test_fuel_passthrough():
     data = reader.read()
     assert data['fuel'] == 42.5
     assert data['max_fuel'] == 100.0
+
+
+def test_tyre_temp_kelvin_to_celsius():
+    """rF2 tire carcass temp is Kelvin; ACC dict expects Celsius."""
+    wheels = [
+        MagicMock(mTireCarcassTemperature=350.0, mPressure=180.0,
+                  mBrakeTemp=500.0, mWear=0.05),
+        MagicMock(mTireCarcassTemperature=355.0, mPressure=181.0,
+                  mBrakeTemp=505.0, mWear=0.06),
+        MagicMock(mTireCarcassTemperature=340.0, mPressure=175.0,
+                  mBrakeTemp=480.0, mWear=0.04),
+        MagicMock(mTireCarcassTemperature=345.0, mPressure=176.0,
+                  mBrakeTemp=485.0, mWear=0.045),
+    ]
+    telem = _make_fake_telemetry()
+    telem.mWheels = wheels
+    reader = _build_reader_with_fakes(telem, _make_fake_scoring())
+    data = reader.read()
+    # Kelvin - 273.15
+    assert math.isclose(data['tyre_temp'][0], 350.0 - 273.15, abs_tol=0.01)
+    assert math.isclose(data['tyre_temp'][3], 345.0 - 273.15, abs_tol=0.01)
+
+
+def test_brake_temp_kelvin_to_celsius():
+    wheels = [
+        MagicMock(mTireCarcassTemperature=300.0, mPressure=180.0,
+                  mBrakeTemp=600.0, mWear=0.0),
+    ] * 4
+    telem = _make_fake_telemetry()
+    telem.mWheels = wheels
+    reader = _build_reader_with_fakes(telem, _make_fake_scoring())
+    data = reader.read()
+    for v in data['brake_temp']:
+        assert math.isclose(v, 600.0 - 273.15, abs_tol=0.01)
+
+
+def test_tyre_pressure_passthrough():
+    """rF2 pressure is kPa; ACC also kPa — no conversion."""
+    wheels = [
+        MagicMock(mTireCarcassTemperature=300.0, mPressure=178.0,
+                  mBrakeTemp=400.0, mWear=0.0),
+    ] * 4
+    telem = _make_fake_telemetry()
+    telem.mWheels = wheels
+    reader = _build_reader_with_fakes(telem, _make_fake_scoring())
+    data = reader.read()
+    assert data['tyre_pressure'] == [178.0, 178.0, 178.0, 178.0]
+
+
+def test_tyre_wear_scales_to_percent():
+    """rF2 mWear is 0..1; ACC reader returns 0..100."""
+    wheels = [
+        MagicMock(mTireCarcassTemperature=300.0, mPressure=180.0,
+                  mBrakeTemp=400.0, mWear=0.25),
+    ] * 4
+    telem = _make_fake_telemetry()
+    telem.mWheels = wheels
+    reader = _build_reader_with_fakes(telem, _make_fake_scoring())
+    data = reader.read()
+    assert data['tyre_wear'] == [25.0, 25.0, 25.0, 25.0]
