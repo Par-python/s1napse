@@ -291,3 +291,46 @@ def test_estimated_lap_seconds_to_ms():
     scoring.mVehicles[0].mBestLapTime = 89.123
     reader = _build_reader_with_fakes(_make_fake_telemetry(), scoring)
     assert math.isclose(reader.read()['estimated_lap'], 89123.0, abs_tol=1.0)
+
+
+def test_read_returns_none_when_no_session():
+    """playerTelemetry/playerScoring may return None when no session active."""
+    from s1napse.readers.lmu import LMUReader
+    reader = LMUReader.__new__(LMUReader)
+    reader.available = True
+    reader._last_read_ok = True  # was True; should flip to False
+    api = MagicMock()
+    api.playerTelemetry.return_value = None
+    api.playerScoring.return_value = None
+    reader.info = api
+    reader._cbytestring = lambda b: b.decode('utf-8', 'ignore')
+    assert reader.read() is None
+    assert reader._last_read_ok is False
+
+
+def test_read_swallows_field_exceptions():
+    """If any field access raises, read() returns None rather than crashing."""
+    from s1napse.readers.lmu import LMUReader
+    reader = LMUReader.__new__(LMUReader)
+    reader.available = True
+    reader._last_read_ok = True
+    api = MagicMock()
+    bad_telem = MagicMock()
+    # Accessing mLocalVel raises.
+    type(bad_telem).mLocalVel = property(
+        lambda self: (_ for _ in ()).throw(RuntimeError("kaboom"))
+    )
+    api.playerTelemetry.return_value = bad_telem
+    api.playerScoring.return_value = _make_fake_scoring()
+    reader.info = api
+    reader._cbytestring = lambda b: b.decode('utf-8', 'ignore')
+    assert reader.read() is None
+    assert reader._last_read_ok is False
+
+
+def test_is_connected_caches_last_read_state():
+    """is_connected() should reflect the latest read() outcome."""
+    reader = _build_reader_with_fakes(_make_fake_telemetry(), _make_fake_scoring())
+    assert reader.is_connected() is False  # nothing read yet
+    reader.read()
+    assert reader.is_connected() is True
