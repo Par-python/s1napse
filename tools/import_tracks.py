@@ -23,7 +23,7 @@ DST_DIR     = REPO / 's1napse' / 'tracks'
 N_OUT       = 250
 PAD         = 0.06
 SMOOTH_SIGMA = 6.0  # gaussian kernel std-dev for curvature smoothing
-SOURCE_TAG  = 'TUMFTM/racetrack-database (CC-BY-4.0)'
+SOURCE_TAG  = 'TUMFTM/racetrack-database (LGPL-3.0)'
 
 
 def slug(name: str) -> str:
