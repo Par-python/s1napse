@@ -217,7 +217,9 @@ acc-telemetry/
 │   ├── tracks/                    # Auto-generated track JSON files
 │   └── racelines/                 # Saved racelines
 ├── tests/                         # pytest test suite
-├── docs/superpowers/              # Specs and implementation plans
+├── installer/                     # Inno Setup installer script
+├── tools/                         # Build helpers (build_installer.py, etc.)
+├── docs/                          # User-facing documentation
 ├── Synapse.spec                   # PyInstaller build config
 ├── requirements.txt               # Runtime dependencies
 ├── requirements-dev.txt           # Test/dev dependencies

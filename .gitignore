@@ -20,3 +20,12 @@ installer/version.iss
 # OS
 .DS_Store
 Thumbs.db
+*.swp
+
+# Local-only working notes (never push)
+internal-docs/
+
+# Local tooling state
+.claude/
+.superpowers/
+.pytest_cache/
