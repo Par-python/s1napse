@@ -122,7 +122,11 @@
       "Bash(python -c \"from s1napse.widgets.primitives import Card, Stat, Sparkline, Pill, GapBar; from s1napse import app; print\\('OK'\\)\")",
       "Bash(python -c \"from s1napse.widgets.panels import SectorScrubWidget; print\\('OK'\\)\")",
       "Bash(python -c \"from s1napse.widgets.tabs.session import SessionTab; print\\('OK'\\)\")",
-      "Bash(python -c \"from s1napse.widgets.track_map import TrackMapWidget; from s1napse import app; print\\('OK'\\)\")"
+      "Bash(python -c \"from s1napse.widgets.track_map import TrackMapWidget; from s1napse import app; print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('s1napse/app.py'\\).read\\(\\)\\); print\\('ok'\\)\")",
+      "Bash(xxd \"/Users/jjpardo/Documents/s1napse/ac-2026-05-09-1547-session.json\")",
+      "Bash(xxd \"/Users/jjpardo/Documents/s1napse/ac-2026-05-09-1611-session.json\")",
+      "Bash(grep -n \"'data':         {k: list\\(v\\) for k, v in lap\" /Users/jjpardo/Documents/acc-telemetry/s1napse/app.py)"
     ]
   }
 }

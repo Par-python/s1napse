@@ -65,6 +65,19 @@ from .coaching.math_engine import MathEngine
 from .coaching.strategy_engine import StrategyEngine
 
 
+def _json_default(obj):
+    """Fallback for json.dump: coerce numpy scalars/arrays and other non-JSON
+    types to native Python so a stray np.float32 in the export payload doesn't
+    crash the whole save."""
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, (set, frozenset)):
+        return list(obj)
+    raise TypeError(f'Object of type {type(obj).__name__} is not JSON serializable')
+
+
 class TelemetrySampler(threading.Thread):
     """Background thread: reads shared memory at ~120 Hz, buffers raw dicts."""
 
@@ -1642,6 +1655,7 @@ class TelemetryApp(QMainWindow):
             'lap_number':   lap['lap_number'],
             'total_time_s': lap.get('total_time_s', 0),
             'sectors':      lap.get('sectors', [None, None, None]),
+            'lap_valid':    bool(lap.get('lap_valid', True)),
             'track_name':   TRACKS.get(self._active_track_key or '', {}).get('name', ''),
             'data':         {k: list(v) for k, v in lap['data'].items()},
         }
@@ -1700,6 +1714,7 @@ class TelemetryApp(QMainWindow):
                 'total_time_fmt': f'{m}:{s:06.3f}',
                 'sectors_s':     sectors_raw,
                 'sectors_fmt':   [_fmt_sector(sv) for sv in sectors_raw],
+                'lap_valid':     bool(lap.get('lap_valid', True)),
             },
             'summary': {
                 'max_speed_kph':    _safe_max(speeds),
@@ -1843,6 +1858,7 @@ class TelemetryApp(QMainWindow):
             'lap_number':   lap['lap_number'],
             'total_time_s': lap.get('total_time_s', 0),
             'sectors':      lap.get('sectors', [None, None, None]),
+            'lap_valid':    bool(lap.get('lap_valid', True)),
             'track_name':   TRACKS.get(self._active_track_key or '', {}).get('name', ''),
             'data':         {k: list(v) for k, v in lap['data'].items()},
         }
@@ -1850,17 +1866,81 @@ class TelemetryApp(QMainWindow):
             json.dump(payload, f)
         QMessageBox.information(self, 'Export Lap', f'Lap saved to:\n{path}')
 
+    @staticmethod
+    def _read_json_any(path: str):
+        """Load a JSON payload from either a gzipped (.json.gz) or plain (.json) file."""
+        try:
+            with gzip.open(path, 'rt', encoding='utf-8') as f:
+                return json.load(f)
+        except (OSError, gzip.BadGzipFile):
+            with open(path, 'rt', encoding='utf-8') as f:
+                return json.load(f)
+
+    @staticmethod
+    def _normalize_imported_lap(lap_payload: dict) -> dict | None:
+        """Accept either the flat legacy shape ({lap_number, total_time_s, sectors, data})
+        or the v2.0 export shape ({lap:{...}, telemetry:{...}}) and return the flat
+        shape used internally. Returns None if the payload has no usable telemetry."""
+        # Flat legacy shape
+        if 'data' in lap_payload and 'time_ms' in (lap_payload.get('data') or {}):
+            return {
+                'lap_number':   lap_payload.get('lap_number', 0),
+                'total_time_s': float(lap_payload.get('total_time_s', 0)),
+                'sectors':      lap_payload.get('sectors', [None, None, None]),
+                'lap_valid':    bool(lap_payload.get('lap_valid', True)),
+                'track_key':    lap_payload.get('track_key', ''),
+                'track_map_pts': list(lap_payload.get('track_map_pts', [])),
+                'data':         {k: list(v) for k, v in lap_payload['data'].items()},
+            }
+        # v2.0 export shape: {lap:{...}, telemetry:{...}}
+        tel = lap_payload.get('telemetry') or {}
+        lap_block = lap_payload.get('lap') or {}
+        if 'time_ms' not in tel:
+            return None
+
+        # Flatten nested per-corner dicts (tyre_temp / tyre_pressure / brake_temp / tyre_wear)
+        # back into the *_fl/*_fr/*_rl/*_rr channels the rest of the app expects.
+        flat: dict = {}
+        speed_kph = tel.get('speed_kph')
+        for k, v in tel.items():
+            if isinstance(v, dict):
+                # e.g. 'tyre_temp': {'fl': [...], 'fr': [...], ...}
+                for corner, series in v.items():
+                    flat[f'{k}_{corner}'] = list(series)
+            elif isinstance(v, list):
+                flat[k] = list(v)
+        if speed_kph is not None and 'speed' not in flat:
+            flat['speed'] = list(speed_kph)
+        if 'air_temp_c' in flat and 'air_temp' not in flat:
+            flat['air_temp'] = flat['air_temp_c']
+        if 'road_temp_c' in flat and 'road_temp' not in flat:
+            flat['road_temp'] = flat['road_temp_c']
+
+        session_block = lap_payload.get('session') or {}
+        track_map_block = lap_payload.get('track_map') or {}
+        return {
+            'lap_number':   lap_block.get('lap_number', lap_payload.get('lap_number', 0)),
+            'total_time_s': float(lap_block.get('total_time_s',
+                                                lap_payload.get('total_time_s', 0))),
+            'sectors':      lap_block.get('sectors_s',
+                                          lap_payload.get('sectors', [None, None, None])),
+            'lap_valid':    bool(lap_block.get('lap_valid',
+                                               lap_payload.get('lap_valid', True))),
+            'track_key':    session_block.get('track_key', ''),
+            'track_map_pts': list(track_map_block.get('pts', [])),
+            'data':         flat,
+        }
+
     def _import_lap_json(self):
         """Import a shared lap JSON file and add it to the comparison dropdowns."""
         path, _ = QFileDialog.getOpenFileName(
             self, 'Import Lap', '',
-            'Lap JSON (gzipped) (*.json.gz);;All files (*)')
+            'Lap JSON (*.json *.json.gz);;All files (*)')
         if not path:
             return
 
         try:
-            with gzip.open(path, 'rt', encoding='utf-8') as f:
-                payload = json.load(f)
+            payload = self._read_json_any(path)
         except Exception as e:
             QMessageBox.warning(self, 'Import Failed', f'Could not read file:\n{e}')
             return
@@ -1880,6 +1960,7 @@ class TelemetryApp(QMainWindow):
             'lap_number':   lap_num,
             'total_time_s': float(payload.get('total_time_s', 0)),
             'sectors':      payload.get('sectors', [None, None, None]),
+            'lap_valid':    bool(payload.get('lap_valid', True)),
             'data':         {k: list(v) for k, v in payload['data'].items()},
             'imported':     True,
         }
@@ -1970,18 +2051,28 @@ class TelemetryApp(QMainWindow):
         self._rpl_s2_lbl.setText(f'S2: {sec_fmts[1]}')
         self._rpl_s3_lbl.setText(f'S3: {sec_fmts[2]}')
 
-        # Load track map — prefer saved track, fall back to live-built shape
-        track_key = self._active_track_key or ''
+        # Load track map — prefer the lap's own track (for imported laps),
+        # then current session's saved track, then fall back to live-built shape.
+        lap_track_key = (lap.get('track_key') or '') if isinstance(lap, dict) else ''
+        lap_track_pts = lap.get('track_map_pts') if isinstance(lap, dict) else None
+        track_key = lap_track_key or self._active_track_key or ''
         if track_key and track_key in TRACKS:
             self._rpl_map.set_track(track_key)
         else:
             self._rpl_map.reset_track()
 
-        # If set_track found no saved pts, borrow the shape the live map built this session
-        if not self._rpl_map._norm and self.track_map._norm:
-            self._rpl_map._norm = list(self.track_map._norm)
-            self._rpl_map._pts = []
-            self._rpl_map._last_sz = (0, 0)
+        # If no saved pts, prefer the imported lap's embedded shape, then the
+        # shape the live map built this session.
+        if not self._rpl_map._norm:
+            if lap_track_pts:
+                self._rpl_map._norm = [tuple(p) for p in lap_track_pts]
+                self._rpl_map._pts = []
+                self._rpl_map._last_sz = (0, 0)
+                self._rpl_map._shape_locked = True
+            elif self.track_map._norm:
+                self._rpl_map._norm = list(self.track_map._norm)
+                self._rpl_map._pts = []
+                self._rpl_map._last_sz = (0, 0)
 
         self._rpl_map.reset()
 
@@ -1989,7 +2080,11 @@ class TelemetryApp(QMainWindow):
         dists = data.get('dist_m', [])
         throttles = data.get('throttle', [])
         brakes = data.get('brake', [])
-        track_len = TRACKS.get(track_key, {}).get('length_m', MONZA_LENGTH_M)
+        track_len = TRACKS.get(track_key, {}).get('length_m', 0)
+        if track_len <= 0 and dists:
+            track_len = float(dists[-1]) or MONZA_LENGTH_M
+        if track_len <= 0:
+            track_len = MONZA_LENGTH_M
         for d, th, br in zip(dists, throttles, brakes):
             prog = d / track_len if track_len > 0 else 0
             self._rpl_map.update_telemetry(prog, th, br)
@@ -2135,32 +2230,27 @@ class TelemetryApp(QMainWindow):
         """Import a lap JSON directly into the replay tab."""
         path, _ = QFileDialog.getOpenFileName(
             self, 'Import Lap for Replay', '',
-            'Lap JSON (gzipped) (*.json.gz);;All files (*)')
+            'Lap JSON (*.json *.json.gz);;All files (*)')
         if not path:
             return
         try:
-            with gzip.open(path, 'rt', encoding='utf-8') as f:
-                payload = json.load(f)
+            payload = self._read_json_any(path)
         except Exception as e:
             QMessageBox.warning(self, 'Import Failed', f'Could not read file:\n{e}')
             return
-        if 'data' not in payload or 'time_ms' not in payload.get('data', {}):
+        normalized = self._normalize_imported_lap(payload)
+        if normalized is None:
             QMessageBox.warning(self, 'Import Failed',
-                                'Invalid lap JSON: missing "data.time_ms".')
+                                'Invalid lap JSON: no telemetry time series found.')
             return
 
         existing_nums = {l['lap_number'] for l in self.session_laps}
-        lap_num = payload.get('lap_number', 0)
+        lap_num = normalized['lap_number']
         if lap_num in existing_nums:
             lap_num = (max(existing_nums) + 1) if existing_nums else 1
+        normalized['lap_number'] = lap_num
 
-        lap = {
-            'lap_number':   lap_num,
-            'total_time_s': float(payload.get('total_time_s', 0)),
-            'sectors':      payload.get('sectors', [None, None, None]),
-            'data':         {k: list(v) for k, v in payload['data'].items()},
-            'imported':     True,
-        }
+        lap = {**normalized, 'imported': True}
         self.session_laps.append(lap)
         self._populate_replay_combo()
         self._populate_comparison_combos()
@@ -2173,12 +2263,11 @@ class TelemetryApp(QMainWindow):
         """Import a full session JSON (multiple laps) into the replay tab."""
         path, _ = QFileDialog.getOpenFileName(
             self, 'Import Session for Replay', '',
-            'Session JSON (gzipped) (*.json.gz);;All files (*)')
+            'Session JSON (*.json *.json.gz);;All files (*)')
         if not path:
             return
         try:
-            with gzip.open(path, 'rt', encoding='utf-8') as f:
-                payload = json.load(f)
+            payload = self._read_json_any(path)
         except Exception as e:
             QMessageBox.warning(self, 'Import Failed', f'Could not read file:\n{e}')
             return
@@ -2193,20 +2282,16 @@ class TelemetryApp(QMainWindow):
         next_num = (max(existing_nums) + 1) if existing_nums else 1
         added = 0
         for lap_payload in laps_in:
-            if 'data' not in lap_payload or 'time_ms' not in lap_payload.get('data', {}):
+            normalized = self._normalize_imported_lap(lap_payload)
+            if normalized is None:
                 continue
-            lap_num = lap_payload.get('lap_number', 0)
+            lap_num = normalized['lap_number']
             if lap_num in existing_nums:
                 lap_num = next_num
                 next_num += 1
             existing_nums.add(lap_num)
-            self.session_laps.append({
-                'lap_number':   lap_num,
-                'total_time_s': float(lap_payload.get('total_time_s', 0)),
-                'sectors':      lap_payload.get('sectors', [None, None, None]),
-                'data':         {k: list(v) for k, v in lap_payload['data'].items()},
-                'imported':     True,
-            })
+            normalized['lap_number'] = lap_num
+            self.session_laps.append({**normalized, 'imported': True})
             added += 1
 
         if added == 0:
@@ -2598,15 +2683,39 @@ class TelemetryApp(QMainWindow):
         if not path:
             return
 
-        payload = {
-            'sim':         sim_name,
-            'exported_at': datetime.datetime.now().isoformat(timespec='seconds'),
-            'lap_count':   len(self.session_laps),
-            'laps':        [self._build_lap_json_payload(lap)
-                            for lap in self.session_laps],
-        }
-        with gzip.open(path, 'wt', encoding='utf-8', compresslevel=6) as f:
-            json.dump(payload, f)
+        try:
+            payload = {
+                'sim':         sim_name,
+                'exported_at': datetime.datetime.now().isoformat(timespec='seconds'),
+                'lap_count':   len(self.session_laps),
+                'laps':        [self._build_lap_json_payload(lap)
+                                for lap in self.session_laps],
+            }
+        except Exception as e:
+            import traceback
+            QMessageBox.critical(self, 'Export Failed',
+                                 f'Failed to build session payload:\n{e}\n\n{traceback.format_exc()}')
+            return
+
+        # Write to a temp path first, then atomically replace, so a crash
+        # during serialization can't leave a half-written file at `path`.
+        tmp_path = f'{path}.part'
+        use_gzip = path.endswith('.json.gz')
+        try:
+            opener = (lambda p: gzip.open(p, 'wt', encoding='utf-8', compresslevel=6)) \
+                if use_gzip else (lambda p: open(p, 'wt', encoding='utf-8'))
+            with opener(tmp_path) as f:
+                json.dump(payload, f, default=_json_default)
+            Path(tmp_path).replace(path)
+        except Exception as e:
+            import traceback
+            try:
+                Path(tmp_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+            QMessageBox.critical(self, 'Export Failed',
+                                 f'Failed to write session file:\n{e}\n\n{traceback.format_exc()}')
+            return
 
         QMessageBox.information(
             self, 'Export JSON',
