@@ -328,12 +328,29 @@ def test_read_swallows_field_exceptions():
     assert reader._last_read_ok is False
 
 
-def test_is_connected_caches_last_read_state():
-    """is_connected() should reflect the latest read() outcome."""
+def test_is_connected_probes_on_first_call_then_caches():
+    """is_connected() probes via read() the first time so auto-detect
+    picks the reader up immediately; subsequent calls use the cached flag."""
     reader = _build_reader_with_fakes(_make_fake_telemetry(), _make_fake_scoring())
-    assert reader.is_connected() is False  # nothing read yet
-    reader.read()
+    # First call probes — fakes succeed, so this returns True.
     assert reader.is_connected() is True
+    assert reader._last_read_ok is True
+    # Second call uses the cached _last_read_ok without probing again.
+    assert reader.is_connected() is True
+
+
+def test_is_connected_returns_false_when_probe_fails():
+    """If the first probe returns no data (no session), is_connected is False."""
+    from s1napse.readers.lmu import LMUReader
+    reader = LMUReader.__new__(LMUReader)
+    reader.available = True
+    reader._last_read_ok = False
+    api = MagicMock()
+    api.playerTelemetry.return_value = None
+    api.playerScoring.return_value = None
+    reader.info = api
+    reader._cbytestring = lambda b: b.decode('utf-8', 'ignore')
+    assert reader.is_connected() is False
 
 
 def test_lmu_dict_keys_match_acc_dict_keys():

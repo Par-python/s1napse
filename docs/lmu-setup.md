@@ -51,3 +51,8 @@ This package only works on Windows.
   and track LMU is currently simulating. It is not a content unlock — you
   still need to own the DLC to drive that car, but if you can drive it,
   S1napse can read it.
+- **`estimated_lap` is the session best, not a live prediction.** ACC
+  exposes a rolling estimate that updates mid-lap; rF2 does not, so the
+  LMU reader reports `mBestLapTime` instead. Expect this field to read
+  zero until the first lap is complete, then stay static until a new
+  best is set.

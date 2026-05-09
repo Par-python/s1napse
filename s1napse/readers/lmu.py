@@ -130,4 +130,11 @@ class LMUReader(TelemetryReader):
     def is_connected(self):
         if not self.available:
             return False
-        return self._last_read_ok
+        if self._last_read_ok:
+            return True
+        # First-time probe: try a read so auto-detect can pick us up
+        # on the first polling cycle instead of the second.
+        try:
+            return self.read() is not None
+        except Exception:
+            return False
