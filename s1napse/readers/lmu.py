@@ -38,9 +38,40 @@ class LMUReader(TelemetryReader):
         if not self.available:
             self._last_read_ok = False
             return None
-        # Field extraction lands in Task 3.
-        self._last_read_ok = False
-        return None
+        try:
+            telem = self.info.playerTelemetry()
+            scoring = self.info.playerScoring()
+            if telem is None or scoring is None:
+                self._last_read_ok = False
+                return None
+
+            # Speed: |mLocalVel| in m/s → km/h
+            v = telem.mLocalVel
+            speed_ms = (v.x * v.x + v.y * v.y + v.z * v.z) ** 0.5
+            speed_kmh = speed_ms * 3.6
+
+            # Gear: rF2 (-1=R, 0=N, 1+=fwd) → ACC (0=R, 1=N, 2+=fwd)
+            gear = telem.mGear + 1
+
+            self._last_read_ok = True
+            return {
+                'speed':       speed_kmh,
+                'rpm':         telem.mEngineRPM,
+                'max_rpm':     telem.mEngineMaxRPM,
+                'gear':        gear,
+                'throttle':    telem.mUnfilteredThrottle * 100.0,
+                'brake':       telem.mUnfilteredBrake * 100.0,
+                'steer_angle': telem.mUnfilteredSteering,
+                'abs':         0.0,
+                'tc':          0.0,
+                'fuel':        telem.mFuel,
+                'max_fuel':    telem.mFuelCapacity,
+                'brake_bias':  float(telem.mRearBrakeBias),
+            }
+        except Exception as e:
+            print(f"LMU read error: {e}")
+            self._last_read_ok = False
+            return None
 
     def is_connected(self):
         if not self.available:
