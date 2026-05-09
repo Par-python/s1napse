@@ -54,9 +54,10 @@ from .widgets import (
     TimeDeltaGraph, ComparisonGraph, ComparisonDeltaGraph,
     RacePaceChart, ReplayGraph, ReplayMultiGraph,
     SectorTimesPanel, SectorScrubWidget, LapHistoryPanel,
-    AidBadge, LiveTabBar,
+    AidBadge, LiveTabBar, UpdateBanner,
 )
 from .widgets.title_bar import TitleBar
+from .updater import UpdateChecker
 from .widgets.graphs import _style_ax
 from .widgets.math_channel_panel import MathChannelPanel
 from .widgets.tabs import RaceTab, TyresTab, DashboardTab, LapAnalysisTab, TelemetryTab, LapComparisonTab, SessionTab, ReplayTab
@@ -268,6 +269,9 @@ class TelemetryApp(QMainWindow):
         self.title_bar = TitleBar()
         main_layout.addWidget(self.title_bar)
 
+        self.update_banner = UpdateBanner()
+        main_layout.addWidget(self.update_banner)
+
         controls = self._build_connection_strip_controls()
         for w in controls:
             self.title_bar.addTrailing(w)
@@ -327,6 +331,13 @@ class TelemetryApp(QMainWindow):
             self._stack.setCurrentIndex(0)
 
         self._set_graph_title_suffix('Lap 1')
+
+        # --- Update check (no-op when running from source) ---
+        self._update_checker = UpdateChecker(self)
+        self._update_checker.update_available.connect(
+            self.update_banner.show_update
+        )
+        self._update_checker.start()
 
     # ------------------------------------------------------------------
     # WELCOME SCREEN
