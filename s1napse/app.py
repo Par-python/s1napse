@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QLabel, QComboBox, QPushButton, QLineEdit, QSlider,
     QTabWidget, QFileDialog, QMessageBox, QSplitter, QScrollArea,
     QFrame, QGridLayout, QSizePolicy, QSpinBox, QDoubleSpinBox,
-    QStackedWidget, QCheckBox,
+    QStackedWidget, QCheckBox, QToolButton, QMenu,
 )
 from PyQt6.QtCore import QTimer, Qt, QRectF, QPointF, QSettings, QStandardPaths
 from PyQt6.QtGui import (QFont, QPainter, QColor, QPen, QBrush, QFontMetrics,
@@ -1469,6 +1469,10 @@ class TelemetryApp(QMainWindow):
                 tail -= 1
             dists = dists[head:tail]
             times = times[head:tail]
+            # TODO: Nordschleife (and other tracks with non-thirds splits) are
+            # incorrect under this assumption — iRacing alone uses ~9 uneven
+            # sectors there. Real fix requires per-sim sector boundary feeds
+            # and dropping the fixed 3-element 'sectors' list across the app.
             boundaries = [_track_length_m * f for f in (1/3, 2/3, 1.0)]
             sectors = _compute_sector_times(dists, times, boundaries)
 
@@ -2165,6 +2169,62 @@ class TelemetryApp(QMainWindow):
         self._replay_combo.setCurrentIndex(len(self.session_laps) - 1)
         self._load_replay_lap(len(self.session_laps) - 1)
 
+    def _import_replay_session_json(self):
+        """Import a full session JSON (multiple laps) into the replay tab."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, 'Import Session for Replay', '',
+            'Session JSON (gzipped) (*.json.gz);;All files (*)')
+        if not path:
+            return
+        try:
+            with gzip.open(path, 'rt', encoding='utf-8') as f:
+                payload = json.load(f)
+        except Exception as e:
+            QMessageBox.warning(self, 'Import Failed', f'Could not read file:\n{e}')
+            return
+
+        laps_in = payload.get('laps') if isinstance(payload, dict) else None
+        if not isinstance(laps_in, list) or not laps_in:
+            QMessageBox.warning(self, 'Import Failed',
+                                'Invalid session JSON: missing "laps" array.')
+            return
+
+        existing_nums = {l['lap_number'] for l in self.session_laps}
+        next_num = (max(existing_nums) + 1) if existing_nums else 1
+        added = 0
+        for lap_payload in laps_in:
+            if 'data' not in lap_payload or 'time_ms' not in lap_payload.get('data', {}):
+                continue
+            lap_num = lap_payload.get('lap_number', 0)
+            if lap_num in existing_nums:
+                lap_num = next_num
+                next_num += 1
+            existing_nums.add(lap_num)
+            self.session_laps.append({
+                'lap_number':   lap_num,
+                'total_time_s': float(lap_payload.get('total_time_s', 0)),
+                'sectors':      lap_payload.get('sectors', [None, None, None]),
+                'data':         {k: list(v) for k, v in lap_payload['data'].items()},
+                'imported':     True,
+            })
+            added += 1
+
+        if added == 0:
+            QMessageBox.warning(self, 'Import Failed',
+                                'No valid laps found in this session file.')
+            return
+
+        self._populate_replay_combo()
+        self._populate_comparison_combos()
+        self._refresh_session_tab()
+
+        first_added_idx = len(self.session_laps) - added
+        self._replay_combo.setCurrentIndex(first_added_idx)
+        self._load_replay_lap(first_added_idx)
+
+        QMessageBox.information(self, 'Import Session',
+                                f'Imported {added} lap(s) from:\n{path}')
+
     # ------------------------------------------------------------------
     # SESSION TAB
     # ------------------------------------------------------------------
@@ -2225,14 +2285,16 @@ class TelemetryApp(QMainWindow):
             samples    = len(lap['data'].get('speed', []))
 
             row = QFrame()
-            if is_best:
-                row.setStyleSheet(
-                    f'background: {C_PURPLE_BG}; border: 1px solid {C_PURPLE};'
-                    f' border-radius: 4px;')
+            row.setObjectName('LapRow')
+            if not lap_valid:
+                row_bg = 'rgba(180,30,30,0.14)'
+            elif is_best:
+                row_bg = C_PURPLE_BG
             else:
-                row.setStyleSheet(
-                    f'background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE};'
-                    f' border-radius: 4px;')
+                row_bg = SURFACE_RAISED
+            row.setStyleSheet(
+                f'#LapRow {{ background: {row_bg}; border: none;'
+                f' border-radius: 4px; }}')
             rl = QHBoxLayout(row)
             rl.setContentsMargins(10, 6, 10, 6)
             rl.setSpacing(0)
@@ -2240,7 +2302,7 @@ class TelemetryApp(QMainWindow):
             def _cell(text, color=TEXT_SECONDARY, bold=False, stretch=0, align=Qt.AlignmentFlag.AlignCenter):
                 l = QLabel(text)
                 l.setFont(mono(9, bold=bold))
-                l.setStyleSheet(f'color: {color};')
+                l.setStyleSheet(f'color: {color}; background: transparent; border: none;')
                 l.setAlignment(align)
                 l.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
                 rl.addWidget(l, stretch)
@@ -2267,22 +2329,36 @@ class TelemetryApp(QMainWindow):
             valid_lbl = QLabel('✓' if valid else '✗')
             valid_lbl.setFont(sans(9, bold=True))
             valid_lbl.setStyleSheet(
-                f'color: {C_THROTTLE if valid else C_BRAKE};')
+                f'color: {C_THROTTLE if valid else C_BRAKE};'
+                f' background: transparent; border: none;')
             valid_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            valid_lbl.setMinimumWidth(40)
+            valid_lbl.setMinimumWidth(56)
             rl.addWidget(valid_lbl)
 
-            export_btn = QPushButton('⬇')
+            export_btn = QToolButton()
+            export_btn.setText('⤓')
             export_btn.setFont(sans(9))
             export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            export_btn.setFixedSize(32, 24)
-            export_btn.setToolTip('Export this lap as JSON')
+            export_btn.setFixedSize(36, 24)
+            export_btn.setToolTip('Export this lap')
+            export_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
             export_btn.setStyleSheet(
-                f'QPushButton {{ background: transparent; color: {TEXT_MUTED}; border: 1px solid {BORDER_STRONG};'
-                f' border-radius: 3px; }}'
-                f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}')
+                f'QToolButton {{ background: transparent; color: {TEXT_MUTED};'
+                f' border: 1px solid {BORDER_STRONG}; border-radius: 3px; }}'
+                f'QToolButton::menu-indicator {{ image: none; width: 0px; }}'
+                f'QToolButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}')
             _lap_ref = lap  # capture for lambda
-            export_btn.clicked.connect(lambda _, lr=_lap_ref: self._export_lap_to_json(lr))
+            lap_menu = QMenu(export_btn)
+            lap_menu.setStyleSheet(
+                f'QMenu {{ background: {SURFACE_RAISED}; color: {TEXT_SECONDARY};'
+                f' border: 1px solid {BORDER_STRONG}; padding: 4px; }}'
+                f'QMenu::item {{ padding: 6px 16px; }}'
+                f'QMenu::item:selected {{ background: {SURFACE_HOVER}; color: {TEXT_PRIMARY}; }}')
+            lap_menu.addAction('Export as CSV',
+                               lambda lr=_lap_ref: self._export_lap_to_csv(lr))
+            lap_menu.addAction('Export as JSON',
+                               lambda lr=_lap_ref: self._export_lap_to_json(lr))
+            export_btn.setMenu(lap_menu)
             rl.addWidget(export_btn)
 
             self._sess_rows_layout.insertWidget(0, row)
@@ -2313,26 +2389,24 @@ class TelemetryApp(QMainWindow):
 
         ts = datetime.datetime.now().strftime('%Y-%m-%d-%H%M')
         base = f'{sim_name}-{ts}'
-        default_path = str(Path(save_dir) / f'{base}-summary.csv')
-        path, _ = QFileDialog.getSaveFileName(
-            self, 'Export Session CSV (summary + telemetry)', default_path,
-            'CSV files (*.csv);;All files (*)')
-        if not path:
+
+        # Each export gets its own folder so the summary + telemetry stay
+        # bundled per session. If the same minute folder already exists,
+        # append -2, -3, ... to avoid clobbering.
+        session_dir = Path(save_dir) / base
+        suffix_n = 2
+        while session_dir.exists():
+            session_dir = Path(save_dir) / f'{base}-{suffix_n}'
+            suffix_n += 1
+        try:
+            session_dir.mkdir(parents=True, exist_ok=False)
+        except OSError as e:
+            QMessageBox.warning(self, 'Export CSV',
+                                f'Could not create session folder:\n{session_dir}\n\n{e}')
             return
 
-        # The user picks one path; we derive the telemetry sibling alongside it.
-        # Honor whatever they renamed it to: '<stem>-summary.csv' →
-        # '<stem>-telemetry.csv'; otherwise just append '-telemetry'.
-        summary_path = Path(path)
-        if summary_path.stem.endswith('-summary'):
-            telemetry_path = summary_path.with_name(
-                summary_path.stem[:-len('-summary')] + '-telemetry' + summary_path.suffix)
-        elif summary_path.stem.endswith('_summary'):
-            telemetry_path = summary_path.with_name(
-                summary_path.stem[:-len('_summary')] + '-telemetry' + summary_path.suffix)
-        else:
-            telemetry_path = summary_path.with_name(
-                summary_path.stem + '-telemetry' + summary_path.suffix)
+        summary_path   = session_dir / f'{base}-summary.csv'
+        telemetry_path = session_dir / f'{base}-telemetry.csv'
 
         def _fmt_time(seconds: float) -> str:
             if seconds is None or seconds <= 0:
@@ -2425,10 +2499,118 @@ class TelemetryApp(QMainWindow):
 
         QMessageBox.information(
             self, 'Export CSV',
-            f'Saved {len(self.session_laps)} laps:\n'
+            f'Saved {len(self.session_laps)} laps to:\n{session_dir}\n\n'
             f'• {summary_path.name}\n'
-            f'• {telemetry_path.name}\n\n'
-            f'In: {summary_path.parent}')
+            f'• {telemetry_path.name}')
+
+    def _export_lap_to_csv(self, lap: dict):
+        """Export a single lap as a CSV (telemetry only, one row per sample)."""
+        save_dir = self._settings().value('paths/csv_dir', '', type=str) or self._default_csv_dir()
+        try:
+            Path(save_dir).mkdir(parents=True, exist_ok=True)
+        except OSError:
+            save_dir = str(Path.home())
+
+        import csv, datetime
+
+        if self.current_reader is self.acc_reader:    sim_name = 'acc'
+        elif self.current_reader is self.ir_reader:   sim_name = 'iracing'
+        elif self.current_reader is self.ac_reader:   sim_name = 'ac'
+        elif self.current_reader is self.elm_reader:  sim_name = 'obd'
+        else:                                         sim_name = 'sim'
+
+        ts = datetime.datetime.now().strftime('%Y-%m-%d-%H%M')
+        lap_no = lap.get('lap_number', 0)
+        out_path = Path(save_dir) / f'{sim_name}-{ts}-lap{lap_no}.csv'
+        n = 2
+        while out_path.exists():
+            out_path = Path(save_dir) / f'{sim_name}-{ts}-lap{lap_no}-{n}.csv'
+            n += 1
+
+        def _fmt_time(seconds):
+            if seconds is None or seconds <= 0:
+                return ''
+            m = int(seconds // 60)
+            s = seconds - m * 60
+            return f'{m}:{s:06.3f}'
+
+        def _round(v, places=1):
+            return round(v, places) if isinstance(v, (int, float)) else ''
+
+        d = lap['data']
+        n_samples = len(d.get('dist_m', []))
+        with open(out_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                'Distance (m)', 'Lap Time', 'Lap Time (s)',
+                'Speed (km/h)', 'Throttle (%)', 'Brake (%)',
+                'Steering (deg)', 'RPM', 'Gear', 'ABS (%)', 'TC (%)',
+            ])
+            for i in range(n_samples):
+                def _v(key, idx=i):
+                    arr = d.get(key, [])
+                    return arr[idx] if idx < len(arr) else ''
+                time_ms = _v('time_ms')
+                t_s = (time_ms / 1000.0) if isinstance(time_ms, (int, float)) else None
+                writer.writerow([
+                    _round(_v('dist_m'), 1),
+                    _fmt_time(t_s) if t_s is not None else '',
+                    round(t_s, 3) if t_s is not None else '',
+                    _round(_v('speed'), 1),
+                    _round(_v('throttle'), 1),
+                    _round(_v('brake'), 1),
+                    _round(_v('steer_deg'), 2),
+                    round(_v('rpm')) if isinstance(_v('rpm'), (int, float)) else '',
+                    int(_v('gear')) if isinstance(_v('gear'), (int, float)) else '',
+                    _round(_v('abs'), 1),
+                    _round(_v('tc'), 1),
+                ])
+
+        QMessageBox.information(self, 'Export CSV',
+                                f'Lap {lap_no} saved to:\n{out_path}')
+
+    def _export_session_to_json(self):
+        """Export every completed lap as a single gzipped JSON bundle."""
+        if not self.session_laps:
+            QMessageBox.information(self, 'Export JSON',
+                                    'No completed laps to export.')
+            return
+
+        save_dir = self._settings().value('paths/csv_dir', '', type=str) or self._default_csv_dir()
+        try:
+            Path(save_dir).mkdir(parents=True, exist_ok=True)
+        except OSError:
+            save_dir = str(Path.home())
+
+        import datetime
+
+        if self.current_reader is self.acc_reader:    sim_name = 'acc'
+        elif self.current_reader is self.ir_reader:   sim_name = 'iracing'
+        elif self.current_reader is self.ac_reader:   sim_name = 'ac'
+        elif self.current_reader is self.elm_reader:  sim_name = 'obd'
+        else:                                         sim_name = 'sim'
+
+        ts = datetime.datetime.now().strftime('%Y-%m-%d-%H%M')
+        default_name = f'{sim_name}-{ts}-session.json.gz'
+        path, _ = QFileDialog.getSaveFileName(
+            self, 'Export Session JSON', str(Path(save_dir) / default_name),
+            'Session JSON (gzipped) (*.json.gz);;All files (*)')
+        if not path:
+            return
+
+        payload = {
+            'sim':         sim_name,
+            'exported_at': datetime.datetime.now().isoformat(timespec='seconds'),
+            'lap_count':   len(self.session_laps),
+            'laps':        [self._build_lap_json_payload(lap)
+                            for lap in self.session_laps],
+        }
+        with gzip.open(path, 'wt', encoding='utf-8', compresslevel=6) as f:
+            json.dump(payload, f)
+
+        QMessageBox.information(
+            self, 'Export JSON',
+            f'Saved {len(self.session_laps)} laps to:\n{path}')
 
     def _update_fuel_save(self):
         _RESET = 'background: transparent; border: none;'
@@ -3278,12 +3460,6 @@ class TelemetryApp(QMainWindow):
         self._sampler.stop()
         self._sampler.join(timeout=1.0)
         super().closeEvent(event)
-
-    def export_last_lap_graphs(self):
-        self._export_graphs(self._get_last_lap_data(), 'Save Last Lap Graphs', 'last_lap.png')
-
-    def export_session_graphs(self):
-        self._export_graphs(self._get_session_data(), 'Save Full Session Graphs', 'session.png')
 
     # ------------------------------------------------------------------
     # DISPLAY RESET

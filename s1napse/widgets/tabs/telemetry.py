@@ -70,7 +70,7 @@ class TelemetryTab(QWidget):
         outer.setContentsMargins(12, 12, 12, 12)
         outer.setSpacing(8)
 
-        # ── Top action row: math-channel toggle + export buttons ─────────
+        # ── Top action row: math-channel toggle ───────────────────────────
         controls_card = Card(dense=True)
         controls_card.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
@@ -79,7 +79,6 @@ class TelemetryTab(QWidget):
         btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.setSpacing(8)
 
-        # Math channel toggle button (kept as QPushButton — controls math panel)
         _math_btn_style = (
             f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
             f' border-radius: 4px; padding: 5px 12px; font-size: 10px; letter-spacing: 0.5px; }}'
@@ -97,46 +96,9 @@ class TelemetryTab(QWidget):
 
         btn_row.addStretch()
 
-        _json_btn_style = (
-            f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 5px 12px; font-size: 10px; letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
-        )
-        self.export_last_lap_button = QPushButton('EXPORT LAP')
-        self.export_last_lap_button.clicked.connect(app.export_last_lap_graphs)
-        self.export_session_button = QPushButton('EXPORT SESSION')
-        self.export_session_button.clicked.connect(app.export_session_graphs)
-
-        export_json_btn = QPushButton('⬇  EXPORT JSON')
-        export_json_btn.setFont(sans(8, bold=True))
-        export_json_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        export_json_btn.setStyleSheet(_json_btn_style)
-        export_json_btn.setToolTip('Export last completed lap as JSON (importable in Replay tab)')
-        export_json_btn.clicked.connect(app._export_graphs_lap_json)
-
-        _full_btn_style = (
-            f'QPushButton {{ background: {BG3}; color: {C_THROTTLE}; border: 1px solid {C_THROTTLE}44;'
-            f' border-radius: 4px; padding: 5px 12px; font-size: 10px; letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ color: {WHITE}; border-color: {C_THROTTLE}; background: {C_THROTTLE}22; }}'
-        )
-        export_full_btn = QPushButton('⬇  EXPORT FULL JSON')
-        export_full_btn.setFont(sans(8, bold=True))
-        export_full_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        export_full_btn.setStyleSheet(_full_btn_style)
-        export_full_btn.setToolTip(
-            'Export last lap with ALL data — telemetry, tyres, fuel, track map, session info')
-        export_full_btn.clicked.connect(app._export_full_lap_json)
-
-        btn_row.addWidget(self.export_last_lap_button)
-        btn_row.addWidget(self.export_session_button)
-        btn_row.addWidget(export_json_btn)
-        btn_row.addWidget(export_full_btn)
         controls_card.body().addLayout(btn_row)
         outer.addWidget(controls_card, 0)  # no stretch — natural height
 
-        # Mirror export buttons on app so legacy export code keeps working
-        app.export_last_lap_button = self.export_last_lap_button
-        app.export_session_button = self.export_session_button
         # Mirror math toggle button on app so _toggle_math_panel state checks work
         app._math_toggle_btn = self._math_toggle_btn
 

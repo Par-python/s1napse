@@ -9,6 +9,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QFrame, QPushButton, QScrollArea, QSizePolicy,
+    QToolButton, QMenu,
 )
 
 from ...constants import C_PURPLE, C_PURPLE_BG, C_THROTTLE, C_BRAKE, mono, sans
@@ -77,14 +78,44 @@ class SessionTab(QWidget):
                 stats_row.addSpacing(28)
         stats_row.addStretch()
 
-        # Export CSV button
-        export_btn = QPushButton('⬇  EXPORT CSV')
+        _action_btn_style = (
+            f'QToolButton {{ background: {BG3}; color: {TXT};'
+            f' border: 1px solid {BORDER2}; border-radius: 4px;'
+            f' padding: 8px 18px; letter-spacing: 1px; }}'
+            f'QToolButton::menu-indicator {{ image: none; width: 0px; }}'
+            f'QToolButton:hover {{ border-color: {C_PURPLE}; }}'
+        )
+        _menu_style = (
+            f'QMenu {{ background: {BG2}; color: {TXT};'
+            f' border: 1px solid {BORDER2}; padding: 4px; }}'
+            f'QMenu::item {{ padding: 6px 16px; }}'
+            f'QMenu::item:selected {{ background: {BG3}; color: {WHITE}; }}'
+        )
+
+        # Import session button — load every lap from a session JSON
+        import_btn = QToolButton()
+        import_btn.setText('⤒  IMPORT')
+        import_btn.setFont(sans(8, bold=True))
+        import_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        import_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        import_btn.setStyleSheet(_action_btn_style)
+        import_btn.setToolTip('Load every lap from a previously exported session JSON')
+        import_btn.clicked.connect(self._app._import_replay_session_json)
+        stats_row.addWidget(import_btn)
+        stats_row.addSpacing(8)
+
+        # Export menu (CSV or JSON for the whole session)
+        export_btn = QToolButton()
+        export_btn.setText('⤓  EXPORT')
         export_btn.setFont(sans(8, bold=True))
         export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        export_btn.setStyleSheet(
-            f'background: {BG3}; color: {TXT}; border: 1px solid {BORDER2};'
-            f' border-radius: 4px; padding: 8px 18px; letter-spacing: 1px;')
-        export_btn.clicked.connect(self._app._export_csv)
+        export_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        export_btn.setStyleSheet(_action_btn_style)
+        menu = QMenu(export_btn)
+        menu.setStyleSheet(_menu_style)
+        menu.addAction('Export as CSV', self._app._export_csv)
+        menu.addAction('Export as JSON', self._app._export_session_to_json)
+        export_btn.setMenu(menu)
         stats_row.addWidget(export_btn)
 
         outer.addWidget(self._sess_stats_card)
@@ -95,22 +126,22 @@ class SessionTab(QWidget):
         hdr_layout = QHBoxLayout(hdr_frame)
         hdr_layout.setContentsMargins(10, 4, 10, 4)
         hdr_layout.setSpacing(0)
-        for txt, stretch, align in [
-            ('#',       0, Qt.AlignmentFlag.AlignCenter),
-            ('LAP TIME', 2, Qt.AlignmentFlag.AlignCenter),
-            ('S1',       1, Qt.AlignmentFlag.AlignCenter),
-            ('S2',       1, Qt.AlignmentFlag.AlignCenter),
-            ('S3',       1, Qt.AlignmentFlag.AlignCenter),
-            ('SAMPLES',  1, Qt.AlignmentFlag.AlignCenter),
-            ('VALID',    0, Qt.AlignmentFlag.AlignCenter),
-            ('',         0, Qt.AlignmentFlag.AlignCenter),
+        for txt, stretch, align, min_w in [
+            ('#',        0, Qt.AlignmentFlag.AlignCenter, 32),
+            ('LAP TIME', 2, Qt.AlignmentFlag.AlignCenter, 80),
+            ('S1',       1, Qt.AlignmentFlag.AlignCenter, 50),
+            ('S2',       1, Qt.AlignmentFlag.AlignCenter, 50),
+            ('S3',       1, Qt.AlignmentFlag.AlignCenter, 50),
+            ('SAMPLES',  1, Qt.AlignmentFlag.AlignCenter, 70),
+            ('VALID',    0, Qt.AlignmentFlag.AlignCenter, 56),
+            ('',         0, Qt.AlignmentFlag.AlignCenter, 36),
         ]:
             l = QLabel(txt)
             l.setFont(sans(7, bold=True))
             l.setStyleSheet(f'color: {TXT2}; letter-spacing: 0.8px;')
             l.setAlignment(align)
-            l.setMinimumWidth(40)
-            l.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            l.setMinimumWidth(min_w)
+            l.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
             hdr_layout.addWidget(l, stretch)
         outer.addWidget(hdr_frame)
         outer.addWidget(h_line())

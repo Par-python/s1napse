@@ -85,7 +85,7 @@ class LapComparisonTab(QWidget):
 
         self._app._cmp_time_b = QLabel('—')
         self._app._cmp_time_b.setFont(mono(9))
-        self._app._cmp_time_b.setStyleSheet(f'color: {C_STEER};')
+        self._app._cmp_time_b.setStyleSheet(f'color: #ffb020;')
         sel_row.addWidget(self._app._cmp_time_b)
 
         sel_row.addStretch()
@@ -116,19 +116,22 @@ class LapComparisonTab(QWidget):
             f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
         )
 
-        export_lap_btn = QPushButton('⬇  EXPORT LAP')
-        export_lap_btn.setFont(sans(8, bold=True))
-        export_lap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        export_lap_btn.setStyleSheet(_btn_style)
-        export_lap_btn.clicked.connect(self._app._export_lap_json)
-        sel_row.addWidget(export_lap_btn)
-
-        import_lap_btn = QPushButton('⬆  IMPORT LAP')
+        import_lap_btn = QPushButton('⤒  IMPORT LAP')
         import_lap_btn.setFont(sans(8, bold=True))
         import_lap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         import_lap_btn.setStyleSheet(_btn_style)
+        import_lap_btn.setToolTip('Import a single-lap JSON file')
         import_lap_btn.clicked.connect(self._app._import_lap_json)
         sel_row.addWidget(import_lap_btn)
+
+        import_session_btn = QPushButton('⤒  IMPORT SESSION')
+        import_session_btn.setFont(sans(8, bold=True))
+        import_session_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        import_session_btn.setStyleSheet(_btn_style)
+        import_session_btn.setToolTip(
+            'Load every lap from a session JSON; pick any two for Lap A / Lap B')
+        import_session_btn.clicked.connect(self._app._import_replay_session_json)
+        sel_row.addWidget(import_session_btn)
 
         sel_card.body().addLayout(sel_row)
         outer.addWidget(sel_card)
@@ -137,7 +140,7 @@ class LapComparisonTab(QWidget):
         legend_row = QHBoxLayout()
         legend_row.setSpacing(16)
         for label, color, style in [('Lap A', C_SPEED, '─────'),
-                                     ('Lap B', C_STEER, '- - -')]:
+                                     ('Lap B', '#ffb020', '- - -')]:
             dot = QLabel(f'{style}  {label}')
             dot.setFont(mono(8))
             dot.setStyleSheet(f'color: {color};')

@@ -87,6 +87,13 @@ class ReplayTab(QWidget):
         import_btn.clicked.connect(self._app._import_replay_lap_json)
         ctrl_row.addWidget(import_btn)
 
+        import_session_btn = QPushButton('IMPORT SESSION')
+        import_session_btn.setFont(sans(8, bold=True))
+        import_session_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        import_session_btn.setStyleSheet(_btn_style)
+        import_session_btn.clicked.connect(self._app._import_replay_session_json)
+        ctrl_row.addWidget(import_session_btn)
+
         load_btn = QPushButton('LOAD')
         load_btn.setFont(sans(8, bold=True))
         load_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -332,12 +339,16 @@ class ReplayTab(QWidget):
         self._rpl_s1_lbl = QLabel('S1: —')
         self._rpl_s2_lbl = QLabel('S2: —')
         self._rpl_s3_lbl = QLabel('S3: —')
-        for i, lbl in enumerate((self._rpl_s1_lbl, self._rpl_s2_lbl, self._rpl_s3_lbl)):
-            colors = [C_DELTA, C_STEER, C_RPM]
+        sector_labels = (self._rpl_s1_lbl, self._rpl_s2_lbl, self._rpl_s3_lbl)
+        colors = [C_DELTA, C_STEER, C_RPM]
+        for i, lbl in enumerate(sector_labels):
             lbl.setFont(mono(8, bold=True))
             lbl.setStyleSheet(f'color: {colors[i]};')
             map_hdr_row.addWidget(lbl)
-            map_hdr_row.addSpacing(8)
+            # Spacing only between labels, not after the last one — the
+            # trailing 8px was pushing S3 off the right edge on narrow panels.
+            if i < len(sector_labels) - 1:
+                map_hdr_row.addSpacing(8)
 
         rl.addLayout(map_hdr_row)
 

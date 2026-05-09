@@ -42,19 +42,24 @@ class _ChannelRow(QFrame):
         super().__init__(parent)
         self.channel_name = name
         self._built_in = built_in
+        # Scope the styled box to this row so child widgets don't inherit
+        # the BG2 fill (which painted as a black rectangle behind every label).
+        self.setObjectName('ChannelRow')
         self.setStyleSheet(
-            f'_ChannelRow {{ background: {BG2}; border: 1px solid {BORDER}; '
-            f'border-radius: 4px; }}'
+            f'#ChannelRow {{ background: {BG2}; border: 1px solid {BORDER};'
+            f' border-radius: 6px; }}'
+            f'#ChannelRow QLabel {{ background: transparent; border: none; }}'
+            f'#ChannelRow QCheckBox {{ background: transparent; border: none; }}'
         )
-        self.setFixedHeight(64)
+        self.setFixedHeight(68)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(2)
+        layout.setContentsMargins(10, 6, 10, 6)
+        layout.setSpacing(3)
 
-        # Top row: checkbox + color + name + value
+        # Top row: checkbox + color + name + value + unit
         top = QHBoxLayout()
-        top.setSpacing(6)
+        top.setSpacing(8)
 
         self._vis_cb = QCheckBox()
         self._vis_cb.setChecked(visible)
@@ -63,45 +68,47 @@ class _ChannelRow(QFrame):
         top.addWidget(self._vis_cb)
 
         swatch = QLabel('\u25cf')
-        swatch.setFont(sans(12))
+        swatch.setFont(sans(13))
         swatch.setStyleSheet(f'color: {color};')
-        swatch.setFixedWidth(16)
+        swatch.setFixedWidth(14)
         top.addWidget(swatch)
 
         name_lbl = QLabel(name)
-        name_lbl.setFont(mono(10, bold=True))
-        name_lbl.setStyleSheet(f'color: {WHITE};')
+        name_lbl.setFont(sans(10, bold=True))
+        name_lbl.setStyleSheet(f'color: {WHITE}; letter-spacing: 0.4px;')
         top.addWidget(name_lbl)
 
         top.addStretch()
 
         self._val_label = QLabel(f'{value:.3f}')
-        self._val_label.setFont(mono(10))
-        self._val_label.setStyleSheet(f'color: {TXT};')
-        self._val_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self._val_label.setFont(mono(11, bold=True))
+        self._val_label.setStyleSheet(f'color: {WHITE};')
+        self._val_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         top.addWidget(self._val_label)
 
         unit_lbl = QLabel(unit)
-        unit_lbl.setFont(sans(9))
+        unit_lbl.setFont(sans(8))
         unit_lbl.setStyleSheet(f'color: {TXT2};')
-        unit_lbl.setFixedWidth(36)
+        unit_lbl.setFixedWidth(32)
+        unit_lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         top.addWidget(unit_lbl)
 
         layout.addLayout(top)
 
         # Bottom row: formula + action buttons
         bot = QHBoxLayout()
-        bot.setSpacing(4)
+        bot.setSpacing(6)
 
         formula_lbl = QLabel(formula)
-        formula_lbl.setFont(mono(8))
+        formula_lbl.setFont(mono(9))
         formula_lbl.setStyleSheet(f'color: {TXT2};')
         formula_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
         bot.addWidget(formula_lbl, stretch=1)
 
         btn_style = (
-            f'QPushButton {{ background: transparent; color: {TXT2}; '
-            f'border: none; font-size: 9px; padding: 2px 6px; }}'
+            f'QPushButton {{ background: transparent; color: {TXT2};'
+            f' border: none; font-size: 10px; padding: 2px 6px;'
+            f' letter-spacing: 0.3px; }}'
             f'QPushButton:hover {{ color: {WHITE}; }}'
         )
 

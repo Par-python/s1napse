@@ -228,20 +228,31 @@ class SectorScrubWidget(QWidget):
             return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        # Match the slider's groove margin (see stylesheet: margin: 0 7px) so
+        # the marker tick lands directly above the corresponding handle slot.
+        groove_margin = 7
         w = self.width()
+        track_left = groove_margin
+        track_right = w - groove_margin
+        track_w = max(1, track_right - track_left)
         font = QFont('Consolas', 7)
         font.setBold(True)
         painter.setFont(font)
+        text_w = 32
         for i, (label, ms) in enumerate(self._sectors):
             if not ms:
                 continue
-            x = int(ms / self._total_ms * w)
+            x = track_left + int(ms / self._total_ms * track_w)
             color = self._SECTOR_COLORS[i % len(self._SECTOR_COLORS)]
             qc = QColor(color)
             painter.setPen(QPen(qc, 1))
             painter.drawLine(x, self._MARK_H - 5, x, self._MARK_H + 3)
             painter.setPen(qc)
-            text_rect = QRectF(x - 16, 2, 32, self._MARK_H - 7)
+            # Clamp the label box inside the widget so end-of-lap markers
+            # (S3 sitting at total_ms) aren't half-clipped on the right edge.
+            tx = x - text_w // 2
+            tx = max(0, min(tx, w - text_w))
+            text_rect = QRectF(tx, 2, text_w, self._MARK_H - 7)
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, label)
         painter.end()
 
@@ -281,12 +292,19 @@ class LapHistoryPanel(QWidget):
         col_hdr_layout = QHBoxLayout(col_hdr)
         col_hdr_layout.setContentsMargins(8, 2, 8, 2)
         col_hdr_layout.setSpacing(0)
-        for txt, stretch in [('LAP', 0), ('TIME', 2), ('S1', 1), ('S2', 1), ('S3', 1)]:
+        for txt, stretch, min_w in [
+            ('#',        0, 32),
+            ('LAP TIME', 2, 80),
+            ('S1',       1, 50),
+            ('S2',       1, 50),
+            ('S3',       1, 50),
+        ]:
             l = QLabel(txt)
-            l.setFont(sans(7))
+            l.setFont(sans(7, bold=True))
             l.setStyleSheet(f'color: {TXT2}; letter-spacing: 0.8px;')
             l.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            l.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            l.setMinimumWidth(min_w)
+            l.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
             col_hdr_layout.addWidget(l, stretch)
         outer.addWidget(col_hdr)
 
@@ -351,18 +369,16 @@ class LapHistoryPanel(QWidget):
         sectors    = lap.get('sectors', [None, None, None]) or [None, None, None]
 
         row = QFrame()
+        row.setObjectName('LapRow')
         if not lap_valid:
-            row.setStyleSheet(
-                f'background: rgba(180,30,30,0.12); border: 1px solid {C_BRAKE};'
-                f' border-radius: 3px;')
+            row_bg = 'rgba(180,30,30,0.14)'
         elif is_best:
-            row.setStyleSheet(
-                f'background: {C_PURPLE_BG}; border: 1px solid {C_PURPLE};'
-                f' border-radius: 3px;')
+            row_bg = C_PURPLE_BG
         else:
-            row.setStyleSheet(
-                f'background: {BG3}; border: 1px solid {BORDER};'
-                f' border-radius: 3px;')
+            row_bg = BG3
+        row.setStyleSheet(
+            f'#LapRow {{ background: {row_bg}; border: none;'
+            f' border-radius: 4px; }}')
 
         layout = QHBoxLayout(row)
         layout.setContentsMargins(8, 5, 8, 5)

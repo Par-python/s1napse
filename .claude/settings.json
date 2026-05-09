@@ -110,7 +110,18 @@
       "Bash(python -c \"from s1napse import app; print\\('OK'\\)\")",
       "Bash(python -c \"from s1napse.widgets.tabs.comparison import LapComparisonTab; print\\('OK'\\)\")",
       "Bash(python -c \"from s1napse.readers import IRacingReader; from s1napse.widgets.tabs.tyres import TyresTab; print\\('OK'\\)\")",
-      "Bash(python -c \"import ast; ast.parse\\(open\\('s1napse/app.py'\\).read\\(\\)\\); from s1napse import app; print\\('OK'\\)\")"
+      "Bash(python -c \"import ast; ast.parse\\(open\\('s1napse/app.py'\\).read\\(\\)\\); from s1napse import app; print\\('OK'\\)\")",
+      "Bash(python -c \"from s1napse import app; from s1napse.widgets.tabs.session import SessionTab; from s1napse.widgets.tabs.replay import ReplayTab; print\\('OK'\\)\")",
+      "Bash(python -c \"from s1napse import app; from s1napse.widgets.tabs.session import SessionTab; print\\('OK'\\)\")",
+      "Bash(python -c \"from s1napse import app; from s1napse.widgets.tabs.replay import ReplayTab; print\\('OK'\\)\")",
+      "Bash(python -c \"from s1napse import app; from s1napse.widgets.tabs.telemetry import TelemetryTab; print\\('OK'\\)\")",
+      "Bash(python -c \"from s1napse.widgets.math_channel_panel import MathChannelPanel; from s1napse.widgets.tabs.comparison import LapComparisonTab; print\\('OK'\\)\")",
+      "Bash(python -c \"from s1napse import app; from s1napse.widgets.tabs.dashboard import DashboardTab; from s1napse.widgets.tabs.race import RaceTab; print\\('OK'\\)\")",
+      "Bash(python -c \"from s1napse import app; from s1napse.widgets.panels import LapHistoryPanel; print\\('OK'\\)\")",
+      "Bash(python -c \"from s1napse.widgets.panels import LapHistoryPanel; print\\('OK'\\)\")",
+      "Bash(python -c \"from s1napse.widgets.primitives import Card, Stat, Sparkline, Pill, GapBar; from s1napse import app; print\\('OK'\\)\")",
+      "Bash(python -c \"from s1napse.widgets.panels import SectorScrubWidget; print\\('OK'\\)\")",
+      "Bash(python -c \"from s1napse.widgets.tabs.session import SessionTab; print\\('OK'\\)\")"
     ]
   }
 }
