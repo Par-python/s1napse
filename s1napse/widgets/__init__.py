@@ -16,6 +16,7 @@ from .math_channel_panel import MathChannelPanel
 from .primitives import Card, Pill, Stat, Sparkline, GapBar
 from .title_bar import TitleBar
 from .tab_bar import LiveTabBar
+from .update_banner import UpdateBanner
 
 __all__ = [
     'RevBar', 'PedalBar', 'ValueDisplay', 'SteeringWidget', 'SteeringBar',
@@ -31,4 +32,5 @@ __all__ = [
     'Card', 'Pill', 'Stat', 'Sparkline', 'GapBar',
     'TitleBar',
     'LiveTabBar',
+    'UpdateBanner',
 ]
