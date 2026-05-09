@@ -63,9 +63,18 @@ class Card(QFrame):
         self._variant = variant
         self._dense = dense
         bg, border = _CARD_VARIANTS[variant]
+        # Scope the surface paint to the Card itself so the border/background
+        # don't cascade to every child label and button inside. Dense cards
+        # (live tabs / inner panels) drop the outline so the UI doesn't read
+        # like a grid of boxes; large containers keep the 1px frame.
+        self.setObjectName('Card')
+        if dense and variant == 'normal':
+            border_rule = 'border:none;'
+        else:
+            border_rule = f'border:1px solid {border};'
         self.setStyleSheet(
-            f'background:{bg}; border:1px solid {border};'
-            f'border-radius:{theme.RADIUS["lg"]}px;'
+            f'#Card {{ background:{bg}; {border_rule}'
+            f' border-radius:{theme.RADIUS["lg"]}px; }}'
         )
 
         outer = QVBoxLayout(self)

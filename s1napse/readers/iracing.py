@@ -108,6 +108,7 @@ class IRacingReader(TelemetryReader):
                 'world_x':      world_x,
                 'world_z':      world_z,
                 'tyre_temp':     self._ir_tyre_temps(),
+                'tyre_imo':      self._ir_tyre_imo(),
                 'tyre_pressure': self._ir_tyre_pressures(),
                 'brake_temp':    [0.0, 0.0, 0.0, 0.0],
                 'tyre_compound': '',
@@ -135,6 +136,23 @@ class IRacingReader(TelemetryReader):
             return [fl, fr, rl, rr]
         except Exception:
             return [0.0, 0.0, 0.0, 0.0]
+
+    def _ir_tyre_imo(self):
+        """Return {pos: [inner, middle, outer]} tyre temps in C from iRacing
+        L/M/R sensors. Mapping: for left-side tyres (FL/RL) the L sensor faces
+        outward and R faces inward; for right-side tyres (FR/RR) it's flipped.
+        """
+        try:
+            def _g(k):
+                return float(self.ir.get(k) or 0.0)
+            return {
+                'FL': [_g('LFtempR'), _g('LFtempM'), _g('LFtempL')],
+                'FR': [_g('RFtempL'), _g('RFtempM'), _g('RFtempR')],
+                'RL': [_g('LRtempR'), _g('LRtempM'), _g('LRtempL')],
+                'RR': [_g('RRtempL'), _g('RRtempM'), _g('RRtempR')],
+            }
+        except Exception:
+            return {}
 
     def _ir_tyre_pressures(self):
         """Return [FL, FR, RL, RR] tyre pressures in PSI, or zeros."""

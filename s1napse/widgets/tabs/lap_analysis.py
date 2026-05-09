@@ -134,23 +134,6 @@ class LapAnalysisTab(QWidget):
         self.time_delta_graph.setMinimumHeight(130)
         delta_card.body().addWidget(self.time_delta_graph)
 
-        # Sector marker strip inside the delta card
-        sector_strip = QHBoxLayout()
-        sector_strip.setSpacing(2)
-        from PyQt6.QtWidgets import QLabel
-        sector_colors = [C_SPEED, C_THROTTLE, C_RPM, C_STEER, C_BRAKE]
-        for s, c in zip(['S1', 'S2', 'S3', 'S4', 'S5'], sector_colors):
-            lbl = QLabel(s)
-            lbl.setFont(mono(8, bold=True))
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet(
-                f'background: {BG3}; color: {c}; border: 1px solid {BORDER}; '
-                f'padding: 2px 8px; border-radius: 2px;'
-            )
-            sector_strip.addWidget(lbl)
-        sector_strip.addStretch()
-        delta_card.body().addLayout(sector_strip)
-
         outer.addWidget(delta_card, stretch=1)
 
         # ── Mirror attributes onto app for legacy code paths ─────────────

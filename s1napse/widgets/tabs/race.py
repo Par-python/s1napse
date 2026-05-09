@@ -87,16 +87,11 @@ class RaceTab(QWidget):
         row.setContentsMargins(18, 12, 18, 12)
         row.setSpacing(20)
 
-        # Big position
+        # Big position. The total field count isn't reliably available across
+        # sims, so we only show the driver's current position.
         self._pos_num = _label('—', font=theme.mono_font(36, bold=True),
                                color=theme.TEXT_PRIMARY)
-        self._pos_of = _label('/ —', font=theme.mono_font(13),
-                              color=theme.TEXT_MUTED)
-        pos_box = QHBoxLayout()
-        pos_box.setSpacing(8)
-        pos_box.addWidget(self._pos_num)
-        pos_box.addWidget(self._pos_of, 0, Qt.AlignmentFlag.AlignBottom)
-        row.addLayout(pos_box, 0)
+        row.addWidget(self._pos_num, 0)
 
         div = QFrame()
         div.setFixedWidth(1)
@@ -125,7 +120,7 @@ class RaceTab(QWidget):
         col.setSpacing(12)
 
         # Last lap card
-        last_card = Card(label='Last lap', dense=True)
+        last_card = Card(label='Laps trend', dense=True)
         self._last_lap_value = _label(
             '—', font=theme.mono_font(theme.FONT_NUMERIC_LG, bold=True),
             color=theme.TEXT_PRIMARY,
@@ -402,11 +397,8 @@ class RaceTab(QWidget):
 
         # ── Position ─────────────────────────────────────────────────────
         pos = d.get('position', 0) or 0
-        total = d.get('num_cars', 0) or 0
         if pos:
             self._pos_num.setText(f'P{int(pos)}')
-        if total:
-            self._pos_of.setText(f'/ {int(total)}')
 
         # ── Strategy state (engine) ──────────────────────────────────────
         engine = getattr(app, '_strategy_engine', None)
