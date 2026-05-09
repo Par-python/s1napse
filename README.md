@@ -43,11 +43,12 @@ When S1napse launches you'll see a welcome screen with two options:
 3. S1napse will **auto-detect** whichever sim is running
 4. The status bar at the top will show **● CONNECTED** when it picks up data
 
-| Sim               | What to do                                                                                                                                                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **ACC**           | Just launch the game — S1napse connects automatically                                                                                                                                 |
-| **Assetto Corsa** | Enable UDP telemetry in AC's settings: `Options → General → Enable Custom Shaders Patch` is not required — just go to `Options → General` and enable **UDP telemetry** on port `9996` |
-| **iRacing**       | Launch iRacing, go to the track — S1napse connects automatically                                                                                                                      |
+| Sim                       | What to do                                                                                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **ACC**                   | Just launch the game — S1napse connects automatically                                                                                                                                 |
+| **Assetto Corsa**         | Enable UDP telemetry in AC's settings: `Options → General → Enable Custom Shaders Patch` is not required — just go to `Options → General` and enable **UDP telemetry** on port `9996` |
+| **iRacing**               | Launch iRacing, go to the track — S1napse connects automatically                                                                                                                      |
+| **Le Mans Ultimate (LMU)**| One-time plugin install required (rF2 Shared Memory Plugin). See [docs/lmu-setup.md](docs/lmu-setup.md). After that, just launch the game — S1napse connects automatically.            |
 
 #### Real Racing (ELM327 OBD-II)
 
@@ -70,6 +71,7 @@ When S1napse launches you'll see a welcome screen with two options:
 | Assetto Corsa Competizione (ACC) | ✅      |
 | Assetto Corsa (AC)               | ✅      |
 | iRacing                          | ✅      |
+| Le Mans Ultimate (LMU)           | ✅      |
 
 ### Real Racing
 
@@ -204,7 +206,8 @@ acc-telemetry/
 │   ├── app.py                     # Main window + render orchestration
 │   ├── theme.py                   # Design tokens + QSS builder
 │   ├── constants.py               # Channel colors + track constants
-│   ├── readers/                   # ACC, AC-UDP, iRacing, ELM327 readers
+│   ├── readers/                   # ACC, AC-UDP, iRacing, LMU, ELM327 readers
+│   ├── vendor/                    # Third-party libs vendored into the repo (MIT)
 │   ├── coaching/                  # LapCoach, MathEngine, StrategyEngine
 │   ├── widgets/
 │   │   ├── primitives.py          # Card, Pill, Stat, Sparkline, GapBar
@@ -248,7 +251,21 @@ acc-telemetry/
 
 ## Notes
 
-- ACC and iRacing use shared memory — S1napse must be running on the **same Windows PC** as the sim
+- ACC, iRacing, and Le Mans Ultimate use shared memory — S1napse must be running on the **same Windows PC** as the sim
 - AC UDP works over a local network too (change the HOST field in the top bar)
 - ELM327 OBD-II works on Windows and Mac via WiFi or Bluetooth — see [REAL_RACING_GUIDE.md](REAL_RACING_GUIDE.md)
 - OBD-II polling is slower than sim telemetry (~2-4 Hz vs 20 Hz) — this is a hardware limitation, not a bug
+
+---
+
+## License
+
+S1napse is licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0). See [LICENSE](LICENSE) for the full text.
+
+In short: you are free to use, modify, and redistribute this software, but any modified version — including network-deployed versions — must be made available under the same license.
+
+### Third-party components
+
+This repository vendors the following third-party code, retained under its original license:
+
+- **`s1napse/vendor/pyRfactor2SharedMemory/`** — Python bindings for the rFactor 2 Shared Memory Plugin. Copyright © 2021 Tony Whitley. Licensed under the MIT License (see `s1napse/vendor/pyRfactor2SharedMemory/License.txt`). Used by `s1napse/readers/lmu.py` to read Le Mans Ultimate telemetry. Source: <https://github.com/TonyWhitley/pyRfactor2SharedMemory>.
