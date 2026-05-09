@@ -1888,6 +1888,8 @@ class TelemetryApp(QMainWindow):
                 'total_time_s': float(lap_payload.get('total_time_s', 0)),
                 'sectors':      lap_payload.get('sectors', [None, None, None]),
                 'lap_valid':    bool(lap_payload.get('lap_valid', True)),
+                'track_key':    lap_payload.get('track_key', ''),
+                'track_map_pts': list(lap_payload.get('track_map_pts', [])),
                 'data':         {k: list(v) for k, v in lap_payload['data'].items()},
             }
         # v2.0 export shape: {lap:{...}, telemetry:{...}}
@@ -1914,6 +1916,8 @@ class TelemetryApp(QMainWindow):
         if 'road_temp_c' in flat and 'road_temp' not in flat:
             flat['road_temp'] = flat['road_temp_c']
 
+        session_block = lap_payload.get('session') or {}
+        track_map_block = lap_payload.get('track_map') or {}
         return {
             'lap_number':   lap_block.get('lap_number', lap_payload.get('lap_number', 0)),
             'total_time_s': float(lap_block.get('total_time_s',
@@ -1922,6 +1926,8 @@ class TelemetryApp(QMainWindow):
                                           lap_payload.get('sectors', [None, None, None])),
             'lap_valid':    bool(lap_block.get('lap_valid',
                                                lap_payload.get('lap_valid', True))),
+            'track_key':    session_block.get('track_key', ''),
+            'track_map_pts': list(track_map_block.get('pts', [])),
             'data':         flat,
         }
 
@@ -2045,18 +2051,28 @@ class TelemetryApp(QMainWindow):
         self._rpl_s2_lbl.setText(f'S2: {sec_fmts[1]}')
         self._rpl_s3_lbl.setText(f'S3: {sec_fmts[2]}')
 
-        # Load track map — prefer saved track, fall back to live-built shape
-        track_key = self._active_track_key or ''
+        # Load track map — prefer the lap's own track (for imported laps),
+        # then current session's saved track, then fall back to live-built shape.
+        lap_track_key = (lap.get('track_key') or '') if isinstance(lap, dict) else ''
+        lap_track_pts = lap.get('track_map_pts') if isinstance(lap, dict) else None
+        track_key = lap_track_key or self._active_track_key or ''
         if track_key and track_key in TRACKS:
             self._rpl_map.set_track(track_key)
         else:
             self._rpl_map.reset_track()
 
-        # If set_track found no saved pts, borrow the shape the live map built this session
-        if not self._rpl_map._norm and self.track_map._norm:
-            self._rpl_map._norm = list(self.track_map._norm)
-            self._rpl_map._pts = []
-            self._rpl_map._last_sz = (0, 0)
+        # If no saved pts, prefer the imported lap's embedded shape, then the
+        # shape the live map built this session.
+        if not self._rpl_map._norm:
+            if lap_track_pts:
+                self._rpl_map._norm = [tuple(p) for p in lap_track_pts]
+                self._rpl_map._pts = []
+                self._rpl_map._last_sz = (0, 0)
+                self._rpl_map._shape_locked = True
+            elif self.track_map._norm:
+                self._rpl_map._norm = list(self.track_map._norm)
+                self._rpl_map._pts = []
+                self._rpl_map._last_sz = (0, 0)
 
         self._rpl_map.reset()
 
@@ -2064,7 +2080,11 @@ class TelemetryApp(QMainWindow):
         dists = data.get('dist_m', [])
         throttles = data.get('throttle', [])
         brakes = data.get('brake', [])
-        track_len = TRACKS.get(track_key, {}).get('length_m', MONZA_LENGTH_M)
+        track_len = TRACKS.get(track_key, {}).get('length_m', 0)
+        if track_len <= 0 and dists:
+            track_len = float(dists[-1]) or MONZA_LENGTH_M
+        if track_len <= 0:
+            track_len = MONZA_LENGTH_M
         for d, th, br in zip(dists, throttles, brakes):
             prog = d / track_len if track_len > 0 else 0
             self._rpl_map.update_telemetry(prog, th, br)
