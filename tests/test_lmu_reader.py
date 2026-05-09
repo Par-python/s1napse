@@ -197,3 +197,97 @@ def test_tyre_wear_scales_to_percent():
     reader = _build_reader_with_fakes(telem, _make_fake_scoring())
     data = reader.read()
     assert data['tyre_wear'] == [25.0, 25.0, 25.0, 25.0]
+
+
+def test_lap_fields():
+    scoring = _make_fake_scoring()
+    scoring.mVehicles[0].mLastLapTime = 91.234
+    scoring.mVehicles[0].mTotalLaps = 7
+    scoring.mScoringInfo.mCurrentET = 200.0
+    scoring.mVehicles[0].mLapStartET = 105.0
+    reader = _build_reader_with_fakes(_make_fake_telemetry(), scoring)
+    data = reader.read()
+    assert math.isclose(data['lap_time'], 91.234, abs_tol=0.001)
+    assert data['lap_count'] == 7
+    # current_time is (mCurrentET - mLapStartET) seconds × 1000 → ms
+    assert math.isclose(data['current_time'], 95.0 * 1000.0, abs_tol=0.1)
+
+
+def test_position_passthrough():
+    scoring = _make_fake_scoring()
+    scoring.mVehicles[0].mPlace = 12
+    reader = _build_reader_with_fakes(_make_fake_telemetry(), scoring)
+    assert reader.read()['position'] == 12
+
+
+def test_lap_dist_pct_normalised():
+    scoring = _make_fake_scoring()
+    scoring.mVehicles[0].mLapDist = 1500.0
+    scoring.mScoringInfo.mLapDist = 6000.0
+    reader = _build_reader_with_fakes(_make_fake_telemetry(), scoring)
+    assert math.isclose(reader.read()['lap_dist_pct'], 0.25, abs_tol=0.001)
+
+
+def test_world_position_xz():
+    scoring = _make_fake_scoring()
+    scoring.mVehicles[0].mPos = MagicMock(x=111.0, y=2.0, z=-222.0)
+    reader = _build_reader_with_fakes(_make_fake_telemetry(), scoring)
+    data = reader.read()
+    assert data['world_x'] == 111.0
+    assert data['world_z'] == -222.0
+
+
+def test_pit_and_lap_validity_flags():
+    scoring = _make_fake_scoring()
+    scoring.mVehicles[0].mInPits = 1
+    scoring.mVehicles[0].mCountLapFlag = 0  # invalid
+    reader = _build_reader_with_fakes(_make_fake_telemetry(), scoring)
+    data = reader.read()
+    assert data['is_in_pit_lane'] is True
+    assert data['lap_valid'] is False
+
+
+def test_byte_string_names_decode():
+    scoring = _make_fake_scoring()
+    scoring.mVehicles[0].mVehicleName = b"Porsche 963\x00\x00\x00"
+    scoring.mScoringInfo.mTrackName = b"Sebring International\x00"
+    telem = _make_fake_telemetry()
+    telem.mFrontTireCompoundName = b"Soft\x00\x00\x00"
+    reader = _build_reader_with_fakes(telem, scoring)
+    data = reader.read()
+    assert data['car_name'] == "Porsche 963"
+    assert data['track_name'] == "Sebring International"
+    assert data['tyre_compound'] == "Soft"
+
+
+def test_session_type_mapping():
+    """rF2 mSession: 0=test, 1-4=practice, 5-8=qualify, 9=warmup, 10-13=race."""
+    cases = [
+        (1, 'PRACTICE'),
+        (5, 'QUALIFY'),
+        (9, 'PRACTICE'),  # warmup → treat as practice
+        (10, 'RACE'),
+        (13, 'RACE'),
+    ]
+    for code, expected in cases:
+        scoring = _make_fake_scoring()
+        scoring.mScoringInfo.mSession = code
+        reader = _build_reader_with_fakes(_make_fake_telemetry(), scoring)
+        assert reader.read()['session_type'] == expected, f"code={code}"
+
+
+def test_weather_passthrough():
+    scoring = _make_fake_scoring()
+    scoring.mScoringInfo.mAmbientTemp = 18.5
+    scoring.mScoringInfo.mTrackTemp = 28.0
+    reader = _build_reader_with_fakes(_make_fake_telemetry(), scoring)
+    data = reader.read()
+    assert data['air_temp'] == 18.5
+    assert data['road_temp'] == 28.0
+
+
+def test_estimated_lap_seconds_to_ms():
+    scoring = _make_fake_scoring()
+    scoring.mVehicles[0].mBestLapTime = 89.123
+    reader = _build_reader_with_fakes(_make_fake_telemetry(), scoring)
+    assert math.isclose(reader.read()['estimated_lap'], 89123.0, abs_tol=1.0)

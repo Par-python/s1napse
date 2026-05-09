@@ -10,6 +10,17 @@ Requires:
 from .base import TelemetryReader
 
 
+def _map_session_type(code: int) -> str:
+    """rF2 mSession codes → ACC-style labels.
+    0=test day, 1-4=practice, 5-8=qualify, 9=warmup, 10-13=race.
+    """
+    if 5 <= code <= 8:
+        return 'QUALIFY'
+    if 10 <= code <= 13:
+        return 'RACE'
+    return 'PRACTICE'
+
+
 class LMUReader(TelemetryReader):
     """Le Mans Ultimate via the rFactor 2 Shared Memory Plugin."""
 
@@ -59,6 +70,19 @@ class LMUReader(TelemetryReader):
             brake_temp = [float(w.mBrakeTemp) - 273.15 for w in wheels]
             tyre_wear = [float(w.mWear) * 100.0 for w in wheels]
 
+            veh = scoring.mVehicles[0]
+            info = scoring.mScoringInfo
+
+            decode = self._cbytestring
+            car_name   = decode(veh.mVehicleName)   if veh.mVehicleName   else ''
+            track_name = decode(info.mTrackName)    if info.mTrackName    else ''
+            compound   = decode(telem.mFrontTireCompoundName) \
+                         if telem.mFrontTireCompoundName else ''
+
+            current_time_ms = (info.mCurrentET - veh.mLapStartET) * 1000.0
+            track_len = float(info.mLapDist) or 1.0
+            lap_pct = float(veh.mLapDist) / track_len
+
             self._last_read_ok = True
             return {
                 'speed':       speed_kmh,
@@ -77,6 +101,26 @@ class LMUReader(TelemetryReader):
                 'tyre_pressure': tyre_pressure,
                 'brake_temp':    brake_temp,
                 'tyre_wear':     tyre_wear,
+                'lap_time':       float(veh.mLastLapTime),
+                'position':       int(veh.mPlace),
+                'car_name':       car_name,
+                'track_name':     track_name,
+                'lap_count':      int(veh.mTotalLaps),
+                'current_time':   current_time_ms,
+                'lap_dist_pct':   lap_pct,
+                'world_x':        float(veh.mPos.x),
+                'world_z':        float(veh.mPos.z),
+                'lap_valid':      bool(veh.mCountLapFlag),
+                'is_in_pit_lane': bool(veh.mInPits),
+                'tyre_compound':  compound,
+                'air_temp':       float(info.mAmbientTemp),
+                'road_temp':      float(info.mTrackTemp),
+                'session_type':   _map_session_type(int(info.mSession)),
+                'estimated_lap':  float(veh.mBestLapTime) * 1000.0,
+                'gap_ahead':      0,
+                'gap_behind':     0,
+                'stint_time_left': 0,
+                'delta_lap_time': 0,
             }
         except Exception as e:
             print(f"LMU read error: {e}")
