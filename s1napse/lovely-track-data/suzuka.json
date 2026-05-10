@@ -1,0 +1,116 @@
+{
+  "name": "Suzuka Circuit",
+  "trackId": "suzuka",
+  "country": "JP",
+  "length": 5807,
+  "turn": [
+    {
+      "name": "First Corner",
+      "marker": 0.071
+    },
+    {
+      "name": "First Corner",
+      "marker": 0.098
+    },
+    {
+      "name": "Snake",
+      "marker": 0.142
+    },
+    {
+      "name": "Snake",
+      "marker": 0.16
+    },
+    {
+      "name": "Snake",
+      "marker": 0.189
+    },
+    {
+      "name": "Anti-Banked Curve",
+      "marker": 0.219
+    },
+    {
+      "name": "Dunlop",
+      "marker": 0.253
+    },
+    {
+      "name": "Degner 1",
+      "marker": 0.344
+    },
+    {
+      "name": "Degner 2",
+      "marker": 0.372
+    },
+    {
+      "name": "10",
+      "marker": 0.429
+    },
+    {
+      "name": "Hairpin",
+      "marker": 0.452
+    },
+    {
+      "name": "200R",
+      "marker": 0.496
+    },
+    {
+      "name": "Spoon",
+      "marker": 0.604
+    },
+    {
+      "name": "Spoon",
+      "marker": 0.638
+    },
+    {
+      "name": "130R",
+      "marker": 0.809
+    },
+    {
+      "name": "Casino Triangle",
+      "marker": 0.88
+    },
+    {
+      "name": "Casino Triangle",
+      "marker": 0.889
+    },
+    {
+      "name": "Last Curve",
+      "marker": 0.911
+    }
+  ],
+  "sector": [
+    {
+      "name": "1",
+      "marker": 0.328
+    },
+    {
+      "name": "2",
+      "marker": 0.763
+    },
+    {
+      "name": "3",
+      "marker": 1
+    }
+  ],
+  "time": [
+    {
+      "gt3": [
+        {
+          "name": "sg30",
+          "time": 71
+        },
+        {
+          "name": "dt",
+          "time": 35
+        }
+      ]
+    }
+  ],
+  "companion": [
+    {
+      "top": 15,
+      "left": -40,
+      "rotation": 195,
+      "scale": 1.1
+    }
+  ]
+}

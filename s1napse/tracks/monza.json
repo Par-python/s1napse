@@ -1004,8 +1004,87 @@
       0.3062
     ]
   ],
-  "turns": [],
-  "source": "TUMFTM/racetrack-database (CC-BY-4.0)",
+  "turns": [
+    [
+      0.162,
+      "1",
+      "Variante Rettifilo",
+      -25.09,
+      7.12
+    ],
+    [
+      0.169,
+      "2",
+      "",
+      17.07,
+      19.71
+    ],
+    [
+      0.262,
+      "3",
+      "Curva Grande",
+      -5.34,
+      16.14
+    ],
+    [
+      0.372,
+      "4",
+      "Variante della Roggia",
+      6.75,
+      -25.19
+    ],
+    [
+      0.379,
+      "5",
+      "",
+      19.96,
+      16.78
+    ],
+    [
+      0.443,
+      "6",
+      "Lesmo 1",
+      10.73,
+      13.18
+    ],
+    [
+      0.499,
+      "7",
+      "Lesmo 2",
+      13.55,
+      10.27
+    ],
+    [
+      0.684,
+      "8",
+      "Variante Ascari",
+      -5.13,
+      25.57
+    ],
+    [
+      0.7,
+      "9",
+      "",
+      -13.06,
+      5.05
+    ],
+    [
+      0.716,
+      "10",
+      "",
+      -20.99,
+      -15.47
+    ],
+    [
+      0.896,
+      "11",
+      "Parabolica",
+      -3.25,
+      -16.69
+    ]
+  ],
+  "source": "TUMFTM/racetrack-database (LGPL-3.0)",
+  "turn_source": "Lovely-Sim-Racing/lovely-track-data (CC BY-NC-SA 4.0)",
   "raceline": [
     [
       0.3071,

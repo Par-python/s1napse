@@ -40,12 +40,12 @@ When S1napse launches you'll see a welcome screen with two options:
 3. S1napse will **auto-detect** whichever sim is running
 4. The status bar at the top will show **● CONNECTED** when it picks up data
 
-| Sim                       | What to do                                                                                                                                                                            |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **ACC**                   | Just launch the game — S1napse connects automatically                                                                                                                                 |
-| **Assetto Corsa**         | Enable UDP telemetry in AC's settings: `Options → General → Enable Custom Shaders Patch` is not required — just go to `Options → General` and enable **UDP telemetry** on port `9996` |
-| **iRacing**               | Launch iRacing, go to the track — S1napse connects automatically                                                                                                                      |
-| **Le Mans Ultimate (LMU)**| One-time plugin install required (rF2 Shared Memory Plugin). See [docs/lmu-setup.md](docs/lmu-setup.md). After that, just launch the game — S1napse connects automatically.            |
+| Sim                        | What to do                                                                                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **ACC**                    | Just launch the game — S1napse connects automatically                                                                                                                                 |
+| **Assetto Corsa**          | Enable UDP telemetry in AC's settings: `Options → General → Enable Custom Shaders Patch` is not required — just go to `Options → General` and enable **UDP telemetry** on port `9996` |
+| **iRacing**                | Launch iRacing, go to the track — S1napse connects automatically                                                                                                                      |
+| **Le Mans Ultimate (LMU)** | One-time plugin install required (rF2 Shared Memory Plugin). See [docs/lmu-setup.md](docs/lmu-setup.md). After that, just launch the game — S1napse connects automatically.           |
 
 #### Real Racing (ELM327 OBD-II)
 
@@ -270,3 +270,4 @@ This repository vendors the following third-party code, retained under its origi
 - **`s1napse/vendor/pyRfactor2SharedMemory/`** — Python bindings for the rFactor 2 Shared Memory Plugin. Copyright © 2021 Tony Whitley. Licensed under the MIT License (see `s1napse/vendor/pyRfactor2SharedMemory/License.txt`). Used by `s1napse/readers/lmu.py` to read Le Mans Ultimate telemetry. Source: <https://github.com/TonyWhitley/pyRfactor2SharedMemory>.
 - **`pyaccsharedmemory`** — Python bindings for the Assetto Corsa Competizione Shared Memory API. Copyright © rrennoir. Licensed under the MIT License. Installed as a PyPI dependency (`requirements.txt`) and used by `s1napse/readers/acc.py` to read ACC telemetry. Source: <https://github.com/rrennoir/PyAccSharedMemory>.
 - **`TUMFTM/racetrack-database`** — Open racetrack centerline and raceline dataset. Licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0). Consumed offline by `tools/import_tracks.py` to generate the pre-built track JSON files shipped in `s1napse/tracks/`. Source: <https://github.com/TUMFTM/racetrack-database>.
+- **`Lovely-Sim-Racing/lovely-track-data`** — Per-track turn names, sector boundaries, and pit markers for ACC. Licensed under CC BY-NC-SA 4.0. A snapshot is vendored under `s1napse/lovely-track-data/` and consumed offline by `tools/import_tracks.py` to populate the `turns` field of `s1napse/tracks/*.json`. Source: <https://github.com/Lovely-Sim-Racing/lovely-track-data>.

@@ -1,0 +1,108 @@
+{
+  "name": "Nurburgring Grand Prix",
+  "trackId": "murburgring",
+  "country": "DE",
+  "length": 5137,
+  "turn": [
+    {
+      "name": "T1",
+      "marker": 0.13
+    },
+    {
+      "name": "T2",
+      "marker": 0.16
+    },
+    {
+      "name": "T3",
+      "marker": 0.21
+    },
+    {
+      "name": "T4",
+      "marker": 0.235
+    },
+    {
+      "name": "T5",
+      "marker": 0.26
+    },
+    {
+      "name": "T6",
+      "marker": 0.32
+    },
+    {
+      "name": "T7",
+      "marker": 0.36
+    },
+    {
+      "name": "T8",
+      "marker": 0.48
+    },
+    {
+      "name": "T9",
+      "marker": 0.55
+    },
+    {
+      "name": "T10",
+      "marker": 0.58
+    },
+    {
+      "name": "T11",
+      "marker": 0.665
+    },
+    {
+      "name": "T12",
+      "marker": 0.705
+    },
+    {
+      "name": "T13",
+      "marker": 0.8
+    },
+    {
+      "name": "T14",
+      "marker": 0.88
+    },
+    {
+      "name": "T15",
+      "marker": 0.9
+    },
+    {
+      "name": "T16",
+      "marker": 0.943
+    }
+  ],
+  "sector": [
+    {
+      "name": "1",
+      "marker": 0.453
+    },
+    {
+      "name": "2",
+      "marker": 0.861
+    },
+    {
+      "name": "3",
+      "marker": 1
+    }
+  ],
+  "time": [
+    {
+      "gt3": [
+        {
+          "name": "sg30",
+          "time": 78
+        },
+        {
+          "name": "dt",
+          "time": 43
+        }
+      ]
+    }
+  ],
+  "companion": [
+    {
+      "top": -120,
+      "left": -265,
+      "rotation": 35,
+      "scale": 1.7
+    }
+  ]
+}

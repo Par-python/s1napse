@@ -25,6 +25,22 @@ PAD         = 0.06
 SMOOTH_SIGMA = 6.0  # gaussian kernel std-dev for curvature smoothing
 SOURCE_TAG  = 'TUMFTM/racetrack-database (LGPL-3.0)'
 
+# Re-export the Lovely-merge logic from the runtime module so both
+# build-time (this script) and runtime (s1napse/track_recorder.py) share
+# a single source of truth.
+sys.path.insert(0, str(REPO))
+from s1napse.lovely_turns import (  # noqa: E402
+    LOVELY_ID_MAP,
+    LOVELY_SOURCE_TAG,
+    LOVELY_DIR,
+    CLOSE_TURN_FRAC,
+    TANGENT_SHIFT,
+    _signed_area,
+    _tangent_and_outward_normal,
+    _compute_turn_offset,
+    load_turns as _load_lovely_turns,
+)
+
 
 def slug(name: str) -> str:
     s = re.sub(r'[^a-z0-9_]', '_', name.lower())
@@ -172,14 +188,18 @@ def convert(name: str, force: bool) -> str:
     min_x, max_x, min_y, max_y = bounds(track_rs)
 
     pts = normalize_with_frame(track_rs, min_x, max_x, min_y, max_y)
+    pts_tuples = [(p[0], p[1]) for p in pts]
+    turns = _load_lovely_turns(key, pts_tuples)
     data = {
         'name':      name,
         'track_key': key,
         'length_m':  length,
         'pts':       pts,
-        'turns':     [],
+        'turns':     turns,
         'source':    SOURCE_TAG,
     }
+    if turns:
+        data['turn_source'] = LOVELY_SOURCE_TAG
 
     # Raceline: normalize with track's frame, resample, compute + smooth + normalize curvature.
     note = ''
@@ -202,7 +222,8 @@ def convert(name: str, force: bool) -> str:
     DST_DIR.mkdir(parents=True, exist_ok=True)
     with open(dst, 'w') as f:
         json.dump(data, f, indent=2)
-    return f'OK    {name:24s} -> {dst.name}  ({length} m, {len(pts)} pts{note})'
+    turn_note = f', {len(turns)} turns' if turns else ''
+    return f'OK    {name:24s} -> {dst.name}  ({length} m, {len(pts)} pts{note}{turn_note})'
 
 
 def main():

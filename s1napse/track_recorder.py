@@ -313,13 +313,19 @@ class TrackRecorder:
         track_key = re.sub(r'[^a-z0-9_]', '_', track_name.lower()).strip('_')
         track_key = re.sub(r'_+', '_', track_key)
 
+        from s1napse.lovely_turns import load_turns, LOVELY_SOURCE_TAG
+        pts_tuples = [(p[0], p[1]) for p in pts]
+        turns = load_turns(track_key, pts_tuples)
+
         data = {
             'name': track_name,
             'track_key': track_key,
             'length_m': length_m,
             'pts': pts,
-            'turns': [],
+            'turns': turns,
         }
+        if turns:
+            data['turn_source'] = LOVELY_SOURCE_TAG
 
         out_dir = _get_tracks_dir()
         out_dir.mkdir(parents=True, exist_ok=True)

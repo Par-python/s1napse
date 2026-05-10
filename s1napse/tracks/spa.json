@@ -1004,8 +1004,101 @@
       0.8425
     ]
   ],
-  "turns": [],
-  "source": "TUMFTM/racetrack-database (CC-BY-4.0)",
+  "turns": [
+    [
+      0.051,
+      "1",
+      "La Source",
+      -6.19,
+      15.83
+    ],
+    [
+      0.101,
+      "2",
+      "Eau Rouge",
+      -3.01,
+      16.73
+    ],
+    [
+      0.165,
+      "3",
+      "Raidillon",
+      3.05,
+      16.72
+    ],
+    [
+      0.227,
+      "4",
+      "Kemmel",
+      11.43,
+      12.59
+    ],
+    [
+      0.343,
+      "5",
+      "Les Combes",
+      18.46,
+      18.42
+    ],
+    [
+      0.37,
+      "6",
+      "Malmedy",
+      8.86,
+      -24.52
+    ],
+    [
+      0.431,
+      "7",
+      "Bruxelles",
+      5.94,
+      -15.93
+    ],
+    [
+      0.557,
+      "8",
+      "Double Gauche",
+      13.77,
+      -9.97
+    ],
+    [
+      0.641,
+      "9",
+      "Les Fagnes",
+      -4.03,
+      -16.52
+    ],
+    [
+      0.703,
+      "10",
+      "Campus",
+      -8.76,
+      -14.57
+    ],
+    [
+      0.741,
+      "11",
+      "Stavelot",
+      -12.08,
+      -11.96
+    ],
+    [
+      0.884,
+      "12",
+      "Blanchimont",
+      -9.71,
+      13.95
+    ],
+    [
+      0.962,
+      "13",
+      "Chicane",
+      -5.65,
+      16.03
+    ]
+  ],
+  "source": "TUMFTM/racetrack-database (LGPL-3.0)",
+  "turn_source": "Lovely-Sim-Racing/lovely-track-data (CC BY-NC-SA 4.0)",
   "raceline": [
     [
       0.4596,

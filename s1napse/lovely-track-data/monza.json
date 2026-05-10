@@ -1,0 +1,112 @@
+{
+  "name": "Autodromo Nazionale Monza",
+  "trackId": "monza",
+  "country": "IT",
+  "length": 5793,
+  "pitentry": 0.963,
+  "pitexit": 0.079,
+  "turn": [
+    {
+      "name": "Variante Rettifilo",
+      "start": 0.151,
+      "end": 0.164,
+      "marker": 0.162
+    },
+    {
+      "name": "Variante Rettifilo",
+      "start": 0.165,
+      "end": 0.181,
+      "marker": 0.169
+    },
+    {
+      "name": "Curva Grande",
+      "start": 0.222,
+      "end": 0.309,
+      "marker": 0.262
+    },
+    {
+      "name": "Variante della Roggia",
+      "start": 0.353,
+      "end": 0.374,
+      "marker": 0.372
+    },
+    {
+      "name": "Variante della Roggia",
+      "start": 0.375,
+      "end": 0.393,
+      "marker": 0.379
+    },
+    {
+      "name": "Lesmo 1",
+      "start": 0.423,
+      "end": 0.461,
+      "marker": 0.443
+    },
+    {
+      "name": "Lesmo 2",
+      "start": 0.485,
+      "end": 0.527,
+      "marker": 0.499
+    },
+    {
+      "name": "Variante Ascari",
+      "start": 0.666,
+      "end": 0.692,
+      "marker": 0.684
+    },
+    {
+      "name": "Variante Ascari",
+      "start": 0.693,
+      "end": 0.712,
+      "marker": 0.7
+    },
+    {
+      "name": "Variante Ascari",
+      "start": 0.713,
+      "end": 0.739,
+      "marker": 0.716
+    },
+    {
+      "name": "Parabolica",
+      "start": 0.875,
+      "end": 0.961,
+      "marker": 0.896
+    }
+  ],
+  "sector": [
+    {
+      "name": "1",
+      "marker": 0.339
+    },
+    {
+      "name": "2",
+      "marker": 0.666
+    },
+    {
+      "name": "3",
+      "marker": 1
+    }
+  ],
+  "time": [
+    {
+      "gt3": [
+        {
+          "name": "sg30",
+          "time": 74
+        },
+        {
+          "name": "dt",
+          "time": 39
+        }
+      ]
+    }
+  ],
+  "companion": [
+    {
+      "top": -165,
+      "left": -260,
+      "rotation": -95,
+      "scale": 1.7
+    }
+  ]
+}
