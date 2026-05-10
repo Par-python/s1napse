@@ -349,11 +349,20 @@ def _load_lovely_turns(s1napse_slug: str,
             oy = ay * t + perp_y * OUTWARD
             offsets[i] = (ox, oy)
 
+    # Suppress duplicate names within a cluster: a chicane named "Variante Ascari"
+    # 3 times reads as visual clutter; keep the name on the first member only.
+    display_names = list(names)
+    for cluster in clusters:
+        first = cluster[0]
+        for i in cluster[1:]:
+            if names[i] == names[first]:
+                display_names[i] = ''
+
     out: list[list] = []
     for idx in range(1, m + 1):
         i = idx - 1
         ox, oy = offsets[i]
-        out.append([round(fracs[i], 4), str(idx), names[i], round(ox, 2), round(oy, 2)])
+        out.append([round(fracs[i], 4), str(idx), display_names[i], round(ox, 2), round(oy, 2)])
     return out
 
 
