@@ -272,10 +272,13 @@ def _load_lovely_turns(s1napse_slug: str,
             ox, oy = 0.0, 0.0
         else:
             (tx, ty), (nx, ny) = vecs
-            ox, oy = nx * 18.0, ny * 18.0
             # Detect close-pair neighbors (handles wrap-around for chicanes near S/F).
             close_prev = m > 1 and (frac - fracs[(idx - 2) % m]) % 1.0 < CLOSE_TURN_FRAC
             close_next = m > 1 and (fracs[idx % m] - frac) % 1.0 < CLOSE_TURN_FRAC
+            # Pull the label further outward when shifted along the tangent — a
+            # pure-tangent shift can drag the label back onto the track surface.
+            outward_mag = 18.0 if (close_prev ^ close_next) else 12.0
+            ox, oy = nx * outward_mag, ny * outward_mag
             if close_prev and not close_next:
                 # later member of a close pair: shift forward along the track
                 ox += tx * TANGENT_SHIFT
