@@ -357,7 +357,7 @@ class TrackMapWidget(QWidget):
         self._font_turn_num_sz = max(6,  int(7 * f))
         self._font_turn_name_sz = max(6,  int(7 * f))
         self._font_sf_sz = max(6,  int(7 * f))
-        self._turn_r = max(7,  int(10 * f))
+        self._turn_r = max(5,  int(7 * f))
         self._car_outer = max(10, int(16 * f))
         self._car_inner = max(4,  int(6 * f))
 

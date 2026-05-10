@@ -250,7 +250,7 @@ def _compute_turn_offset(pts: list[tuple[float, float]],
 
 
 CLOSE_TURN_FRAC = 0.03  # turns within 3% of lap are considered "close"
-TANGENT_SHIFT   = 18.0  # renderer-units; shoves close-pair labels along the track
+TANGENT_SHIFT   = 26.0  # renderer-units; shoves close-pair labels along the track
 
 
 def _load_lovely_turns(s1napse_slug: str,
@@ -276,11 +276,12 @@ def _load_lovely_turns(s1napse_slug: str,
     keyed.sort(key=lambda t: t['marker'])
 
     fracs = [float(t['marker']) for t in keyed]
+    names = [str(t.get('name') or '') for t in keyed]
     m = len(fracs)
     out: list[list] = []
     for idx, t in enumerate(keyed, start=1):
         frac = fracs[idx - 1]
-        name = str(t.get('name') or '')
+        name = names[idx - 1]
         vecs = _tangent_and_outward_normal(pts_normalized, frac)
         if vecs is None:
             ox, oy = 0.0, 0.0
@@ -289,20 +290,27 @@ def _load_lovely_turns(s1napse_slug: str,
             # Detect close-pair neighbors (handles wrap-around for chicanes near S/F).
             close_prev = m > 1 and (frac - fracs[(idx - 2) % m]) % 1.0 < CLOSE_TURN_FRAC
             close_next = m > 1 and (fracs[idx % m] - frac) % 1.0 < CLOSE_TURN_FRAC
-            # Singletons get a clean outward push. Close-pair members rely mostly
-            # on the tangent shift to spread apart, with reduced outward to avoid
-            # crossing nearby track sections in chicane geometry.
-            outward_mag = 8.0 if (close_prev or close_next) else 12.0
-            ox, oy = nx * outward_mag, ny * outward_mag
-            if close_prev and not close_next:
-                # later member of a close pair: shift forward along the track
-                ox += tx * TANGENT_SHIFT
-                oy += ty * TANGENT_SHIFT
-            elif close_next and not close_prev:
-                # earlier member: shift backward
-                ox -= tx * TANGENT_SHIFT
-                oy -= ty * TANGENT_SHIFT
-            # If close on both sides (3+ in a row), leave it centered.
+            if close_prev and close_next:
+                # Middle of a 3+ cluster: no tangent room, push hard outward instead.
+                ox, oy = nx * 32.0, ny * 32.0
+            else:
+                outward_mag = 12.0 if (close_prev or close_next) else 17.0
+                ox, oy = nx * outward_mag, ny * outward_mag
+                if close_prev:
+                    # later member of a close pair: shift forward along the track
+                    ox += tx * TANGENT_SHIFT
+                    oy += ty * TANGENT_SHIFT
+                elif close_next:
+                    # earlier member: shift backward
+                    ox -= tx * TANGENT_SHIFT
+                    oy -= ty * TANGENT_SHIFT
+        # Suppress duplicate names within a close-cluster so "Variante Ascari"
+        # doesn't render three times stacked. Keep the name on the earliest
+        # member, blank it on the rest.
+        if (m > 1
+                and (frac - fracs[(idx - 2) % m]) % 1.0 < CLOSE_TURN_FRAC
+                and names[(idx - 2) % m] == name):
+            name = ''
         out.append([round(frac, 4), str(idx), name, round(ox, 2), round(oy, 2)])
     return out
 
