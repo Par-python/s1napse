@@ -25,6 +25,39 @@ PAD         = 0.06
 SMOOTH_SIGMA = 6.0  # gaussian kernel std-dev for curvature smoothing
 SOURCE_TAG  = 'TUMFTM/racetrack-database (LGPL-3.0)'
 
+LOVELY_DIR = REPO / 's1napse' / 'lovely-track-data'
+LOVELY_SOURCE_TAG = 'Lovely-Sim-Racing/lovely-track-data (CC BY-NC-SA 4.0)'
+
+# s1napse track slug (slug-of-ACC-Static.track) -> Lovely's ACC trackId (their filename).
+# Slugs follow the rule in s1napse/track_recorder.py:313 (lowercase, [^a-z0-9_] -> _).
+LOVELY_ID_MAP: dict[str, str] = {
+    'barcelona':       'barcelona',
+    'brands_hatch':    'brands-hatch',
+    'cota':            'cota',
+    'donington':       'donington',
+    'hungaroring':     'hungaroring',
+    'imola':           'imola',
+    'indianapolis':    'indianapolis',
+    'kyalami':         'kyalami',
+    'laguna_seca':     'laguna-seca',
+    'misano':          'misano',
+    'monza':           'monza',
+    'mount_panorama':  'mount-panorama',
+    'nurburgring_24h': 'nurburgring-24h',
+    'nurburgring':     'nurburgring',
+    'oulton_park':     'oulton-park',
+    'paul_ricard':     'paul-ricard',
+    'red_bull_ring':   'red-bull-ring',
+    'silverstone':     'silverstone',
+    'snetterton':      'snetterton',
+    'spa':             'spa',
+    'suzuka':          'suzuka',
+    'valencia':        'valencia',
+    'watkins_glen':    'watkins-glen',
+    'zandvoort':       'zandvoort',
+    'zolder':          'zolder',
+}
+
 
 def slug(name: str) -> str:
     s = re.sub(r'[^a-z0-9_]', '_', name.lower())
