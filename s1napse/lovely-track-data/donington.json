@@ -1,0 +1,117 @@
+{
+  "name": "Donington Park",
+  "trackId": "donington",
+  "country": "GB",
+  "length": 4020,
+  "turn": [
+    {
+      "name": "Redgate",
+      "marker": 0.109,
+      "start": 0.085,
+      "end": 0.135
+    },
+    {
+      "name": "Hollywood",
+      "marker": 0.177,
+      "start": 0.165,
+      "end": 0.2
+    },
+    {
+      "name": "Craner Curves",
+      "marker": 0.236,
+      "start": 0.22,
+      "end": 0.25
+    },
+    {
+      "name": "Old Hairpin",
+      "marker": 0.298,
+      "start": 0.28,
+      "end": 0.31
+    },
+    {
+      "name": "Schwantz Curve",
+      "marker": 0.423,
+      "start": 0.4,
+      "end": 0.425
+    },
+    {
+      "name": "McLeans",
+      "marker": 0.459
+    },
+    {
+      "name": "Coppice",
+      "marker": 0.559
+    },
+    {
+      "name": "Fogarty Esses",
+      "marker": 0.728,
+      "start": 0.7,
+      "end": 0.75
+    },
+    {
+      "name": "Melbourne Hairpin",
+      "marker": 0.853,
+      "start": 0.81,
+      "end": 0.87
+    },
+    {
+      "name": "Goddards",
+      "marker": 0.954,
+      "start": 0.92,
+      "end": 0.965
+    }
+  ],
+  "straight": [
+    {
+      "name": "Starkey's Bridge",
+      "start": 0.325,
+      "end": 0.355
+    },
+    {
+      "name": "Starkey's Straight",
+      "start": 0.62,
+      "end": 0.69
+    },
+    {
+      "name": "WheatCroft Straight",
+      "start": 0.975,
+      "end": 0.08
+    }
+  ],
+  "sector": [
+    {
+      "name": "1",
+      "marker": 0.255
+    },
+    {
+      "name": "2",
+      "marker": 0.679
+    },
+    {
+      "name": "3",
+      "marker": 1
+    }
+  ],
+  "time": [
+    {
+      "gt3": [
+        {
+          "name": "sg30",
+          "time": 60
+        },
+        {
+          "name": "dt",
+          "time": 25
+        }
+      ]
+    }
+  ],
+  "companion": [
+    {
+      "top": -30,
+      "left": 5,
+      "rotation": -5,
+      "scale": 1
+    }
+  ]
+}

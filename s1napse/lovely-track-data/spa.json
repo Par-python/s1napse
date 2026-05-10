@@ -1,0 +1,142 @@
+{
+  "name": "Spa Francorchamps",
+  "trackId": "spa",
+  "country": "BE",
+  "length": 7004,
+  "turn": [
+    {
+      "scale": 1,
+      "direction": 1,
+      "name": "La Source",
+      "marker": 0.051,
+      "start": 0.035,
+      "end": 0.058
+    },
+    {
+      "scale": 4,
+      "direction": 0,
+      "name": "Eau Rouge",
+      "marker": 0.101,
+      "start": 0.13,
+      "end": 0.152
+    },
+    {
+      "scale": 6,
+      "direction": 0,
+      "name": "Raidillon",
+      "marker": 0.165,
+      "start": 0.152,
+      "end": 0.185
+    },
+    {
+      "scale": 6,
+      "direction": 1,
+      "name": "Kemmel",
+      "marker": 0.227,
+      "start": 0.205,
+      "end": 0.233
+    },
+    {
+      "name": "Les Combes",
+      "marker": 0.343,
+      "start": 0.318,
+      "end": 0.36
+    },
+    {
+      "name": "Malmedy",
+      "marker": 0.37,
+      "start": 0.365,
+      "end": 0.385
+    },
+    {
+      "name": "Bruxelles",
+      "marker": 0.431,
+      "start": 0.41,
+      "end": 0.45
+    },
+    {
+      "name": "Double Gauche",
+      "marker": 0.557,
+      "start": 0.525,
+      "end": 0.595
+    },
+    {
+      "name": "Les Fagnes",
+      "marker": 0.641,
+      "start": 0.62,
+      "end": 0.672
+    },
+    {
+      "name": "Campus",
+      "marker": 0.703,
+      "start": 0.69,
+      "end": 0.715
+    },
+    {
+      "name": "Stavelot",
+      "marker": 0.741,
+      "start": 0.715,
+      "end": 0.745
+    },
+    {
+      "name": "Courbe Paul Frere",
+      "start": 0.77,
+      "end": 0.81
+    },
+    {
+      "name": "Blanchimont",
+      "marker": 0.884,
+      "start": 0.865,
+      "end": 0.9
+    },
+    {
+      "name": "Chicane",
+      "marker": 0.962,
+      "start": 0.935,
+      "end": 0.975
+    }
+  ],
+  "straight": [
+    {
+      "name": "Kemmel Straight",
+      "start": 0.233,
+      "end": 0.3
+    }
+  ],
+  "sector": [
+    {
+      "name": "1",
+      "marker": 0.333
+    },
+    {
+      "name": "2",
+      "marker": 0.719
+    },
+    {
+      "name": "3",
+      "marker": 1
+    }
+  ],
+  "time": [
+    {
+      "gt3": [
+        {
+          "name": "sg30",
+          "time": 123
+        },
+        {
+          "name": "dt",
+          "time": 88
+        }
+      ]
+    }
+  ],
+  "companion": [
+    {
+      "top": -155,
+      "left": -280,
+      "rotation": -95,
+      "scale": 1.7
+    }
+  ]
+}

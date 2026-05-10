@@ -1,0 +1,90 @@
+{
+  "name": "Circuit Zolder",
+  "trackId": "zolder",
+  "country": "BE",
+  "length": 4010,
+  "pitEntry": 0.904,
+  "pitExit": 0.131,
+  "turn": [
+    {
+      "name": "1",
+      "marker": 0.076
+    },
+    {
+      "name": "2",
+      "marker": 0.15
+    },
+    {
+      "name": "3",
+      "marker": 0.203
+    },
+    {
+      "name": "4",
+      "marker": 0.288
+    },
+    {
+      "name": "5",
+      "marker": 0.45
+    },
+    {
+      "name": "6",
+      "marker": 0.53
+    },
+    {
+      "name": "7",
+      "marker": 0.594
+    },
+    {
+      "name": "8",
+      "marker": 0.643
+    },
+    {
+      "name": "9",
+      "marker": 0.763
+    },
+    {
+      "name": "10",
+      "marker": 0.796
+    },
+    {
+      "name": "11",
+      "marker": 0.905
+    }
+  ],
+  "sector": [
+    {
+      "name": "1",
+      "marker": 0.368
+    },
+    {
+      "name": "2",
+      "marker": 0.693
+    },
+    {
+      "name": "3",
+      "marker": 1
+    }
+  ],
+  "time": [
+    {
+      "gt3": [
+        {
+          "name": "sg30",
+          "time": 84
+        },
+        {
+          "name": "dt",
+          "time": 50
+        }
+      ]
+    }
+  ],
+  "companion": [
+    {
+      "top": -120,
+      "left": -280,
+      "rotation": 50,
+      "scale": 1.7
+    }
+  ]
+}

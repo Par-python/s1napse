@@ -1,0 +1,164 @@
+{
+  "name": "Circuit of the Americas",
+  "trackId": "cota",
+  "country": "US",
+  "length": 5513,
+  "turn": [
+    {
+      "name": "T1",
+      "marker": 0.121,
+      "start": 0.1,
+      "end": 0.132
+    },
+    {
+      "name": "T2",
+      "marker": 0.169,
+      "start": 0.15,
+      "end": 0.184
+    },
+    {
+      "name": "T3",
+      "marker": 0.214,
+      "start": 0.2,
+      "end": 0.22
+    },
+    {
+      "name": "T4",
+      "marker": 0.232,
+      "start": 0.22,
+      "end": 0.236
+    },
+    {
+      "name": "T5",
+      "marker": 0.249,
+      "start": 0.236,
+      "end": 0.255
+    },
+    {
+      "name": "T6",
+      "marker": 0.269,
+      "start": 0.255,
+      "end": 0.298
+    },
+    {
+      "name": "T7",
+      "marker": 0.315,
+      "start": 0.305,
+      "end": 0.325
+    },
+    {
+      "name": "T8",
+      "marker": 0.344,
+      "start": 0.328,
+      "end": 0.352
+    },
+    {
+      "name": "T9",
+      "marker": 0.36,
+      "start": 0.352,
+      "end": 0.37
+    },
+    {
+      "name": "T10",
+      "marker": 0.398,
+      "start": 0.385,
+      "end": 0.405
+    },
+    {
+      "name": "T11",
+      "marker": 0.471,
+      "start": 0.445,
+      "end": 0.478
+    },
+    {
+      "name": "T12",
+      "marker": 0.69,
+      "start": 0.673,
+      "end": 0.7
+    },
+    {
+      "name": "T13",
+      "marker": 0.731,
+      "start": 0.718,
+      "end": 0.739
+    },
+    {
+      "name": "T14",
+      "marker": 0.75,
+      "start": 0.739,
+      "end": 0.76
+    },
+    {
+      "name": "T15",
+      "marker": 0.782,
+      "start": 0.76,
+      "end": 0.79
+    },
+    {
+      "name": "T16",
+      "marker": 0.82,
+      "start": 0.81,
+      "end": 0.825
+    },
+    {
+      "name": "T17",
+      "marker": 0.838,
+      "start": 0.825,
+      "end": 0.84
+    },
+    {
+      "name": "T18",
+      "marker": 0.857,
+      "start": 0.84,
+      "end": 0.89
+    },
+    {
+      "name": "T19",
+      "marker": 0.92,
+      "start": 0.9,
+      "end": 0.925
+    },
+    {
+      "name": "T20",
+      "marker": 0.972,
+      "start": 0.95,
+      "end": 0.98
+    }
+  ],
+  "sector": [
+    {
+      "name": "1",
+      "marker": 0.239
+    },
+    {
+      "name": "2",
+      "marker": 0.659
+    },
+    {
+      "name": "3",
+      "marker": 1
+    }
+  ],
+  "time": [
+    {
+      "gt3": [
+        {
+          "name": "sg30",
+          "time": 79
+        },
+        {
+          "name": "dt",
+          "time": 42
+        }
+      ]
+    }
+  ],
+  "companion": [
+    {
+      "top": -20,
+      "left": -115,
+      "rotation": 35,
+      "scale": 1.2
+    }
+  ]
+}

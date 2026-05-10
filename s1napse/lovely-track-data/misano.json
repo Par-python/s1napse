@@ -1,0 +1,110 @@
+{
+  "name": "Misano World Circuit Marco Simoncelli",
+  "trackId": "misano",
+  "country": "IT",
+  "length": 4200,
+  "turn": [
+    {
+      "name": "Variante del Parco",
+      "marker": 0.066,
+      "start": 0.04,
+      "end": 0.14
+    },
+    {
+      "name": "Curva del Rio",
+      "marker": 0.195,
+      "start": 0.17,
+      "end": 0.235
+    },
+    {
+      "name": "T6",
+      "marker": 0.241
+    },
+    {
+      "name": "T7",
+      "marker": 0.334
+    },
+    {
+      "name": "Curva Quercia",
+      "marker": 0.401,
+      "start": 0.36,
+      "end": 0.42
+    },
+    {
+      "name": "T9",
+      "marker": 0.491
+    },
+    {
+      "name": "Curva Tramonto",
+      "marker": 0.515,
+      "start": 0.495,
+      "end": 0.532
+    },
+    {
+      "name": "Curvone",
+      "marker": 0.67,
+      "start": 0.645,
+      "end": 0.725
+    },
+    {
+      "name": "T12",
+      "marker": 0.735
+    },
+    {
+      "name": "T13",
+      "marker": 0.774
+    },
+    {
+      "name": "Curva del Carro",
+      "marker": 0.816,
+      "start": 0.785,
+      "end": 0.828
+    },
+    {
+      "name": "T15",
+      "marker": 0.865
+    },
+    {
+      "name": "Curva Misano",
+      "marker": 0.929,
+      "start": 0.9,
+      "end": 0.945
+    }
+  ],
+  "sector": [
+    {
+      "name": "1",
+      "marker": 0.224
+    },
+    {
+      "name": "2",
+      "marker": 0.625
+    },
+    {
+      "name": "3",
+      "marker": 1
+    }
+  ],
+  "time": [
+    {
+      "gt3": [
+        {
+          "name": "sg30",
+          "time": 85
+        },
+        {
+          "name": "dt",
+          "time": 50
+        }
+      ]
+    }
+  ],
+  "companion": [
+    {
+      "top": -10,
+      "left": -60,
+      "rotation": 30,
+      "scale": 1.2
+    }
+  ]
+}
