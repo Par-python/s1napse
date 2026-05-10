@@ -195,6 +195,28 @@ def _signed_area(pts: list[tuple[float, float]]) -> float:
     return 0.5 * s
 
 
+def _tangent_and_outward_normal(pts: list[tuple[float, float]],
+                                frac: float
+                                ) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """Return ((tx, ty), (nx, ny)) — unit tangent and unit outward normal — at `frac`.
+    None if the polyline is degenerate."""
+    n = len(pts)
+    if n < 2:
+        return None
+    i = int(frac * n) % n
+    x0, y0 = pts[(i - 1) % n]
+    x1, y1 = pts[(i + 1) % n]
+    tx, ty = (x1 - x0), (y1 - y0)
+    L = math.hypot(tx, ty)
+    if L == 0:
+        return None
+    tx, ty = tx / L, ty / L
+    nx, ny = ty, -tx
+    if _signed_area(pts) < 0:
+        nx, ny = -nx, -ny
+    return (tx, ty), (nx, ny)
+
+
 def _compute_turn_offset(pts: list[tuple[float, float]],
                          frac: float,
                          magnitude: float = 12.0) -> tuple[float, float]:
@@ -206,30 +228,27 @@ def _compute_turn_offset(pts: list[tuple[float, float]],
     multiplies by `CR / 8.0` (CR is the turn-circle radius in pixels), so a magnitude
     of ~12 yields an offset of ~1.5 * CR pixels — clearly clear of the track.
     """
-    n = len(pts)
-    if n < 2:
+    vecs = _tangent_and_outward_normal(pts, frac)
+    if vecs is None:
         return (0.0, 0.0)
-    i = int(frac * n) % n
-    x0, y0 = pts[(i - 1) % n]
-    x1, y1 = pts[(i + 1) % n]
-    tx, ty = (x1 - x0), (y1 - y0)
-    L = math.hypot(tx, ty)
-    if L == 0:
-        return (0.0, 0.0)
-    tx, ty = tx / L, ty / L
-    # `(ty, -tx)` points to the right of the tangent direction. For a CCW polygon
-    # (positive signed area) this is outward; for CW it points inward, so flip.
-    nx, ny = ty, -tx
-    if _signed_area(pts) < 0:
-        nx, ny = -nx, -ny
+    _, (nx, ny) = vecs
     return (round(nx * magnitude, 2), round(ny * magnitude, 2))
+
+
+CLOSE_TURN_FRAC = 0.03  # turns within 3% of lap are considered "close"
+TANGENT_SHIFT   = 10.0  # renderer-units; shoves close-pair labels along the track
 
 
 def _load_lovely_turns(s1napse_slug: str,
                        pts_normalized: list[tuple[float, float]]
                        ) -> list[list]:
     """Load turn metadata for a track slug. Returns the renderer's tuple shape:
-    [frac, label, name, ox, oy]. Empty list if no mapping or no file."""
+    [frac, label, name, ox, oy]. Empty list if no mapping or no file.
+
+    For consecutive turns within CLOSE_TURN_FRAC of each other (chicanes, paired
+    corners), the labels are shifted along the tangent so they don't stack on top
+    of one another: earlier member shifts backward, later member shifts forward.
+    """
     lovely_id = LOVELY_ID_MAP.get(s1napse_slug)
     if lovely_id is None:
         return []
@@ -241,12 +260,32 @@ def _load_lovely_turns(s1napse_slug: str,
     raw = data.get('turn', []) or []
     keyed = [t for t in raw if isinstance(t.get('marker'), (int, float))]
     keyed.sort(key=lambda t: t['marker'])
+
+    fracs = [float(t['marker']) for t in keyed]
+    m = len(fracs)
     out: list[list] = []
     for idx, t in enumerate(keyed, start=1):
-        frac = float(t['marker'])
+        frac = fracs[idx - 1]
         name = str(t.get('name') or '')
-        ox, oy = _compute_turn_offset(pts_normalized, frac)
-        out.append([round(frac, 4), str(idx), name, ox, oy])
+        vecs = _tangent_and_outward_normal(pts_normalized, frac)
+        if vecs is None:
+            ox, oy = 0.0, 0.0
+        else:
+            (tx, ty), (nx, ny) = vecs
+            ox, oy = nx * 12.0, ny * 12.0
+            # Detect close-pair neighbors (handles wrap-around for chicanes near S/F).
+            close_prev = m > 1 and (frac - fracs[(idx - 2) % m]) % 1.0 < CLOSE_TURN_FRAC
+            close_next = m > 1 and (fracs[idx % m] - frac) % 1.0 < CLOSE_TURN_FRAC
+            if close_prev and not close_next:
+                # later member of a close pair: shift forward along the track
+                ox += tx * TANGENT_SHIFT
+                oy += ty * TANGENT_SHIFT
+            elif close_next and not close_prev:
+                # earlier member: shift backward
+                ox -= tx * TANGENT_SHIFT
+                oy -= ty * TANGENT_SHIFT
+            # If close on both sides (3+ in a row), leave it centered.
+        out.append([round(frac, 4), str(idx), name, round(ox, 2), round(oy, 2)])
     return out
 
 
