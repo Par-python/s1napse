@@ -109,3 +109,25 @@ class TestLoadLovelyTurns:
         assert labels[-1] == str(len(turns))
         fracs = [t[0] for t in turns]
         assert fracs == sorted(fracs)
+
+
+import pytest
+
+
+class TestConvertEmitsTurns:
+    def test_convert_writes_turns_and_turn_source_when_lovely_mapping_exists(self, tmp_path, monkeypatch):
+        spa_csv = it.TRACKS_DIR / 'Spa.csv'
+        if not spa_csv.exists():
+            pytest.skip(f'TUMFTM Spa CSV not bundled at {spa_csv}')
+        monkeypatch.setattr(it, 'DST_DIR', tmp_path)
+        result = it.convert('Spa', force=True)
+        assert result.startswith('OK')
+        out_file = tmp_path / 'spa.json'
+        assert out_file.exists()
+        import json as _json
+        data = _json.loads(out_file.read_text())
+        assert data['turn_source'] == it.LOVELY_SOURCE_TAG
+        assert len(data['turns']) > 0
+        first = data['turns'][0]
+        assert len(first) == 5
+        assert first[1] == '1'
