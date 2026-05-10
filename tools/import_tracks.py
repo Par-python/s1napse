@@ -182,6 +182,45 @@ def percentile_normalize(values: list[float], lo_p: float = 0.05, hi_p: float = 
     return [max(0.0, min(1.0, (v - lo) / (hi - lo))) for v in values]
 
 
+def _signed_area(pts: list[tuple[float, float]]) -> float:
+    """Signed area (shoelace). Positive = CCW, negative = CW."""
+    n = len(pts)
+    s = 0.0
+    for i in range(n):
+        x0, y0 = pts[i]
+        x1, y1 = pts[(i + 1) % n]
+        s += x0 * y1 - x1 * y0
+    return 0.5 * s
+
+
+def _compute_turn_offset(pts: list[tuple[float, float]],
+                         frac: float,
+                         magnitude: float = 0.04) -> tuple[float, float]:
+    """Outward-normal label offset for a turn at `frac` along a closed polyline.
+
+    `pts` is the centerline in the normalized [0,1] frame. `frac` is 0..1 along the
+    polyline by index (lovely's marker; close enough since pts is arc-length-resampled
+    by import_tracks). Returns (ox, oy) suitable for the renderer's offset tuple.
+    """
+    n = len(pts)
+    if n < 2:
+        return (0.0, 0.0)
+    i = int(frac * n) % n
+    x0, y0 = pts[(i - 1) % n]
+    x1, y1 = pts[(i + 1) % n]
+    tx, ty = (x1 - x0), (y1 - y0)
+    L = math.hypot(tx, ty)
+    if L == 0:
+        return (0.0, 0.0)
+    tx, ty = tx / L, ty / L
+    # `(ty, -tx)` points to the right of the tangent direction. For a CCW polygon
+    # (positive signed area) this is outward; for CW it points inward, so flip.
+    nx, ny = ty, -tx
+    if _signed_area(pts) < 0:
+        nx, ny = -nx, -ny
+    return (round(nx * magnitude, 4), round(ny * magnitude, 4))
+
+
 def convert(name: str, force: bool) -> str:
     key = slug(name)
     dst = DST_DIR / f'{key}.json'
