@@ -278,57 +278,89 @@ def _load_lovely_turns(s1napse_slug: str,
     fracs = [float(t['marker']) for t in keyed]
     names = [str(t.get('name') or '') for t in keyed]
     m = len(fracs)
-    out: list[list] = []
-    for idx, t in enumerate(keyed, start=1):
-        frac = fracs[idx - 1]
-        name = names[idx - 1]
-        vecs = _tangent_and_outward_normal(pts_normalized, frac)
-        if vecs is None:
-            ox, oy = 0.0, 0.0
-        else:
-            (tx, ty), (nx, ny) = vecs
-            # Detect close-pair neighbors (handles wrap-around for chicanes near S/F).
-            close_prev = m > 1 and (frac - fracs[(idx - 2) % m]) % 1.0 < CLOSE_TURN_FRAC
-            close_next = m > 1 and (fracs[idx % m] - frac) % 1.0 < CLOSE_TURN_FRAC
-            if close_prev and close_next:
-                # Middle of a 3+ cluster: no spread room, push hard outward instead.
-                ox, oy = nx * 32.0, ny * 32.0
-            elif close_prev or close_next:
-                # Close pair: spread along the line *between the pair* (symmetric),
-                # plus a perpendicular outward nudge. Pure pair-axis spreading keeps
-                # both members the same distance from their anchor.
-                pn = len(pts_normalized)
-                px, py = pts_normalized[int(frac * pn) % pn]
-                if close_prev:
-                    of = fracs[(idx - 2) % m]
-                else:
-                    of = fracs[idx % m]
-                opx, opy = pts_normalized[int(of * pn) % pn]
-                # Direction from the *other* member toward this member.
-                if close_prev:
-                    sx, sy = (px - opx), (py - opy)
-                else:
-                    sx, sy = (px - opx), (py - opy)
-                sL = math.hypot(sx, sy)
-                if sL > 0:
-                    sx, sy = sx / sL, sy / sL
-                else:
-                    sx, sy = nx, ny
-                # Perpendicular to the spread axis, picked to align with outward.
-                perp_x, perp_y = -sy, sx
-                if perp_x * nx + perp_y * ny < 0:
-                    perp_x, perp_y = -perp_x, -perp_y
-                ox = sx * TANGENT_SHIFT + perp_x * 10.0
-                oy = sy * TANGENT_SHIFT + perp_y * 10.0
+
+    # Group consecutive close turns into clusters. A cluster is a list of indices
+    # (0-based into `fracs`) where each pair of neighbors is within CLOSE_TURN_FRAC.
+    clusters: list[list[int]] = []
+    if m > 0:
+        cur = [0]
+        for i in range(1, m):
+            if (fracs[i] - fracs[i - 1]) < CLOSE_TURN_FRAC:
+                cur.append(i)
             else:
-                ox, oy = nx * 17.0, ny * 17.0
-        # Suppress duplicate names within a close-cluster so "Variante Ascari"
-        # doesn't render three times stacked. Keep the name on the earliest
-        # member, blank it on the rest.
-        if (m > 1
-                and (frac - fracs[(idx - 2) % m]) % 1.0 < CLOSE_TURN_FRAC
-                and names[(idx - 2) % m] == name):
-            name = ''
+                clusters.append(cur)
+                cur = [i]
+        clusters.append(cur)
+        # Wrap: if first and last cluster are close across the lap boundary, merge.
+        if (len(clusters) > 1
+                and ((fracs[0] - fracs[-1]) % 1.0) < CLOSE_TURN_FRAC):
+            clusters[0] = clusters[-1] + clusters[0]
+            clusters.pop()
+
+    pn = len(pts_normalized)
+
+    # Per-turn offset, indexed 0..m-1.
+    offsets: list[tuple[float, float]] = [(0.0, 0.0)] * m
+
+    for cluster in clusters:
+        if len(cluster) == 1:
+            i = cluster[0]
+            vecs = _tangent_and_outward_normal(pts_normalized, fracs[i])
+            if vecs is None:
+                continue
+            _, (nx, ny) = vecs
+            offsets[i] = (nx * 17.0, ny * 17.0)
+            continue
+
+        # Multi-turn cluster: lay out all members along a single shared axis from
+        # first to last, evenly spaced. This is symmetric and handles 2, 3, or
+        # more members the same way.
+        first_i, last_i = cluster[0], cluster[-1]
+        fpx, fpy = pts_normalized[int(fracs[first_i] * pn) % pn]
+        lpx, lpy = pts_normalized[int(fracs[last_i]  * pn) % pn]
+        ax, ay = (lpx - fpx), (lpy - fpy)
+        aL = math.hypot(ax, ay)
+        if aL > 0:
+            ax, ay = ax / aL, ay / aL
+        else:
+            ax, ay = 1.0, 0.0  # degenerate fallback
+
+        # Outward direction: perpendicular to the cluster axis, pointing away from
+        # the track centroid (consistent for all members of the cluster).
+        cx = sum(p[0] for p in pts_normalized) / pn
+        cy = sum(p[1] for p in pts_normalized) / pn
+        mid_px, mid_py = (fpx + lpx) / 2.0, (fpy + lpy) / 2.0
+        out_seed_x, out_seed_y = (mid_px - cx), (mid_py - cy)
+        # Project out perpendicular to axis.
+        perp_x, perp_y = -ay, ax
+        if perp_x * out_seed_x + perp_y * out_seed_y < 0:
+            perp_x, perp_y = -perp_x, -perp_y
+
+        # Spread evenly along the axis: -SPAN/2 .. +SPAN/2 around cluster midpoint.
+        SPAN = TANGENT_SHIFT * 2.0
+        OUTWARD = 14.0
+        k = len(cluster)
+        for j, i in enumerate(cluster):
+            if k == 1:
+                t = 0.0
+            else:
+                t = (j / (k - 1) - 0.5) * SPAN
+            ox = ax * t + perp_x * OUTWARD
+            oy = ay * t + perp_y * OUTWARD
+            offsets[i] = (ox, oy)
+
+    out: list[list] = []
+    for idx in range(1, m + 1):
+        i = idx - 1
+        frac = fracs[i]
+        name = names[i]
+        ox, oy = offsets[i]
+        # Suppress duplicate names within a close-cluster so the same name doesn't
+        # render multiple times stacked. Keep it on the earliest member only.
+        for cluster in clusters:
+            if i in cluster and i != cluster[0] and names[cluster[0]] == name:
+                name = ''
+                break
         out.append([round(frac, 4), str(idx), name, round(ox, 2), round(oy, 2)])
     return out
 
