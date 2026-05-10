@@ -250,7 +250,7 @@ def _compute_turn_offset(pts: list[tuple[float, float]],
 
 
 CLOSE_TURN_FRAC = 0.03  # turns within 3% of lap are considered "close"
-TANGENT_SHIFT   = 26.0  # renderer-units; shoves close-pair labels along the track
+TANGENT_SHIFT   = 22.0  # renderer-units; shoves close-pair labels along the track
 
 
 def _load_lovely_turns(s1napse_slug: str,
@@ -291,19 +291,37 @@ def _load_lovely_turns(s1napse_slug: str,
             close_prev = m > 1 and (frac - fracs[(idx - 2) % m]) % 1.0 < CLOSE_TURN_FRAC
             close_next = m > 1 and (fracs[idx % m] - frac) % 1.0 < CLOSE_TURN_FRAC
             if close_prev and close_next:
-                # Middle of a 3+ cluster: no tangent room, push hard outward instead.
+                # Middle of a 3+ cluster: no spread room, push hard outward instead.
                 ox, oy = nx * 32.0, ny * 32.0
-            else:
-                outward_mag = 12.0 if (close_prev or close_next) else 17.0
-                ox, oy = nx * outward_mag, ny * outward_mag
+            elif close_prev or close_next:
+                # Close pair: spread along the line *between the pair* (symmetric),
+                # plus a perpendicular outward nudge. Pure pair-axis spreading keeps
+                # both members the same distance from their anchor.
+                pn = len(pts_normalized)
+                px, py = pts_normalized[int(frac * pn) % pn]
                 if close_prev:
-                    # later member of a close pair: shift forward along the track
-                    ox += tx * TANGENT_SHIFT
-                    oy += ty * TANGENT_SHIFT
-                elif close_next:
-                    # earlier member: shift backward
-                    ox -= tx * TANGENT_SHIFT
-                    oy -= ty * TANGENT_SHIFT
+                    of = fracs[(idx - 2) % m]
+                else:
+                    of = fracs[idx % m]
+                opx, opy = pts_normalized[int(of * pn) % pn]
+                # Direction from the *other* member toward this member.
+                if close_prev:
+                    sx, sy = (px - opx), (py - opy)
+                else:
+                    sx, sy = (px - opx), (py - opy)
+                sL = math.hypot(sx, sy)
+                if sL > 0:
+                    sx, sy = sx / sL, sy / sL
+                else:
+                    sx, sy = nx, ny
+                # Perpendicular to the spread axis, picked to align with outward.
+                perp_x, perp_y = -sy, sx
+                if perp_x * nx + perp_y * ny < 0:
+                    perp_x, perp_y = -perp_x, -perp_y
+                ox = sx * TANGENT_SHIFT + perp_x * 10.0
+                oy = sy * TANGENT_SHIFT + perp_y * 10.0
+            else:
+                ox, oy = nx * 17.0, ny * 17.0
         # Suppress duplicate names within a close-cluster so "Variante Ascari"
         # doesn't render three times stacked. Keep the name on the earliest
         # member, blank it on the rest.
