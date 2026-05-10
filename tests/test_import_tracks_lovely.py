@@ -131,3 +131,53 @@ class TestConvertEmitsTurns:
         first = data['turns'][0]
         assert len(first) == 5
         assert first[1] == '1'
+
+
+class TestRecorderMergesLovelyTurns:
+    """When a user records a track live (e.g. driving Bathurst in ACC), the saved
+    JSON should automatically pick up turn labels from Lovely if a mapping exists.
+    """
+
+    def _drive_a_lap(self, recorder, n=300):
+        # Simulate a lap by feeding evenly-spaced samples around a circle.
+        recorder.start()
+        for i in range(n):
+            pct = i / n
+            theta = pct * 2 * math.pi
+            x = 1000.0 * math.cos(theta)
+            z = 1000.0 * math.sin(theta)
+            recorder.feed(pct, x, z)
+        recorder.stop()
+
+    def test_save_attaches_lovely_turns_when_track_known(self, tmp_path, monkeypatch):
+        # Redirect tracks output to tmp_path.
+        from s1napse import track_recorder as tr
+        monkeypatch.setattr(tr, '_get_tracks_dir', lambda: tmp_path)
+
+        recorder = tr.TrackRecorder()
+        self._drive_a_lap(recorder)
+        # 'Mount Panorama' slugifies to 'mount_panorama' which IS in LOVELY_ID_MAP
+        # but TUMFTM does NOT bundle it — so this exercises the recorder->Lovely
+        # path with no TUMFTM fallback in play.
+        path = recorder.save('Mount Panorama', length_m=6213)
+        assert path is not None
+        import json as _json
+        data = _json.loads(open(path).read())
+        from s1napse.lovely_turns import LOVELY_SOURCE_TAG
+        assert data['turn_source'] == LOVELY_SOURCE_TAG
+        assert len(data['turns']) > 0
+        # Spot-check: Mount Panorama in lovely-track-data has 'Hell Corner' as turn 1.
+        assert data['turns'][0][1] == '1'
+
+    def test_save_skips_lovely_when_track_unknown(self, tmp_path, monkeypatch):
+        from s1napse import track_recorder as tr
+        monkeypatch.setattr(tr, '_get_tracks_dir', lambda: tmp_path)
+
+        recorder = tr.TrackRecorder()
+        self._drive_a_lap(recorder)
+        path = recorder.save('Some Fictional Track', length_m=4000)
+        assert path is not None
+        import json as _json
+        data = _json.loads(open(path).read())
+        assert data['turns'] == []
+        assert 'turn_source' not in data
