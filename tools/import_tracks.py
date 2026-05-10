@@ -197,7 +197,7 @@ def _signed_area(pts: list[tuple[float, float]]) -> float:
 
 def _compute_turn_offset(pts: list[tuple[float, float]],
                          frac: float,
-                         magnitude: float = 0.04) -> tuple[float, float]:
+                         magnitude: float = 0.07) -> tuple[float, float]:
     """Outward-normal label offset for a turn at `frac` along a closed polyline.
 
     `pts` is the centerline in the normalized [0,1] frame. `frac` is 0..1 along the
