@@ -352,16 +352,8 @@ def _load_lovely_turns(s1napse_slug: str,
     out: list[list] = []
     for idx in range(1, m + 1):
         i = idx - 1
-        frac = fracs[i]
-        name = names[i]
         ox, oy = offsets[i]
-        # Suppress duplicate names within a close-cluster so the same name doesn't
-        # render multiple times stacked. Keep it on the earliest member only.
-        for cluster in clusters:
-            if i in cluster and i != cluster[0] and names[cluster[0]] == name:
-                name = ''
-                break
-        out.append([round(frac, 4), str(idx), name, round(ox, 2), round(oy, 2)])
+        out.append([round(fracs[i], 4), str(idx), names[i], round(ox, 2), round(oy, 2)])
     return out
 
 
