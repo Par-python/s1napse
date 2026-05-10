@@ -50,8 +50,8 @@ class LMUReader(TelemetryReader):
             self._last_read_ok = False
             return None
         try:
-            telem = self.info.playerTelemetry()
-            scoring = self.info.playerScoring()
+            telem = self.info.playersVehicleTelemetry()
+            scoring = self.info.playersVehicleScoring()
             if telem is None or scoring is None:
                 self._last_read_ok = False
                 return None

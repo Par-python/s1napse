@@ -85,8 +85,8 @@ def _build_reader_with_fakes(telem, scoring):
     reader._last_read_ok = False
 
     api = MagicMock()
-    api.playerTelemetry.return_value = telem
-    api.playerScoring.return_value = scoring
+    api.playersVehicleTelemetry.return_value = telem
+    api.playersVehicleScoring.return_value = scoring
     reader.info = api
 
     # Cbytestring decoder: strip NULs and decode utf-8.
@@ -294,14 +294,14 @@ def test_estimated_lap_seconds_to_ms():
 
 
 def test_read_returns_none_when_no_session():
-    """playerTelemetry/playerScoring may return None when no session active."""
+    """playersVehicleTelemetry/playersVehicleScoring may return None when no session active."""
     from s1napse.readers.lmu import LMUReader
     reader = LMUReader.__new__(LMUReader)
     reader.available = True
     reader._last_read_ok = True  # was True; should flip to False
     api = MagicMock()
-    api.playerTelemetry.return_value = None
-    api.playerScoring.return_value = None
+    api.playersVehicleTelemetry.return_value = None
+    api.playersVehicleScoring.return_value = None
     reader.info = api
     reader._cbytestring = lambda b: b.decode('utf-8', 'ignore')
     assert reader.read() is None
@@ -320,8 +320,8 @@ def test_read_swallows_field_exceptions():
     type(bad_telem).mLocalVel = property(
         lambda self: (_ for _ in ()).throw(RuntimeError("kaboom"))
     )
-    api.playerTelemetry.return_value = bad_telem
-    api.playerScoring.return_value = _make_fake_scoring()
+    api.playersVehicleTelemetry.return_value = bad_telem
+    api.playersVehicleScoring.return_value = _make_fake_scoring()
     reader.info = api
     reader._cbytestring = lambda b: b.decode('utf-8', 'ignore')
     assert reader.read() is None
@@ -346,8 +346,8 @@ def test_is_connected_returns_false_when_probe_fails():
     reader.available = True
     reader._last_read_ok = False
     api = MagicMock()
-    api.playerTelemetry.return_value = None
-    api.playerScoring.return_value = None
+    api.playersVehicleTelemetry.return_value = None
+    api.playersVehicleScoring.return_value = None
     reader.info = api
     reader._cbytestring = lambda b: b.decode('utf-8', 'ignore')
     assert reader.is_connected() is False

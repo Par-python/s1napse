@@ -29,3 +29,4 @@ internal-docs/
 .claude/
 .superpowers/
 .pytest_cache/
+docs
