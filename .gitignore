@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# PyInstaller / installer build artifacts
+build/
+dist/
+*.spec.bak
+
+# Generated installer version include
+installer/version.iss
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+
+# Local-only working notes (never push)
+internal-docs/
+
+# Local tooling state
+.claude/
+.superpowers/
+.pytest_cache/
