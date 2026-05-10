@@ -45,6 +45,8 @@ LOVELY_ID_MAP: dict[str, str] = {
     'mount_panorama':  'mount-panorama',
     'nurburgring_24h': 'nurburgring-24h',
     'nurburgring':     'nurburgring',
+    # TUMFTM bundles the Nürburgring GP layout as `Nuerburgring.csv`; alias to the same Lovely file.
+    'nuerburgring':    'nurburgring',
     'oulton_park':     'oulton-park',
     'paul_ricard':     'paul-ricard',
     'red_bull_ring':   'red-bull-ring',
