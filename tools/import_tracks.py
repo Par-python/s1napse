@@ -198,22 +198,36 @@ def _signed_area(pts: list[tuple[float, float]]) -> float:
 def _tangent_and_outward_normal(pts: list[tuple[float, float]],
                                 frac: float
                                 ) -> tuple[tuple[float, float], tuple[float, float]] | None:
-    """Return ((tx, ty), (nx, ny)) — unit tangent and unit outward normal — at `frac`.
-    None if the polyline is degenerate."""
+    """Return ((tx, ty), (nx, ny)) — unit tangent and unit outward direction — at `frac`.
+
+    The outward direction is computed as the vector from the track centroid to the
+    point, not from the local tangent's normal. Local tangents wiggle through
+    chicanes and can point the "outward" direction back across the track itself;
+    the centroid-relative direction is globally consistent.
+    """
     n = len(pts)
     if n < 2:
         return None
     i = int(frac * n) % n
     x0, y0 = pts[(i - 1) % n]
     x1, y1 = pts[(i + 1) % n]
+    px, py = pts[i]
     tx, ty = (x1 - x0), (y1 - y0)
     L = math.hypot(tx, ty)
     if L == 0:
         return None
     tx, ty = tx / L, ty / L
-    nx, ny = ty, -tx
-    if _signed_area(pts) < 0:
-        nx, ny = -nx, -ny
+    cx = sum(p[0] for p in pts) / n
+    cy = sum(p[1] for p in pts) / n
+    nx, ny = (px - cx), (py - cy)
+    R = math.hypot(nx, ny)
+    if R == 0:
+        # Fallback to local normal if the point sits exactly on the centroid.
+        nx, ny = ty, -tx
+        if _signed_area(pts) < 0:
+            nx, ny = -nx, -ny
+    else:
+        nx, ny = nx / R, ny / R
     return (tx, ty), (nx, ny)
 
 
@@ -236,7 +250,7 @@ def _compute_turn_offset(pts: list[tuple[float, float]],
 
 
 CLOSE_TURN_FRAC = 0.03  # turns within 3% of lap are considered "close"
-TANGENT_SHIFT   = 10.0  # renderer-units; shoves close-pair labels along the track
+TANGENT_SHIFT   = 18.0  # renderer-units; shoves close-pair labels along the track
 
 
 def _load_lovely_turns(s1napse_slug: str,
@@ -275,9 +289,10 @@ def _load_lovely_turns(s1napse_slug: str,
             # Detect close-pair neighbors (handles wrap-around for chicanes near S/F).
             close_prev = m > 1 and (frac - fracs[(idx - 2) % m]) % 1.0 < CLOSE_TURN_FRAC
             close_next = m > 1 and (fracs[idx % m] - frac) % 1.0 < CLOSE_TURN_FRAC
-            # Pull the label further outward when shifted along the tangent — a
-            # pure-tangent shift can drag the label back onto the track surface.
-            outward_mag = 18.0 if (close_prev ^ close_next) else 12.0
+            # Singletons get a clean outward push. Close-pair members rely mostly
+            # on the tangent shift to spread apart, with reduced outward to avoid
+            # crossing nearby track sections in chicane geometry.
+            outward_mag = 8.0 if (close_prev or close_next) else 12.0
             ox, oy = nx * outward_mag, ny * outward_mag
             if close_prev and not close_next:
                 # later member of a close pair: shift forward along the track
