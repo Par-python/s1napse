@@ -72,3 +72,40 @@ class TestComputeTurnOffset:
         ox, oy = it._compute_turn_offset(cw, 0.125, magnitude=0.04)
         assert ox < 0
         assert abs(oy) < 1e-6
+
+
+class TestLoadLovelyTurns:
+    def _stub_pts(self):
+        # Simple closed loop, enough points for offset computation to be meaningful.
+        # Counter-clockwise circle approximation.
+        n = 100
+        out = []
+        for i in range(n):
+            theta = 2 * math.pi * i / n
+            out.append((0.5 + 0.4 * math.cos(theta), 0.5 + 0.4 * math.sin(theta)))
+        return out
+
+    def test_returns_empty_for_unknown_slug(self):
+        assert it._load_lovely_turns('does_not_exist', self._stub_pts()) == []
+
+    def test_spa_returns_expected_count_and_shape(self):
+        # Spa's vendored file has 14 turn entries; 13 have a `marker`. The "Courbe Paul Frere"
+        # entry has only start/end and is skipped.
+        turns = it._load_lovely_turns('spa', self._stub_pts())
+        assert len(turns) == 13
+        for entry in turns:
+            assert len(entry) == 5
+            frac, lbl, name, ox, oy = entry
+            assert 0.0 <= frac <= 1.0
+            assert isinstance(lbl, str)
+            assert isinstance(name, str) and name
+            assert isinstance(ox, float)
+            assert isinstance(oy, float)
+
+    def test_labels_are_one_based_and_ordered_by_marker(self):
+        turns = it._load_lovely_turns('spa', self._stub_pts())
+        labels = [t[1] for t in turns]
+        assert labels[0] == '1'
+        assert labels[-1] == str(len(turns))
+        fracs = [t[0] for t in turns]
+        assert fracs == sorted(fracs)

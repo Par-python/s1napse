@@ -221,6 +221,31 @@ def _compute_turn_offset(pts: list[tuple[float, float]],
     return (round(nx * magnitude, 4), round(ny * magnitude, 4))
 
 
+def _load_lovely_turns(s1napse_slug: str,
+                       pts_normalized: list[tuple[float, float]]
+                       ) -> list[list]:
+    """Load turn metadata for a track slug. Returns the renderer's tuple shape:
+    [frac, label, name, ox, oy]. Empty list if no mapping or no file."""
+    lovely_id = LOVELY_ID_MAP.get(s1napse_slug)
+    if lovely_id is None:
+        return []
+    src = LOVELY_DIR / f'{lovely_id}.json'
+    if not src.exists():
+        return []
+    with open(src) as f:
+        data = json.load(f)
+    raw = data.get('turn', []) or []
+    keyed = [t for t in raw if isinstance(t.get('marker'), (int, float))]
+    keyed.sort(key=lambda t: t['marker'])
+    out: list[list] = []
+    for idx, t in enumerate(keyed, start=1):
+        frac = float(t['marker'])
+        name = str(t.get('name') or '')
+        ox, oy = _compute_turn_offset(pts_normalized, frac)
+        out.append([round(frac, 4), str(idx), name, ox, oy])
+    return out
+
+
 def convert(name: str, force: bool) -> str:
     key = slug(name)
     dst = DST_DIR / f'{key}.json'
