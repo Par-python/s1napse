@@ -6,10 +6,10 @@
 
 #include "version.iss"
 
-#define MyAppName "Synapse"
+#define MyAppName "S1napse"
 #define MyAppPublisher "S1napse"
 #define MyAppURL "https://github.com/Par-python/s1napse"
-#define MyAppExeName "Synapse.exe"
+#define MyAppExeName "S1napse.exe"
 
 [Setup]
 AppId={{6F7B0E6E-1F8D-4F3A-9D1B-5A7C2E1F9A01}
@@ -25,12 +25,14 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=..\dist\installer
-OutputBaseFilename=Synapse-Setup-{#MyAppVersion}
+OutputBaseFilename=S1napse-Setup-{#MyAppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+SetupIconFile=..\icon.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -39,7 +41,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Files]
-Source: "..\dist\Synapse.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\S1napse.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

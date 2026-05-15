@@ -127,7 +127,7 @@ class TelemetrySampler(threading.Thread):
 class TelemetryApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('s1napse')
+        self.setWindowTitle('S1napse')
         _screen = QApplication.primaryScreen().availableGeometry()
         _w = min(1640, _screen.width() - 40)
         _h = min(980, _screen.height() - 60)
@@ -475,7 +475,7 @@ class TelemetryApp(QMainWindow):
         pl.addWidget(sec3)
 
         tos_text = (
-            's1napse is in open beta. Everything is free during the beta '
+            'S1napse is in open beta. Everything is free during the beta '
             'period. The software is provided as-is, without warranty of any '
             'kind. Telemetry data stays on your machine — nothing is uploaded.'
         )

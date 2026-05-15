@@ -56,7 +56,7 @@ class UpdateChecker(QThread):
         try:
             req = urllib.request.Request(
                 RELEASES_URL,
-                headers={"User-Agent": f"Synapse/{__version__}"},
+                headers={"User-Agent": f"S1napse/{__version__}"},
             )
             with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))

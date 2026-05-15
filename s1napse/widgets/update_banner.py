@@ -67,7 +67,7 @@ class UpdateBanner(QFrame):
 
     def show_update(self, version: str, html_url: str) -> None:
         self._html_url = html_url
-        self._message.setText(f"Synapse {version} is available")
+        self._message.setText(f"S1napse {version} is available")
         self.show()
 
     def _open_release_url(self) -> None:

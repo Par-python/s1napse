@@ -61,7 +61,7 @@ def run_pyinstaller() -> None:
         cwd=str(ROOT),
         check=True,
     )
-    exe = DIST_DIR / "Synapse.exe"
+    exe = DIST_DIR / "S1napse.exe"
     if not exe.exists():
         raise RuntimeError(f"PyInstaller did not produce {exe}")
     print(f"[build] PyInstaller produced {exe}")
@@ -88,7 +88,7 @@ def run_iscc() -> Path:
         cwd=str(ROOT),
         check=True,
     )
-    candidates = sorted(INSTALLER_OUT.glob("Synapse-Setup-*.exe"))
+    candidates = sorted(INSTALLER_OUT.glob("S1napse-Setup-*.exe"))
     if not candidates:
         raise RuntimeError(f"ISCC ran but no installer found in {INSTALLER_OUT}")
     return candidates[-1]

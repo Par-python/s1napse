@@ -42,7 +42,7 @@ a = Analysis(
     ['s1napse.py'],
     pathex=[],
     binaries=pyqt6_binaries + mpl_binaries,
-    datas=pyqt6_datas + mpl_datas,
+    datas=pyqt6_datas + mpl_datas + [('icon.ico', '.')],
     hiddenimports=hidden,
     hookspath=[],
     hooksconfig={},
@@ -65,7 +65,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='Synapse',
+    name='S1napse',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -78,5 +78,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # icon='icon.ico',  # uncomment and add icon.ico to use a custom icon
+    icon='icon.ico',
 )
