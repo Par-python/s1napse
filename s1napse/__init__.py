@@ -1,3 +1,3 @@
 # s1napse telemetry package
 
-__version__ = "0.5.1-beta"
+__version__ = "0.6.0-beta"
