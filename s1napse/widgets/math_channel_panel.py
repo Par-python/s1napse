@@ -184,7 +184,7 @@ class MathChannelPanel(QWidget):
 
         # -- Header --
         hdr = QHBoxLayout()
-        title = QLabel('MATH CHANNELS')
+        title = QLabel('Math channels')
         title.setFont(sans(9, bold=True))
         title.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
         hdr.addWidget(title)
@@ -281,7 +281,7 @@ class MathChannelPanel(QWidget):
         vals = self._engine._last_values
 
         if user_channels:
-            lbl = QLabel('YOUR CHANNELS')
+            lbl = QLabel('Your channels')
             lbl.setFont(sans(8, bold=True))
             lbl.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
             self._list_layout.addWidget(lbl)
@@ -291,7 +291,7 @@ class MathChannelPanel(QWidget):
                 self._rows[ch.name] = row
 
         if builtin_channels:
-            lbl2 = QLabel('BUILT-IN')
+            lbl2 = QLabel('Built-in')
             lbl2.setFont(sans(8, bold=True))
             lbl2.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px; margin-top: 8px;')
             self._list_layout.addWidget(lbl2)

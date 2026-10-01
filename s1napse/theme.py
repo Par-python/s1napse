@@ -115,7 +115,6 @@ def build_app_qss() -> str:
 QMainWindow, QWidget {{
     background-color: {BG};
     color: {TEXT_SECONDARY};
-    font-size: {FONT_BODY_ROOMY}pt;
 }}
 
 QTabWidget::pane {{

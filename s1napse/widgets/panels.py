@@ -26,12 +26,13 @@ class SectorTimesPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMaximumWidth(230)
-        self.setStyleSheet(f'background: {BG2};')
+        self.setObjectName('SectorTimesPanel')
+        self.setStyleSheet(f'#SectorTimesPanel {{ background: {BG2};' f' }}')
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
         layout.setContentsMargins(10, 10, 10, 10)
 
-        laps_header = QLabel('LAP TIMES')
+        laps_header = QLabel('Lap times')
         laps_header.setFont(sans(8))
         laps_header.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
         layout.addWidget(laps_header)
@@ -49,8 +50,9 @@ class SectorTimesPanel(QWidget):
         self.lap_gap_label.setStyleSheet(f'color: {TXT2};')
 
         lap_card = QFrame()
-        lap_card.setStyleSheet(f'background: {BG3}; border: 1px solid {BORDER};'
-                               f' border-radius: 4px; padding: 6px;')
+        lap_card.setObjectName('LapTimesCard')
+        lap_card.setStyleSheet(f'#LapTimesCard {{ background: {BG3}; border: 1px solid {BORDER};'
+                               f' border-radius: 4px; padding: 6px;' f' }}')
         lc = QVBoxLayout(lap_card)
         lc.setSpacing(3)
         lc.addWidget(self.lap_current_label)
@@ -60,7 +62,7 @@ class SectorTimesPanel(QWidget):
 
         layout.addWidget(h_line())
 
-        sectors_header = QLabel('SECTOR GAPS')
+        sectors_header = QLabel('Sector gaps')
         sectors_header.setFont(sans(8))
         sectors_header.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
         layout.addWidget(sectors_header)
@@ -110,8 +112,9 @@ class SectorTimesPanel(QWidget):
         self.lap_current_label.setMaximumWidth(210)
 
         gaps_frame = QFrame()
-        gaps_frame.setStyleSheet(f'background: {BG3}; border: 1px solid {BORDER};'
-                                 f' border-radius: 4px;')
+        gaps_frame.setObjectName('SectorGapsCard')
+        gaps_frame.setStyleSheet(f'#SectorGapsCard {{ background: {BG3}; border: 1px solid {BORDER};'
+                                 f' border-radius: 4px;' f' }}')
         gaps_frame.setLayout(grid)
         layout.addWidget(gaps_frame)
         layout.addStretch()
@@ -184,7 +187,8 @@ class SectorScrubWidget(QWidget):
         self._total_ms: int = 1
         self._sectors: list = []
         self.setFixedHeight(self._MARK_H + 30)
-        self.setStyleSheet(f'background: {BG1}; border-radius: 4px;')
+        self.setObjectName('SectorScrubWidget')
+        self.setStyleSheet(f'#SectorScrubWidget {{ background: {BG1}; border-radius: 4px;' f' }}')
 
         self.slider = QSlider(Qt.Orientation.Horizontal, self)
         self.slider.setRange(0, 1000)
@@ -262,14 +266,15 @@ class LapHistoryPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(f'background: {BG2}; border-radius: 4px;')
+        self.setObjectName('LapHistoryPanel')
+        self.setStyleSheet(f'#LapHistoryPanel {{ background: {BG2}; border-radius: 4px;' f' }}')
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(10, 10, 10, 6)
         outer.setSpacing(6)
 
         hdr_row = QHBoxLayout()
-        title = QLabel('SESSION LAPS')
+        title = QLabel('Session laps')
         title.setFont(sans(8))
         title.setStyleSheet(f'color: {TXT2}; letter-spacing: 1.5px;')
         hdr_row.addWidget(title)

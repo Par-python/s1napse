@@ -261,7 +261,7 @@ class FormulaEditorWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        title = QLabel('FORMULA EDITOR')
+        title = QLabel('Formula editor')
         title.setFont(sans(9, bold=True))
         title.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
         layout.addWidget(title)

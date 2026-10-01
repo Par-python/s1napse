@@ -60,8 +60,9 @@ class ReplayTab(QWidget):
 
         # ── Top controls bar ──────────────────────────────────────────
         ctrl_card = QFrame()
+        ctrl_card.setObjectName('ReplayControls')
         ctrl_card.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
+            f'#ReplayControls {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;' f' }}')
         ctrl_row = QHBoxLayout(ctrl_card)
         ctrl_row.setContentsMargins(14, 8, 14, 8)
         ctrl_row.setSpacing(10)
@@ -123,7 +124,7 @@ class ReplayTab(QWidget):
         self._replay_play_btn.clicked.connect(self._app._toggle_replay_playback)
         ctrl_row.addWidget(self._replay_play_btn)
 
-        ctrl_row.addWidget(_lbl('SPEED'))
+        ctrl_row.addWidget(_lbl('Speed'))
         self._replay_speed_combo = QComboBox()
         self._replay_speed_combo.addItems(['0.25x', '0.5x', '1x', '2x', '5x', '10x'])
         self._replay_speed_combo.setCurrentIndex(2)
@@ -163,15 +164,16 @@ class ReplayTab(QWidget):
 
         # ── Left top: mini dashboard ──────────────────────────────────
         left_panel = QFrame()
+        left_panel.setObjectName('ReplayDashboard')
         left_panel.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
+            f'#ReplayDashboard {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;' f' }}')
         ll = QVBoxLayout(left_panel)
         ll.setContentsMargins(12, 10, 12, 10)
         ll.setSpacing(6)
 
         # ── Sector badge ──────────────────────────────
         sec_row = QHBoxLayout()
-        sec_hdr = QLabel('SECTOR')
+        sec_hdr = QLabel('Sector')
         sec_hdr.setFont(sans(7, bold=True))
         sec_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
         sec_row.addWidget(sec_hdr)
@@ -197,7 +199,7 @@ class ReplayTab(QWidget):
 
         speed_col = QVBoxLayout()
         speed_col.setSpacing(0)
-        spd_hdr = QLabel('SPEED')
+        spd_hdr = QLabel('Speed')
         spd_hdr.setFont(sans(7, bold=True))
         spd_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
         self._rpl_speed_lbl = QLabel('0')
@@ -213,7 +215,7 @@ class ReplayTab(QWidget):
 
         gear_col = QVBoxLayout()
         gear_col.setSpacing(0)
-        gear_hdr = QLabel('GEAR')
+        gear_hdr = QLabel('Gear')
         gear_hdr.setFont(sans(7, bold=True))
         gear_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
         self._rpl_gear_lbl = QLabel('—')
@@ -241,7 +243,7 @@ class ReplayTab(QWidget):
         info_col.addWidget(self._rpl_rev_bar)
 
         # Steering
-        steer_hdr = QLabel('STEERING')
+        steer_hdr = QLabel('Steering')
         steer_hdr.setFont(sans(7, bold=True))
         steer_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
         info_col.addWidget(steer_hdr)
@@ -256,7 +258,7 @@ class ReplayTab(QWidget):
         side_col = QVBoxLayout()
         side_col.setSpacing(4)
 
-        ped_hdr = QLabel('T / B')
+        ped_hdr = QLabel('Throttle / brake')
         ped_hdr.setFont(sans(7, bold=True))
         ped_hdr.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
         side_col.addWidget(ped_hdr)
@@ -301,11 +303,11 @@ class ReplayTab(QWidget):
         ]
 
         for title, color, graph in [
-            ('SPEED',            C_SPEED,    self._rpl_speed_graph),
+            ('Speed',            C_SPEED,    self._rpl_speed_graph),
             ('THROTTLE / BRAKE', C_THROTTLE, self._rpl_thr_brk_graph),
-            ('STEERING',        C_STEER,    self._rpl_steer_graph),
+            ('Steering',        C_STEER,    self._rpl_steer_graph),
             ('RPM',             C_RPM,      self._rpl_rpm_graph),
-            ('GEAR',            C_GEAR,     self._rpl_gear_graph),
+            ('Gear',            C_GEAR,     self._rpl_gear_graph),
         ]:
             gv.addWidget(_channel_header(color, title))
             gv.addWidget(graph)
@@ -323,14 +325,15 @@ class ReplayTab(QWidget):
 
         # ── Right: track map ──────────────────────────────────────────
         right_panel = QFrame()
+        right_panel.setObjectName('ReplayTrackPanel')
         right_panel.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
+            f'#ReplayTrackPanel {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;' f' }}')
         rl = QVBoxLayout(right_panel)
         rl.setContentsMargins(8, 8, 8, 8)
         rl.setSpacing(4)
 
         map_hdr_row = QHBoxLayout()
-        map_title = QLabel('TRACK POSITION')
+        map_title = QLabel('Track position')
         map_title.setFont(sans(7, bold=True))
         map_title.setStyleSheet(f'color: {TXT2}; letter-spacing: 1px;')
         map_hdr_row.addWidget(map_title)

@@ -174,6 +174,8 @@ class TitleBar(QFrame):
         self._source_lbl.setText(shown)
         self._pill.setAccessibleName(shown)
         self._live_dot.setVisible(self._live)
+        self._pill.setMinimumWidth(self._pill.layout().sizeHint().width())
+        self._pill.updateGeometry()
 
     def setSession(self, *, lap: str = '', stint: str = '', last_lap: str = '') -> None:
         self._lap.setText(lap)

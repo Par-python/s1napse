@@ -61,7 +61,7 @@ from .widgets.title_bar import TitleBar
 from .updater import UpdateChecker
 from .widgets.graphs import _style_ax, LINE_W
 from .widgets.math_channel_panel import MathChannelPanel
-from .widgets.tabs import RaceTab, TyresTab, DashboardTab, LapAnalysisTab, TelemetryTab, LapComparisonTab, SessionTab, ReplayTab
+from .widgets.tabs import CoachTab, RaceTab, TyresTab, DashboardTab, LapAnalysisTab, TelemetryTab, LapComparisonTab, SessionTab, ReplayTab
 from .coaching.lap_coach import LapCoach
 from .coaching.math_engine import MathEngine
 from .coaching.strategy_engine import StrategyEngine
@@ -299,6 +299,8 @@ class TelemetryApp(QMainWindow):
         self.tabs.addTab(self.dashboard_tab, 'Dashboard')
         self.telemetry_tab = TelemetryTab(self)
         self.tabs.addTab(self.telemetry_tab, 'Telemetry')
+        self.coach_tab = CoachTab()
+        self.tabs.addTab(self.coach_tab, TAB_TITLES[2])
         self.lap_analysis_tab = LapAnalysisTab(self)
         self.tabs.addTab(self.lap_analysis_tab, 'Lap analysis')
         self.race_tab = RaceTab(self)
@@ -414,9 +416,9 @@ class TelemetryApp(QMainWindow):
         pl.setSpacing(14)
 
         # ---- SAVE LOCATION section ----
-        sec1 = QLabel('CSV SAVE LOCATION')
+        sec1 = QLabel('CSV save location')
         sec1.setFont(sans(10, bold=True))
-        sec1.setStyleSheet(f'color: {TEXT_PRIMARY}; background: transparent; border: none; letter-spacing: 2px;')
+        sec1.setStyleSheet(f'color: {TEXT_PRIMARY}; background: transparent; border: none; ')
         pl.addWidget(sec1)
 
         path_row = QHBoxLayout()
@@ -458,9 +460,9 @@ class TelemetryApp(QMainWindow):
         pl.addSpacing(8)
 
         # ---- REQUIREMENTS section ----
-        sec2 = QLabel('REQUIREMENTS')
+        sec2 = QLabel('Requirements')
         sec2.setFont(sans(10, bold=True))
-        sec2.setStyleSheet(f'color: {TEXT_PRIMARY}; background: transparent; border: none; letter-spacing: 2px;')
+        sec2.setStyleSheet(f'color: {TEXT_PRIMARY}; background: transparent; border: none; ')
         pl.addWidget(sec2)
 
         req_text = (
@@ -480,9 +482,9 @@ class TelemetryApp(QMainWindow):
         pl.addSpacing(8)
 
         # ---- TERMS section ----
-        sec3 = QLabel('TERMS')
+        sec3 = QLabel('Terms')
         sec3.setFont(sans(10, bold=True))
-        sec3.setStyleSheet(f'color: {TEXT_PRIMARY}; background: transparent; border: none; letter-spacing: 2px;')
+        sec3.setStyleSheet(f'color: {TEXT_PRIMARY}; background: transparent; border: none; ')
         pl.addWidget(sec3)
 
         tos_text = (
@@ -541,7 +543,7 @@ class TelemetryApp(QMainWindow):
                 border-radius: 6px;
                 font-size: 13px;
                 font-weight: bold;
-                letter-spacing: 2px;
+
             }}
             QPushButton:hover {{ background: #000000; }}
             QPushButton:pressed {{ background: #3A3A3C; }}
@@ -601,7 +603,7 @@ class TelemetryApp(QMainWindow):
         outer.addStretch(2)
 
         # Title
-        title = QLabel('ELM327 OBD-II SETUP')
+        title = QLabel('ELM327 OBD-II setup')
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setFont(sans(28, bold=True))
         title.setStyleSheet(f'color: {TEXT_PRIMARY}; background: transparent; letter-spacing: 4px;')
@@ -631,7 +633,7 @@ class TelemetryApp(QMainWindow):
         fl.setSpacing(14)
 
         # Connection type
-        type_lbl = QLabel('CONNECTION TYPE')
+        type_lbl = QLabel('Connection type')
         type_lbl.setFont(sans(8, bold=True))
         type_lbl.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; border: none;'
                                f' letter-spacing: 1px;')
@@ -653,7 +655,7 @@ class TelemetryApp(QMainWindow):
         wfl.setContentsMargins(0, 0, 0, 0)
         wfl.setSpacing(8)
 
-        ip_lbl = QLabel('IP ADDRESS')
+        ip_lbl = QLabel('IP address')
         ip_lbl.setFont(sans(8, bold=True))
         ip_lbl.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; border: none;'
                              f' letter-spacing: 1px;')
@@ -665,7 +667,7 @@ class TelemetryApp(QMainWindow):
         """)
         wfl.addWidget(self._obd_ip)
 
-        port_lbl = QLabel('PORT')
+        port_lbl = QLabel('Port')
         port_lbl.setFont(sans(8, bold=True))
         port_lbl.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; border: none;'
                                f' letter-spacing: 1px;')
@@ -686,7 +688,7 @@ class TelemetryApp(QMainWindow):
         bfl.setContentsMargins(0, 0, 0, 0)
         bfl.setSpacing(8)
 
-        serial_lbl = QLabel('SERIAL PORT')
+        serial_lbl = QLabel('Serial port')
         serial_lbl.setFont(sans(8, bold=True))
         serial_lbl.setStyleSheet(f'color: {TEXT_MUTED}; background: transparent; border: none;'
                                  f' letter-spacing: 1px;')
@@ -730,7 +732,7 @@ class TelemetryApp(QMainWindow):
         connect_btn.setFixedHeight(40)
         connect_btn.setStyleSheet(f"""
             QPushButton {{ background: {C_SPEED}; color: {BG}; border: none;
-                           border-radius: 6px; font-weight: bold; letter-spacing: 2px; }}
+                           border-radius: 6px; font-weight: bold;  }}
             QPushButton:hover {{ background: #0077ED; }}
             QPushButton:pressed {{ background: #006EDB; }}
         """)
@@ -946,12 +948,12 @@ class TelemetryApp(QMainWindow):
         sc_l = QVBoxLayout(speed_card)
         sc_l.setContentsMargins(24, 20, 24, 20)
         sc_l.setSpacing(4)
-        sc_hdr = QLabel('SPEED')
-        sc_hdr.setFont(sans(8, bold=True))
-        sc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 2px;')
+        sc_hdr = QLabel('Speed')
+        sc_hdr.setFont(theme.label_font())
+        sc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; ')
         sc_l.addWidget(sc_hdr)
         self._real_speed = QLabel('0')
-        self._real_speed.setFont(mono(52, bold=True))
+        self._real_speed.setFont(theme.mono_font(theme.FONT_HERO + 18, bold=True))
         self._real_speed.setStyleSheet(f'color: {C_SPEED};')
         self._real_speed.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sc_l.addWidget(self._real_speed)
@@ -971,8 +973,8 @@ class TelemetryApp(QMainWindow):
         rc_l.setContentsMargins(24, 20, 24, 20)
         rc_l.setSpacing(4)
         rc_hdr = QLabel('RPM')
-        rc_hdr.setFont(sans(8, bold=True))
-        rc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 2px;')
+        rc_hdr.setFont(theme.label_font())
+        rc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; ')
         rc_l.addWidget(rc_hdr)
         self._real_rpm = QLabel('0')
         self._real_rpm.setFont(mono(52, bold=True))
@@ -993,9 +995,9 @@ class TelemetryApp(QMainWindow):
         gc_l = QVBoxLayout(gear_card)
         gc_l.setContentsMargins(16, 20, 16, 20)
         gc_l.setSpacing(4)
-        gc_hdr = QLabel('GEAR')
-        gc_hdr.setFont(sans(8, bold=True))
-        gc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 2px;')
+        gc_hdr = QLabel('Gear')
+        gc_hdr.setFont(theme.label_font())
+        gc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; ')
         gc_hdr.setAlignment(Qt.AlignmentFlag.AlignCenter)
         gc_l.addWidget(gc_hdr)
         self._real_gear = QLabel('N')
@@ -1020,9 +1022,9 @@ class TelemetryApp(QMainWindow):
         tc_l = QVBoxLayout(thr_card)
         tc_l.setContentsMargins(20, 14, 20, 14)
         tc_l.setSpacing(6)
-        tc_hdr = QLabel('THROTTLE')
-        tc_hdr.setFont(sans(8, bold=True))
-        tc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 2px;')
+        tc_hdr = QLabel('Throttle')
+        tc_hdr.setFont(theme.label_font())
+        tc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; ')
         tc_l.addWidget(tc_hdr)
         self._real_throttle_val = QLabel('0%')
         self._real_throttle_val.setFont(mono(24, bold=True))
@@ -1049,9 +1051,9 @@ class TelemetryApp(QMainWindow):
         fc_l = QVBoxLayout(fuel_card)
         fc_l.setContentsMargins(20, 14, 20, 14)
         fc_l.setSpacing(6)
-        fc_hdr = QLabel('FUEL LEVEL')
-        fc_hdr.setFont(sans(8, bold=True))
-        fc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 2px;')
+        fc_hdr = QLabel('Fuel level')
+        fc_hdr.setFont(theme.label_font())
+        fc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; ')
         fc_l.addWidget(fc_hdr)
         self._real_fuel = QLabel('--%')
         self._real_fuel.setFont(mono(24, bold=True))
@@ -1078,9 +1080,9 @@ class TelemetryApp(QMainWindow):
         cc_l = QVBoxLayout(cool_card)
         cc_l.setContentsMargins(20, 14, 20, 14)
         cc_l.setSpacing(6)
-        cc_hdr = QLabel('COOLANT TEMP')
-        cc_hdr.setFont(sans(8, bold=True))
-        cc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 2px;')
+        cc_hdr = QLabel('Coolant temp')
+        cc_hdr.setFont(theme.label_font())
+        cc_hdr.setStyleSheet(f'color: {TEXT_MUTED}; ')
         cc_l.addWidget(cc_hdr)
         self._real_coolant = QLabel('--\u00b0C')
         self._real_coolant.setFont(mono(24, bold=True))
@@ -1097,9 +1099,9 @@ class TelemetryApp(QMainWindow):
         ic_l = QVBoxLayout(intake_card)
         ic_l.setContentsMargins(20, 14, 20, 14)
         ic_l.setSpacing(6)
-        ic_hdr = QLabel('INTAKE TEMP')
-        ic_hdr.setFont(sans(8, bold=True))
-        ic_hdr.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 2px;')
+        ic_hdr = QLabel('Intake temp')
+        ic_hdr.setFont(theme.label_font())
+        ic_hdr.setStyleSheet(f'color: {TEXT_MUTED}; ')
         ic_l.addWidget(ic_hdr)
         self._real_intake = QLabel('--\u00b0C')
         self._real_intake.setFont(mono(24, bold=True))
@@ -1188,13 +1190,17 @@ class TelemetryApp(QMainWindow):
     def _update_title_bar(self) -> None:
         """Refresh the TitleBar with live source, track, temps, and lap info."""
         src_name = ''
-        if self.current_reader is self.acc_reader: src_name = 'ACC'
-        elif self.current_reader is self.ac_reader: src_name = 'AC'
-        elif self.current_reader is self.ir_reader: src_name = 'iRacing'
-        elif self.current_reader is self.elm_reader: src_name = 'OBD-II'
-        track = self._last_track_name or ''
-        air = f'{self._last_air_temp:.0f}°C' if self._last_air_temp else ''
-        road = f'{self._last_road_temp:.0f}°C' if self._last_road_temp else ''
+        reader = self.current_reader
+        if reader is not None and reader.is_connected():
+            for candidate, name in ((self.acc_reader, 'ACC'), (self.ac_reader, 'AC'),
+                                    (self.ir_reader, 'iRacing'), (self.lmu_reader, 'LMU'),
+                                    (self.elm_reader, 'OBD-II')):
+                if reader is candidate:
+                    src_name = name
+                    break
+        track = self._last_track_name if src_name else ''
+        air = f'{self._last_air_temp:.0f}°C' if src_name and self._last_air_temp else ''
+        road = f'{self._last_road_temp:.0f}°C' if src_name and self._last_road_temp else ''
         parts = [p for p in (src_name, track, f'{air} / {road}' if air or road else '') if p]
         self.title_bar.setSource(' · '.join(parts), live=src_name != '')
 
@@ -1528,8 +1534,13 @@ class TelemetryApp(QMainWindow):
         self._populate_replay_combo()
         self._refresh_session_tab()
 
-        # Coach tab was removed (raw-data focus). LapCoach engine still
-        # runs for any internal use, but no UI consumer needs it now.
+        # Coaching: analyse the lap we just stored and show it on the Coach tab.
+        try:
+            report = self._lap_coach.analyze(self.session_laps[-1])
+            if report is not None:
+                self.coach_tab.set_report(report, history=self._lap_coach.reports)
+        except Exception as e:  # analysis must never break lap storage
+            print(f'Coaching analysis error: {e}')
 
         # Promote this lap to the reference for delta / sector comparison
         if len(dists) > 0 and len(dists) == len(times):
@@ -3342,9 +3353,9 @@ class TelemetryApp(QMainWindow):
         # ── Graph updates (only render when visible) ──────────────────────
         steer_deg = math.degrees(steer_angle)
         gear_int = gear if isinstance(gear, int) else 0
-        _current_tab = self.tabs.currentIndex()
+        _current_tab = self.tabs.currentWidget()
 
-        if _current_tab == 1:  # TELEMETRY GRAPHS
+        if _current_tab is self.telemetry_tab:  # TELEMETRY GRAPHS
             self.speed_graph.update_data(speed)
             self.pedals_graph.update_data(throttle, brake)
             self.steering_graph.update_data(steer_deg)
@@ -3362,7 +3373,7 @@ class TelemetryApp(QMainWindow):
         _track_length_m = TRACKS.get(self._active_track_key or '', {}).get('length_m', MONZA_LENGTH_M)
         distance_m = lap_progress * _track_length_m
 
-        if _current_tab == 2:  # LAP ANALYSIS
+        if _current_tab is self.lap_analysis_tab:  # LAP ANALYSIS
             self.ana_speed.update_data(distance_m, speed)
             self.ana_throttle_brake.update_data(distance_m, throttle, brake)
             self.ana_gear.update_data(distance_m, gear_int)
@@ -3401,7 +3412,7 @@ class TelemetryApp(QMainWindow):
         self._math_engine.set_raw_channels(set(_math_raw.keys()))
         try:
             _math_vals = self._math_engine.evaluate(_math_raw, time.monotonic())
-            if _current_tab == 1:  # TELEMETRY GRAPHS
+            if _current_tab is self.telemetry_tab:  # TELEMETRY GRAPHS
                 self._update_math_graphs(_math_vals)
         except Exception:
             pass  # never crash the tick loop for math channels
@@ -3409,13 +3420,13 @@ class TelemetryApp(QMainWindow):
         # ── Delta graph render ───────────────────────────────────────────
         _lap_snap = self.current_lap_data  # snapshot once — property rebuilds dict each call
         if self._ref_lap_dists:
-            if _current_tab == 2:  # LAP ANALYSIS
+            if _current_tab is self.lap_analysis_tab:  # LAP ANALYSIS
                 n_d = min(len(_lap_snap['dist_m']), len(self._current_deltas))
                 self.time_delta_graph.update_data(
                     _lap_snap['dist_m'][:n_d],
                     self._current_deltas[:n_d],
                     distance_m)
-        elif _current_tab == 2:
+        elif _current_tab is self.lap_analysis_tab:
             self.time_delta_graph.update_data([], [], distance_m)
 
         # ── Sector panel ─────────────────────────────────────────────────

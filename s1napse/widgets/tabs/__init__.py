@@ -9,6 +9,7 @@
 # we'll replace this with explicit signals; for v1 the direct ref keeps the
 # refactor minimal.
 
+from .coach import CoachTab
 from .race import RaceTab
 from .tyres import TyresTab
 from .dashboard import DashboardTab
@@ -18,5 +19,5 @@ from .comparison import LapComparisonTab
 from .session import SessionTab
 from .replay import ReplayTab
 
-__all__ = ['RaceTab', 'TyresTab', 'DashboardTab', 'LapAnalysisTab',
+__all__ = ['CoachTab', 'RaceTab', 'TyresTab', 'DashboardTab', 'LapAnalysisTab',
            'TelemetryTab', 'LapComparisonTab', 'SessionTab', 'ReplayTab']

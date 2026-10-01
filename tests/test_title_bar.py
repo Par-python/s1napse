@@ -61,3 +61,30 @@ def test_clicking_pill_opens_popover(app):
     t.sourceButton().click()
     assert t.popover().isVisible()
     t.popover().hide()
+
+
+def test_source_text_fits_inside_pill(app):
+    t = TitleBar()
+    t.resize(1600, 48)
+    t.setSource('AC · Monza · 23°C / 38°C')
+    t.show()
+    app.processEvents()
+    assert t._source_lbl.width() >= t._source_lbl.sizeHint().width()
+    t.close()
+
+
+def test_app_disconnected_source_has_no_stale_context(app):
+    from s1napse.app import TelemetryApp
+    w = TelemetryApp()
+    try:
+        w.current_reader = None
+        w._last_track_name = 'Monza'
+        w._last_air_temp = 23
+        w._update_title_bar()
+        assert w.title_bar.sourceText() == ''
+        assert not w.title_bar.isLive()
+        w.current_reader = w.ir_reader
+        w._update_title_bar()
+        assert w.title_bar.sourceText() == ''
+    finally:
+        w.close()

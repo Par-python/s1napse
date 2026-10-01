@@ -40,8 +40,9 @@ class SessionTab(QWidget):
 
         # ── Stats bar ─────────────────────────────────────────────────────
         self._sess_stats_card = QFrame()
+        self._sess_stats_card.setObjectName('SessionStatsCard')
         self._sess_stats_card.setStyleSheet(
-            f'background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;')
+            f'#SessionStatsCard {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 6px;' f' }}')
         stats_row = QHBoxLayout(self._sess_stats_card)
         stats_row.setContentsMargins(18, 10, 18, 10)
         stats_row.setSpacing(0)
@@ -64,10 +65,10 @@ class SessionTab(QWidget):
                                     f.setFixedWidth(1),
                                     f)[-1])(QFrame())
 
-        c1, self._sess_lbl_count = _stat_chip('LAPS', '0', TXT)
-        c2, self._sess_lbl_best  = _stat_chip('BEST LAP', '—:——.———', C_PURPLE)
-        c3, self._sess_lbl_avg   = _stat_chip('AVG LAP', '—:——.———', TXT)
-        c4, self._sess_lbl_gap   = _stat_chip('BEST → AVG', '—', TXT2)
+        c1, self._sess_lbl_count = _stat_chip('Laps', '0', TXT)
+        c2, self._sess_lbl_best  = _stat_chip('Best lap', '—:——.———', C_PURPLE)
+        c3, self._sess_lbl_avg   = _stat_chip('Average lap', '—:——.———', TXT)
+        c4, self._sess_lbl_gap   = _stat_chip('Best → average', '—', TXT2)
 
         for i, (col, _) in enumerate([(c1, None), (c2, None),
                                        (c3, None), (c4, None)]):

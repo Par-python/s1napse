@@ -154,3 +154,31 @@ def test_pill_is_rounded_and_label_sized(app):
     p = Pill('PB')
     assert p.font().pointSize() == theme.FONT_LABEL
     assert 'border-radius:999px' in p.styleSheet().replace(' ', '')
+
+
+def test_app_stylesheet_preserves_explicit_type_roles(app):
+    previous = app.styleSheet()
+    try:
+        app.setStyleSheet(theme.build_app_qss())
+        stat = Stat(value='123', size='xl')
+        stat.show()
+        app.processEvents()
+        assert stat.valueLabel().font().pointSize() == theme.FONT_HERO
+    finally:
+        stat.close()
+        app.setStyleSheet(previous)
+
+
+def test_lap_panel_label_does_not_inherit_card_frame(app):
+    from s1napse.widgets.panels import SectorTimesPanel
+    previous = app.styleSheet()
+    try:
+        app.setStyleSheet(theme.build_app_qss())
+        panel = SectorTimesPanel()
+        panel.show()
+        app.processEvents()
+        label = panel.lap_current_label
+        assert label.contentsRect().left() == 0
+    finally:
+        panel.close()
+        app.setStyleSheet(previous)
