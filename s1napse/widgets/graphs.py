@@ -19,40 +19,48 @@ from ..theme import (
 from .. import theme as _theme
 from ..utils import _interp_time_at_dist
 
+LINE_W = 1.8  # every data line; thin enough for dense traces, readable on white
+
 # Apply S1napse theme to matplotlib defaults — runs once on module import.
 _mpl.rcParams.update({
     'axes.edgecolor':    _theme.BORDER_SUBTLE,
     'axes.labelcolor':   _theme.TEXT_MUTED,
     'axes.titlecolor':   _theme.TEXT_MUTED,
-    'figure.facecolor':  _theme.BG,
+    'axes.spines.top':   False,
+    'axes.spines.right': False,
+    'figure.facecolor':  _theme.SURFACE,
     'axes.facecolor':    _theme.SURFACE,
-    'savefig.facecolor': _theme.BG,
-    'xtick.color':       _theme.TEXT_FAINT,
-    'ytick.color':       _theme.TEXT_FAINT,
+    'savefig.facecolor': _theme.SURFACE,
+    'xtick.color':       _theme.TEXT_MUTED,
+    'ytick.color':       _theme.TEXT_MUTED,
+    'xtick.major.size':  0,
+    'ytick.major.size':  0,
     'grid.color':        _theme.BORDER_SUBTLE,
-    'grid.alpha':        0.5,
-    'grid.linewidth':    0.5,
+    'grid.alpha':        1.0,
+    'grid.linewidth':    0.8,
+    'lines.linewidth':   LINE_W,
     'text.color':        _theme.TEXT_SECONDARY,
     'legend.facecolor':  _theme.SURFACE,
-    'legend.edgecolor':  _theme.BORDER_SUBTLE,
+    'legend.edgecolor':  _theme.SURFACE,
     'legend.labelcolor': _theme.TEXT_SECONDARY,
 })
 
 
 def _style_ax(ax, fig, ylabel: str = '', ylim=None, title: str = '', xlabel: str = '') -> None:
-    """Apply S1napse theme to a matplotlib axes — call once after ax creation."""
+    """Apply the light S1napse chart style to an axes. Call once after creating it."""
     ax.set_facecolor(_theme.SURFACE)
-    fig.patch.set_facecolor(_theme.BG)
-    for spine in ax.spines.values():
-        spine.set_color(_theme.BORDER_SUBTLE)
-        spine.set_linewidth(0.6)
-    ax.tick_params(axis='both', which='both',
-                   colors=_theme.TEXT_FAINT, labelsize=8.5,
-                   length=2, pad=4, width=0.6)
-    ax.grid(True, color=_theme.BORDER_SUBTLE, linewidth=0.5, alpha=0.5)
+    fig.patch.set_facecolor(_theme.SURFACE)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    for side in ('left', 'bottom'):
+        ax.spines[side].set_color(_theme.BORDER_SUBTLE)
+        ax.spines[side].set_linewidth(0.8)
+    ax.tick_params(axis='both', which='both', colors=_theme.TEXT_MUTED,
+                   labelsize=9, length=0, pad=6)
+    ax.grid(False)
+    ax.grid(True, axis='y', color=_theme.BORDER_SUBTLE, linewidth=0.8)
     if title:
-        ax.set_title(title, color=_theme.TEXT_MUTED, fontsize=10,
-                     loc='left', pad=6, fontweight=500)
+        ax.set_title(title, color=_theme.TEXT_MUTED, fontsize=10, loc='left', pad=8)
     if xlabel:
         ax.set_xlabel(xlabel, color=_theme.TEXT_MUTED, fontsize=9)
     if ylabel:
@@ -69,7 +77,7 @@ class ChannelGraph(FigureCanvas):
     """Single-channel live telemetry graph."""
 
     def __init__(self, color: str, ylabel: str, ylim=(0, 100), parent=None):
-        self.fig = Figure(figsize=(8, 2.2), facecolor=BG)
+        self.fig = Figure(figsize=(8, 2.2), facecolor=_theme.SURFACE)
         super().__init__(self.fig)
         self.setMinimumWidth(100)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -77,7 +85,7 @@ class ChannelGraph(FigureCanvas):
         _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
         self.setMinimumHeight(160)
         self.data = []
-        self.line, = self.ax.plot([], [], color=color, linewidth=1.4, animated=True)
+        self.line, = self.ax.plot([], [], color=color, linewidth=LINE_W, animated=True)
         self._xlim_max = _XLIM_CHUNK
         self.ax.set_xlim(0, self._xlim_max)
         self._bg = None
@@ -118,7 +126,7 @@ class MultiChannelGraph(FigureCanvas):
 
     def __init__(self, color1: str, color2: str, ylabel: str,
                  label1: str, label2: str, ylim=(0, 100), parent=None):
-        self.fig = Figure(figsize=(8, 2.2), facecolor=BG)
+        self.fig = Figure(figsize=(8, 2.2), facecolor=_theme.SURFACE)
         super().__init__(self.fig)
         self.setMinimumWidth(100)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -126,8 +134,8 @@ class MultiChannelGraph(FigureCanvas):
         _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
         self.setMinimumHeight(160)
         self.data1, self.data2 = [], []
-        self.line1, = self.ax.plot([], [], color=color1, linewidth=1.4, label=label1, animated=True)
-        self.line2, = self.ax.plot([], [], color=color2, linewidth=1.4, label=label2, animated=True)
+        self.line1, = self.ax.plot([], [], color=color1, linewidth=LINE_W, label=label1, animated=True)
+        self.line2, = self.ax.plot([], [], color=color2, linewidth=LINE_W, label=label2, animated=True)
         self.ax.legend(fontsize=7, framealpha=0, loc='upper right',
                        labelcolor=TXT2)
         self._xlim_max = _XLIM_CHUNK
@@ -175,14 +183,14 @@ class AnalysisTelemetryGraph(FigureCanvas):
     """Distance-based single channel graph for lap analysis."""
 
     def __init__(self, ylabel: str, color: str = C_SPEED, ylim=(0, 100), parent=None):
-        self.fig = Figure(figsize=(4, 1.2), facecolor=BG)
+        self.fig = Figure(figsize=(4, 1.2), facecolor=_theme.SURFACE)
         super().__init__(self.fig)
         self.setMinimumWidth(100)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.ax = self.fig.add_subplot(111)
         _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
         self.distances, self.values = [], []
-        self.line, = self.ax.plot([], [], color=color, linewidth=1.2)
+        self.line, = self.ax.plot([], [], color=color, linewidth=LINE_W)
         self.vline = self.ax.axvline(0, color=WHITE, linewidth=0.8, alpha=0.5)
 
     def update_data(self, distance_m: float, value: float):
@@ -208,15 +216,15 @@ class AnalysisMultiLineGraph(FigureCanvas):
     def __init__(self, ylabel: str, label1: str, label2: str,
                  color1: str = C_THROTTLE, color2: str = C_BRAKE,
                  ylim=(0, 100), parent=None):
-        self.fig = Figure(figsize=(4, 1.2), facecolor=BG)
+        self.fig = Figure(figsize=(4, 1.2), facecolor=_theme.SURFACE)
         super().__init__(self.fig)
         self.setMinimumWidth(100)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.ax = self.fig.add_subplot(111)
         _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
         self.distances, self.v1, self.v2 = [], [], []
-        self.line1, = self.ax.plot([], [], color=color1, linewidth=1.2, label=label1)
-        self.line2, = self.ax.plot([], [], color=color2, linewidth=1.2, label=label2)
+        self.line1, = self.ax.plot([], [], color=color1, linewidth=LINE_W, label=label1)
+        self.line2, = self.ax.plot([], [], color=color2, linewidth=LINE_W, label=label2)
         self.ax.legend(fontsize=6, framealpha=0, loc='upper right', labelcolor=TXT2)
         self.vline = self.ax.axvline(0, color=WHITE, linewidth=0.8, alpha=0.5)
 
@@ -245,7 +253,7 @@ class TimeDeltaGraph(FigureCanvas):
     """Time delta vs distance with fill bands."""
 
     def __init__(self, parent=None):
-        self.fig = Figure(figsize=(10, 1.8), facecolor=BG)
+        self.fig = Figure(figsize=(10, 1.8), facecolor=_theme.SURFACE)
         super().__init__(self.fig)
         self.setMinimumWidth(100)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -254,7 +262,7 @@ class TimeDeltaGraph(FigureCanvas):
         self.ax.axhline(0, color=C_REF, linewidth=1, alpha=0.8)
         self.distances, self.deltas = [], []
         self.current_dist = 0
-        self.line, = self.ax.plot([], [], color=C_DELTA, linewidth=1.4)
+        self.line, = self.ax.plot([], [], color=C_DELTA, linewidth=LINE_W)
         self.vline = self.ax.axvline(0, color=WHITE, linewidth=0.8, alpha=0.5)
         self._fill_pos = None
         self._fill_neg = None
@@ -312,16 +320,16 @@ class ComparisonGraph(FigureCanvas):
 
     def __init__(self, ylabel: str, color_a: str, color_b: str,
                  ylim=(0, 100), parent=None):
-        self.fig = Figure(figsize=(8, 1.8), facecolor=BG)
+        self.fig = Figure(figsize=(8, 1.8), facecolor=_theme.SURFACE)
         super().__init__(self.fig)
         self.setMinimumWidth(100)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.ax = self.fig.add_subplot(111)
         _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
         self.setMinimumHeight(140)
-        self.line_a, = self.ax.plot([], [], color=color_a, linewidth=1.4,
+        self.line_a, = self.ax.plot([], [], color=color_a, linewidth=LINE_W,
                                     linestyle='-', alpha=0.9)
-        self.line_b, = self.ax.plot([], [], color=color_b, linewidth=1.4,
+        self.line_b, = self.ax.plot([], [], color=color_b, linewidth=LINE_W,
                                     linestyle='--', alpha=0.75)
 
     def set_data(self, dists_a: list, vals_a: list,
@@ -347,7 +355,7 @@ class ComparisonDeltaGraph(FigureCanvas):
     """Time delta between two saved laps."""
 
     def __init__(self, parent=None):
-        self.fig = Figure(figsize=(8, 1.8), facecolor=BG)
+        self.fig = Figure(figsize=(8, 1.8), facecolor=_theme.SURFACE)
         super().__init__(self.fig)
         self.setMinimumWidth(100)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -355,7 +363,7 @@ class ComparisonDeltaGraph(FigureCanvas):
         _style_ax(self.ax, self.fig, ylabel='Delta (s)')
         self.ax.axhline(0, color=TXT2, linewidth=0.8, alpha=0.6)
         self.setMinimumHeight(140)
-        self.line, = self.ax.plot([], [], color=C_DELTA, linewidth=1.4)
+        self.line, = self.ax.plot([], [], color=C_DELTA, linewidth=LINE_W)
         self._fill_pos = None
         self._fill_neg = None
 
@@ -422,7 +430,7 @@ class RacePaceChart(FigureCanvas):
     """Session lap times scatter/line chart for race pace trend."""
 
     def __init__(self, parent=None):
-        self.fig = Figure(figsize=(8, 2.0), facecolor=BG)
+        self.fig = Figure(figsize=(8, 2.0), facecolor=_theme.SURFACE)
         super().__init__(self.fig)
         self.setMinimumWidth(100)
         self.setMinimumHeight(130)
@@ -459,14 +467,14 @@ class ReplayGraph(FigureCanvas):
     """Full-lap single-channel graph with a movable playhead line."""
 
     def __init__(self, ylabel: str, color: str, ylim=(0, 100), parent=None):
-        self.fig = Figure(figsize=(8, 1.5), facecolor=BG)
+        self.fig = Figure(figsize=(8, 1.5), facecolor=_theme.SURFACE)
         super().__init__(self.fig)
         self.setMinimumWidth(100)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.ax = self.fig.add_subplot(111)
         _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
         self.setMinimumHeight(110)
-        self.line, = self.ax.plot([], [], color=color, linewidth=1.2)
+        self.line, = self.ax.plot([], [], color=color, linewidth=LINE_W)
         self.vline = self.ax.axvline(0, color=WHITE, linewidth=1.0, alpha=0.7)
         self._bg = None
 
@@ -509,15 +517,15 @@ class ReplayMultiGraph(FigureCanvas):
 
     def __init__(self, ylabel: str, color1: str, color2: str,
                  label1: str, label2: str, ylim=(0, 100), parent=None):
-        self.fig = Figure(figsize=(8, 1.5), facecolor=BG)
+        self.fig = Figure(figsize=(8, 1.5), facecolor=_theme.SURFACE)
         super().__init__(self.fig)
         self.setMinimumWidth(100)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.ax = self.fig.add_subplot(111)
         _style_ax(self.ax, self.fig, ylabel=ylabel, ylim=ylim)
         self.setMinimumHeight(110)
-        self.line1, = self.ax.plot([], [], color=color1, linewidth=1.2, label=label1)
-        self.line2, = self.ax.plot([], [], color=color2, linewidth=1.2, label=label2)
+        self.line1, = self.ax.plot([], [], color=color1, linewidth=LINE_W, label=label1)
+        self.line2, = self.ax.plot([], [], color=color2, linewidth=LINE_W, label=label2)
         self.ax.legend(fontsize=7, framealpha=0, loc='upper right', labelcolor=TXT2)
         self.vline = self.ax.axvline(0, color=WHITE, linewidth=1.0, alpha=0.7)
         self._bg = None

@@ -59,7 +59,7 @@ from .widgets import (
 )
 from .widgets.title_bar import TitleBar
 from .updater import UpdateChecker
-from .widgets.graphs import _style_ax
+from .widgets.graphs import _style_ax, LINE_W
 from .widgets.math_channel_panel import MathChannelPanel
 from .widgets.tabs import RaceTab, TyresTab, DashboardTab, LapAnalysisTab, TelemetryTab, LapComparisonTab, SessionTab, ReplayTab
 from .coaching.lap_coach import LapCoach
@@ -1116,16 +1116,11 @@ class TelemetryApp(QMainWindow):
 
         # Speed history graph
         self._real_speed_history: list[float] = []
-        self._real_speed_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=SURFACE_RAISED))
+        self._real_speed_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=SURFACE))
         self._real_speed_ax = self._real_speed_canvas.figure.add_subplot(111)
-        self._real_speed_ax.set_facecolor(SURFACE_RAISED)
-        self._real_speed_ax.tick_params(colors=TEXT_MUTED, labelsize=7)
-        self._real_speed_ax.spines['top'].set_visible(False)
-        self._real_speed_ax.spines['right'].set_visible(False)
-        self._real_speed_ax.spines['left'].set_color(BORDER_SUBTLE)
-        self._real_speed_ax.spines['bottom'].set_color(BORDER_SUBTLE)
+        _style_ax(self._real_speed_ax, self._real_speed_canvas.figure)
         self._real_speed_ax.set_ylabel('km/h', color=TEXT_MUTED, fontsize=7)
-        self._real_speed_ax.set_title('SPEED', color=TEXT_MUTED, fontsize=8, pad=4)
+        self._real_speed_ax.set_title('Speed', color=TEXT_MUTED, fontsize=8, pad=4)
         self._real_speed_canvas.figure.subplots_adjust(
             left=0.12, right=0.97, top=0.82, bottom=0.15)
 
@@ -1140,16 +1135,11 @@ class TelemetryApp(QMainWindow):
 
         # Throttle history graph
         self._real_thr_history: list[float] = []
-        self._real_thr_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=SURFACE_RAISED))
+        self._real_thr_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=SURFACE))
         self._real_thr_ax = self._real_thr_canvas.figure.add_subplot(111)
-        self._real_thr_ax.set_facecolor(SURFACE_RAISED)
-        self._real_thr_ax.tick_params(colors=TEXT_MUTED, labelsize=7)
-        self._real_thr_ax.spines['top'].set_visible(False)
-        self._real_thr_ax.spines['right'].set_visible(False)
-        self._real_thr_ax.spines['left'].set_color(BORDER_SUBTLE)
-        self._real_thr_ax.spines['bottom'].set_color(BORDER_SUBTLE)
+        _style_ax(self._real_thr_ax, self._real_thr_canvas.figure)
         self._real_thr_ax.set_ylabel('%', color=TEXT_MUTED, fontsize=7)
-        self._real_thr_ax.set_title('THROTTLE', color=TEXT_MUTED, fontsize=8, pad=4)
+        self._real_thr_ax.set_title('Throttle', color=TEXT_MUTED, fontsize=8, pad=4)
         self._real_thr_canvas.figure.subplots_adjust(
             left=0.12, right=0.97, top=0.82, bottom=0.15)
 
@@ -1164,14 +1154,9 @@ class TelemetryApp(QMainWindow):
 
         # RPM history graph
         self._real_rpm_history: list[float] = []
-        self._real_rpm_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=SURFACE_RAISED))
+        self._real_rpm_canvas = FigureCanvas(Figure(figsize=(5, 1.5), facecolor=SURFACE))
         self._real_rpm_ax = self._real_rpm_canvas.figure.add_subplot(111)
-        self._real_rpm_ax.set_facecolor(SURFACE_RAISED)
-        self._real_rpm_ax.tick_params(colors=TEXT_MUTED, labelsize=7)
-        self._real_rpm_ax.spines['top'].set_visible(False)
-        self._real_rpm_ax.spines['right'].set_visible(False)
-        self._real_rpm_ax.spines['left'].set_color(BORDER_SUBTLE)
-        self._real_rpm_ax.spines['bottom'].set_color(BORDER_SUBTLE)
+        _style_ax(self._real_rpm_ax, self._real_rpm_canvas.figure)
         self._real_rpm_ax.set_ylabel('rpm', color=TEXT_MUTED, fontsize=7)
         self._real_rpm_ax.set_title('RPM', color=TEXT_MUTED, fontsize=8, pad=4)
         self._real_rpm_canvas.figure.subplots_adjust(
@@ -1311,16 +1296,13 @@ class TelemetryApp(QMainWindow):
                 (self._real_rpm_ax,   self._real_rpm_history,   C_RPM),
             ]:
                 ax.clear()
-                ax.set_facecolor(SURFACE_RAISED)
-                ax.plot(hist, color=color, linewidth=1.2)
-                ax.tick_params(colors=TEXT_MUTED, labelsize=7)
-                ax.spines['top'].set_visible(False)
-                ax.spines['right'].set_visible(False)
-                ax.spines['left'].set_color(BORDER_SUBTLE)
-                ax.spines['bottom'].set_color(BORDER_SUBTLE)
-            self._real_speed_ax.set_title('SPEED', color=TEXT_MUTED, fontsize=8, pad=4)
+                _style_ax(ax, ax.figure)
+                # keep the small-chart margins (titles sit above the axes)
+                ax.figure.subplots_adjust(left=0.12, right=0.97, top=0.82, bottom=0.15)
+                ax.plot(hist, color=color, linewidth=LINE_W)
+            self._real_speed_ax.set_title('Speed', color=TEXT_MUTED, fontsize=8, pad=4)
             self._real_speed_ax.set_ylabel('km/h', color=TEXT_MUTED, fontsize=7)
-            self._real_thr_ax.set_title('THROTTLE', color=TEXT_MUTED, fontsize=8, pad=4)
+            self._real_thr_ax.set_title('Throttle', color=TEXT_MUTED, fontsize=8, pad=4)
             self._real_thr_ax.set_ylabel('%', color=TEXT_MUTED, fontsize=7)
             self._real_rpm_ax.set_title('RPM', color=TEXT_MUTED, fontsize=8, pad=4)
             self._real_rpm_ax.set_ylabel('rpm', color=TEXT_MUTED, fontsize=7)
@@ -3555,19 +3537,12 @@ class TelemetryApp(QMainWindow):
             x_values = list(range(len(data_dict['speed'])))
             x_label = 'Samples'
 
-        export_fig = Figure(figsize=(12, 9), facecolor=BG)
+        export_fig = Figure(figsize=(12, 9), facecolor=SURFACE)
         axs = export_fig.subplots(3, 2, sharex=True)
         axs = axs.flatten()
 
         def style_export_ax(ax, title):
-            ax.set_facecolor(SURFACE)
-            ax.set_title(title, color=TEXT_MUTED, fontsize=10, pad=4)
-            ax.tick_params(colors=TEXT_MUTED, labelsize=7)
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.spines['left'].set_color(BORDER_STRONG)
-            ax.spines['bottom'].set_color(BORDER_STRONG)
-            ax.grid(True, color=BORDER_SUBTLE, linewidth=0.8, linestyle='-', axis='y')
+            _style_ax(ax, export_fig, title=title)   # tight_layout below sets the margins
 
         style_export_ax(axs[0], 'Speed')
         axs[0].plot(x_values, data_dict['speed'], color=C_SPEED, linewidth=1.0)
@@ -3601,7 +3576,7 @@ class TelemetryApp(QMainWindow):
             ax.set_xlabel(x_label, color=TEXT_MUTED, fontsize=8)
 
         export_fig.tight_layout(pad=0.5)
-        export_fig.savefig(file_path, dpi=150, facecolor=BG)
+        export_fig.savefig(file_path, dpi=150, facecolor=SURFACE)
         QMessageBox.information(self, 'Export', f'Graphs saved to:\n{file_path}')
 
     def closeEvent(self, event):
