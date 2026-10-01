@@ -10,7 +10,7 @@ def app():
 
 def test_titlebar_default_no_source(app):
     t = TitleBar()
-    assert t.brand() == 'S1NAPSE'
+    assert t.brand() == 'S1napse'
     assert t.sourceText() == ''
 
 
@@ -27,3 +27,37 @@ def test_titlebar_set_session(app):
     assert t.sessionLap().text() == '8 / —'
     assert t.sessionStint().text() == 'Stint 2'
     assert t.sessionLastLap().text() == '1:29.871'
+
+
+def test_disconnected_pill_still_visible_and_clickable(app):
+    t = TitleBar()
+    t.setSource('', live=False)
+    assert t.sourceText() == ''
+    assert t.sourceButton().isHidden() is False
+    assert 'Not connected' in t.sourceButton().accessibleName()
+
+
+def test_trailing_widgets_live_in_popover(app):
+    from PyQt6.QtWidgets import QPushButton
+    t = TitleBar()
+    b = QPushButton('REC')
+    t.addTrailing(b)
+    assert b.parent() is t.popover() or t.popover().isAncestorOf(b)
+
+
+def test_persistent_widgets_stay_in_bar(app):
+    from PyQt6.QtWidgets import QPushButton
+    t = TitleBar()
+    lap = QPushButton('LAP')
+    t.addPersistent(lap)
+    assert t.isAncestorOf(lap)
+    assert not t.popover().isAncestorOf(lap)
+
+
+def test_clicking_pill_opens_popover(app):
+    t = TitleBar()
+    t.resize(900, 48)
+    t.show()
+    t.sourceButton().click()
+    assert t.popover().isVisible()
+    t.popover().hide()

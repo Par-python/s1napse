@@ -1,8 +1,8 @@
 """Always-visible top strip — brand + live source pill + session context."""
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QPoint
 from PyQt6.QtGui import QColor, QPainter, QBrush
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget, QSizePolicy
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from .. import theme
 
@@ -42,95 +42,140 @@ class _LiveDot(QWidget):
 
 
 class TitleBar(QFrame):
-    """Top strip — brand on the left, source pill in the middle, session context on the right."""
+    """Top strip: wordmark and status pill on the left, session context on the right.
+
+    Connection controls live in a popover opened from the status pill so the
+    bar itself stays quiet. Widgets that must stay reachable while driving
+    (the manual LAP button) go in via addPersistent().
+    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(40)
+        self.setFixedHeight(48)
+        self.setObjectName('TitleBar')
         self.setStyleSheet(
-            f'background:{theme.BG}; border:none; '
-            f'border-bottom:1px solid {theme.BORDER_SUBTLE};'
+            f'#TitleBar {{ background:{theme.BG}; border:none;'
+            f' border-bottom:1px solid {theme.BORDER_SUBTLE}; }}'
         )
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(16, 0, 16, 0)
-        row.setSpacing(14)
+        row.setContentsMargins(20, 0, 20, 0)
+        row.setSpacing(16)
 
-        # Brand
-        brand = QHBoxLayout()
-        brand.setSpacing(8)
-        brand.setContentsMargins(0, 0, 0, 0)
-        brand.addWidget(_BrandDot())
-        brand_lbl = QLabel('S1NAPSE')
-        brand_lbl.setFont(theme.ui_font(13, bold=True))
+        brand_lbl = QLabel('S1napse')
+        bf = theme.ui_font(15, bold=True)
+        bf.setLetterSpacing(bf.SpacingType.AbsoluteSpacing, -0.3)
+        brand_lbl.setFont(bf)
         brand_lbl.setStyleSheet(f'color:{theme.TEXT_PRIMARY}; background:transparent;')
-        brand.addWidget(brand_lbl)
-        row.addLayout(brand)
+        row.addWidget(brand_lbl)
         self._brand_lbl = brand_lbl
 
-        # Source pill
-        self._pill_box = QFrame()
-        self._pill_box.setStyleSheet(
-            f'background:{theme.SURFACE_RAISED}; border:1px solid {theme.BORDER_STRONG};'
-            f'border-radius:999px;'
+        # Status pill: always visible, opens the source popover.
+        self._pill = QPushButton()
+        self._pill.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._pill.setObjectName('SourcePill')
+        self._pill.setStyleSheet(
+            f'#SourcePill {{ background:{theme.SURFACE}; border:1px solid {theme.BORDER_SUBTLE};'
+            f' border-radius:15px; padding:0; min-height:30px; }}'
+            f'#SourcePill:hover {{ border-color:{theme.BORDER_STRONG}; }}'
         )
-        pill_l = QHBoxLayout(self._pill_box)
-        pill_l.setContentsMargins(10, 4, 10, 4)
-        pill_l.setSpacing(6)
+        pill_l = QHBoxLayout(self._pill)
+        pill_l.setContentsMargins(12, 0, 14, 0)
+        pill_l.setSpacing(8)
         self._live_dot = _LiveDot()
-        self._live = False  # tracks logical live state independent of Qt visibility
+        self._live_dot.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         pill_l.addWidget(self._live_dot)
         self._source_lbl = QLabel('')
-        self._source_lbl.setFont(theme.mono_font(10))
+        self._source_lbl.setFont(theme.ui_font(theme.FONT_BODY))
         self._source_lbl.setStyleSheet(f'color:{theme.TEXT_SECONDARY}; background:transparent; border:none;')
+        self._source_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         pill_l.addWidget(self._source_lbl)
-        self._pill_box.setVisible(False)
-        row.addWidget(self._pill_box)
+        chevron = QLabel('\u25be')
+        chevron.setStyleSheet(f'color:{theme.TEXT_FAINT}; background:transparent; border:none;')
+        chevron.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        pill_l.addWidget(chevron)
+        self._pill.clicked.connect(self.showPopover)
+        row.addWidget(self._pill)
 
         row.addStretch(1)
 
-        self._trailing = QHBoxLayout()
-        self._trailing.setContentsMargins(0, 0, 0, 0)
-        self._trailing.setSpacing(8)
-        row.addLayout(self._trailing)
+        self._persistent = QHBoxLayout()
+        self._persistent.setContentsMargins(0, 0, 0, 0)
+        self._persistent.setSpacing(8)
+        row.addLayout(self._persistent)
 
         # Session context
         self._lap = QLabel('')
         self._stint = QLabel('')
         self._last = QLabel('')
-        for lbl, color in (
-            (self._lap, theme.TEXT_MUTED),
-            (self._stint, theme.TEXT_MUTED),
-            (self._last, theme.TEXT_PRIMARY),
+        for lbl, color, size in (
+            (self._lap, theme.TEXT_MUTED, theme.FONT_BODY),
+            (self._stint, theme.TEXT_MUTED, theme.FONT_BODY),
+            (self._last, theme.TEXT_PRIMARY, theme.FONT_BODY + 1),
         ):
-            lbl.setFont(theme.mono_font(11))
+            lbl.setFont(theme.mono_font(size))
             lbl.setStyleSheet(f'color:{color}; background:transparent; border:none;')
             row.addWidget(lbl)
 
+        # Popover with the connection controls.
+        self._popover = QFrame(self, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self._popover.setObjectName('SourcePopover')
+        self._popover.setStyleSheet(
+            f'#SourcePopover {{ background:{theme.SURFACE}; border:1px solid {theme.BORDER_SUBTLE};'
+            f' border-radius:{theme.RADIUS["lg"]}px; }}'
+        )
+        pop_l = QVBoxLayout(self._popover)
+        pop_l.setContentsMargins(16, 14, 16, 16)
+        pop_l.setSpacing(10)
+        hdr = QLabel('Data source')
+        hdr.setFont(theme.label_font())
+        hdr.setStyleSheet(f'color:{theme.TEXT_MUTED}; background:transparent; border:none;')
+        pop_l.addWidget(hdr)
+        self._trailing = QHBoxLayout()
+        self._trailing.setContentsMargins(0, 0, 0, 0)
+        self._trailing.setSpacing(8)
+        pop_l.addLayout(self._trailing)
+
+        self._source_text = ''
+        self._live = False
+        self.setSource('', live=False)
+
+    # -- controls ---------------------------------------------------------
     def addTrailing(self, w) -> None:
-        """Insert a widget into the right-side toolbar slot."""
+        """Add a connection control to the source popover."""
         self._trailing.addWidget(w)
 
+    def addPersistent(self, w) -> None:
+        """Add a widget that stays visible in the bar (e.g. the manual LAP button)."""
+        self._persistent.addWidget(w)
+
+    def showPopover(self) -> None:
+        self._popover.adjustSize()
+        self._popover.move(self._pill.mapToGlobal(QPoint(0, self._pill.height() + 6)))
+        self._popover.show()
+
+    def sourceButton(self) -> QPushButton: return self._pill
+    def popover(self) -> QFrame:            return self._popover
+
+    # -- state ------------------------------------------------------------
     def brand(self) -> str:
         return self._brand_lbl.text()
 
     def sourceText(self) -> str:
-        return self._source_lbl.text()
+        return self._source_text
 
     def isLive(self) -> bool:
-        # Use the logical flag rather than Qt's isVisible(), which returns False
-        # for widgets whose top-level window has never been shown.
-        return self._live and bool(self._source_lbl.text())
+        return self._live and bool(self._source_text)
 
     def setSource(self, text: str, *, live: bool = True) -> None:
+        self._source_text = text
         self._live = live and bool(text)
-        self._source_lbl.setText(text)
-        self._live_dot.setVisible(live)
-        self._pill_box.setVisible(bool(text))
+        shown = text if text else 'Not connected'
+        self._source_lbl.setText(shown)
+        self._pill.setAccessibleName(shown)
+        self._live_dot.setVisible(self._live)
 
     def setSession(self, *, lap: str = '', stint: str = '', last_lap: str = '') -> None:
-        # Store text verbatim. No "Lap " prefix — keeps the API symmetric
-        # with the test's assertion `sessionLap().text() == '8 / —'`.
         self._lap.setText(lap)
         self._stint.setText(stint)
         self._last.setText(last_lap)

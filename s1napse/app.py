@@ -280,7 +280,12 @@ class TelemetryApp(QMainWindow):
 
         controls = self._build_connection_strip_controls()
         for w in controls:
-            self.title_bar.addTrailing(w)
+            if w is self.connection_dot:
+                continue  # the status pill's live dot already shows connection state
+            if w is self._manual_lap_btn:
+                self.title_bar.addPersistent(w)  # pressed while driving: keep it in the bar
+            else:
+                self.title_bar.addTrailing(w)
 
         self.tabs = QTabWidget()
         self.tabs.setTabBar(LiveTabBar(self.tabs))
