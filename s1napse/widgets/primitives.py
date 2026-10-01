@@ -24,12 +24,13 @@ class Pill(QLabel):
             raise ValueError(f'invalid tone {tone!r}, expected one of {sorted(_PILL_TONES)}')
         super().__init__(text, parent)
         self._tone = tone
-        self.setFont(theme.mono_font(9))
+        f = theme.ui_font(theme.FONT_LABEL)
+        f.setWeight(f.Weight.DemiBold)
+        self.setFont(f)
         bg, border, fg = _PILL_TONES[tone]
         self.setStyleSheet(
             f'background:{bg}; color:{fg}; border:1px solid {border};'
-            f'border-radius:{theme.RADIUS["sm"]}px; padding:2px 7px;'
-            f'letter-spacing:0.3px;'
+            f'border-radius:999px; padding:3px 10px;'
         )
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
@@ -64,23 +65,19 @@ class Card(QFrame):
         self._dense = dense
         bg, border = _CARD_VARIANTS[variant]
         # Scope the surface paint to the Card itself so the border/background
-        # don't cascade to every child label and button inside. Dense cards
-        # (live tabs / inner panels) drop the outline so the UI doesn't read
-        # like a grid of boxes; large containers keep the 1px frame.
+        # don't cascade to every child label and button inside. White on the
+        # smoky-grey ground separates a card; only warn/bad get an outline.
         self.setObjectName('Card')
-        if dense and variant == 'normal':
-            border_rule = 'border:none;'
-        else:
-            border_rule = f'border:1px solid {border};'
+        border_rule = 'border:none;' if variant == 'normal' else f'border:1px solid {border};'
         self.setStyleSheet(
             f'#Card {{ background:{bg}; {border_rule}'
             f' border-radius:{theme.RADIUS["lg"]}px; }}'
         )
 
         outer = QVBoxLayout(self)
-        pad = 12 if dense else 16
+        pad = 14 if dense else 20
         outer.setContentsMargins(pad, pad, pad, pad)
-        outer.setSpacing(8 if dense else 10)
+        outer.setSpacing(10 if dense else 12)
         self._outer = outer
 
         # --- Header (lazy) ---------------------------------------------
@@ -105,7 +102,7 @@ class Card(QFrame):
         # --- Body container --------------------------------------------
         self._body = QVBoxLayout()
         self._body.setContentsMargins(0, 0, 0, 0)
-        self._body.setSpacing(6 if dense else 8)
+        self._body.setSpacing(8 if dense else 10)
         outer.addLayout(self._body)
 
     def variant(self) -> str:
@@ -160,9 +157,11 @@ class Stat(QWidget):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(6)
 
-        size_pt = theme.FONT_DISPLAY if size == 'xl' else theme.FONT_NUMERIC_LG
+        size_pt = theme.FONT_HERO if size == 'xl' else theme.FONT_VALUE
         v = QLabel(value)
-        v.setFont(theme.mono_font(size_pt))
+        vf = theme.mono_font(size_pt)
+        vf.setWeight(vf.Weight.DemiBold)
+        v.setFont(vf)
         v.setStyleSheet(f'color:{theme.TEXT_PRIMARY}; background:transparent; border:none;')
         row.addWidget(v, 0, Qt.AlignmentFlag.AlignBaseline)
         self._value = v
@@ -170,7 +169,7 @@ class Stat(QWidget):
         self._unit: QLabel | None = None
         if unit:
             u = QLabel(unit)
-            u.setFont(theme.ui_font(theme.FONT_BODY_ROOMY))
+            u.setFont(theme.ui_font(theme.FONT_FINE))
             u.setStyleSheet(f'color:{theme.TEXT_MUTED}; background:transparent; border:none;')
             row.addWidget(u, 0, Qt.AlignmentFlag.AlignBaseline)
             self._unit = u

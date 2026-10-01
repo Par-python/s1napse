@@ -126,3 +126,31 @@ def test_gapbar_updates_in_place(app):
     g.setGaps(-1.5, 2.4)
     assert g.gap_ahead() == -1.5
     assert g.gap_behind() == 2.4
+
+
+def test_card_padding_roomier(app):
+    c, cd = Card(), Card(dense=True)
+    m = c.contentLayout().contentsMargins()
+    d = cd.contentLayout().contentsMargins()
+    assert m.left() == 20
+    assert d.left() == 14
+
+
+def test_card_normal_has_no_border(app):
+    assert 'border:none' in Card().styleSheet().replace(' ', '')
+
+
+def test_card_bad_keeps_border(app):
+    assert 'border:1px' in Card(variant='bad').styleSheet().replace(' ', '')
+
+
+def test_stat_sizes_follow_type_roles(app):
+    assert Stat(value='1').valueLabel().font().pointSize() == theme.FONT_VALUE
+    assert Stat(value='1', size='xl').valueLabel().font().pointSize() == theme.FONT_HERO
+    assert Stat(value='1', unit='km/h').unitLabel().font().pointSize() == theme.FONT_FINE
+
+
+def test_pill_is_rounded_and_label_sized(app):
+    p = Pill('PB')
+    assert p.font().pointSize() == theme.FONT_LABEL
+    assert 'border-radius:999px' in p.styleSheet().replace(' ', '')
