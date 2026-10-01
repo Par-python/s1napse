@@ -55,7 +55,7 @@ BAD_BORDER    = _rgba(BAD, 0.35)
 BAD_FG        = '#D70015'
 
 # Layout scales --------------------------------------------------------
-SPACING = (4, 8, 12, 16, 20, 24)
+SPACING = (4, 8, 12, 16, 20, 24, 32)
 RADIUS  = {'sm': 6, 'md': 10, 'lg': 14, 'xl': 18}
 
 # Typography (point sizes used by font helpers) ------------------------
@@ -63,13 +63,20 @@ FONT_UI_FAMILY   = 'Inter'
 # Numbers use the UI face with tabular figures (see mono_font), not a monospace.
 FONT_MONO_FAMILY = 'Inter'
 
-FONT_DISPLAY     = 22
-FONT_NUMERIC_LG  = 17
+# Five text roles. Everything on screen uses one of these.
+FONT_HERO   = 34   # the one big number on a card
+FONT_VALUE  = 20   # secondary readings
+FONT_BODY   = 12   # running text, table cells, coaching messages
+FONT_LABEL  = 10   # card / field labels, sentence case
+FONT_FINE   = 9    # units, footnotes, axis text
+
+# Legacy names, mapped onto the roles so existing call sites keep working.
+FONT_DISPLAY     = FONT_HERO
+FONT_NUMERIC_LG  = FONT_VALUE
 FONT_NUMERIC_MD  = 13
 FONT_HEADING     = 14
 FONT_BODY_DENSE  = 11
-FONT_BODY_ROOMY  = 12
-FONT_LABEL       = 10
+FONT_BODY_ROOMY  = FONT_BODY
 
 from PyQt6.QtGui import QFont
 
@@ -94,12 +101,11 @@ def mono_font(size: int = FONT_NUMERIC_MD, *, bold: bool = False) -> QFont:
 
 
 def label_font() -> QFont:
-    """10pt uppercase label with positive letter-spacing."""
+    """Small sentence-case label: medium weight, a hair of tracking."""
     f = QFont(FONT_UI_FAMILY, FONT_LABEL)
     f.setStyleHint(QFont.StyleHint.SansSerif)
     f.setWeight(QFont.Weight.Medium)
-    f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.2)
-    f.setCapitalization(QFont.Capitalization.AllUppercase)
+    f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 0.2)
     return f
 
 

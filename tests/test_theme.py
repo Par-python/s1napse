@@ -28,7 +28,7 @@ def test_accent_and_state_colors():
 
 
 def test_spacing_and_radius_scales():
-    assert theme.SPACING == (4, 8, 12, 16, 20, 24)
+    assert theme.SPACING == (4, 8, 12, 16, 20, 24, 32)
     assert theme.RADIUS == {'sm': 6, 'md': 10, 'lg': 14, 'xl': 18}
 
 
@@ -48,10 +48,24 @@ def test_mono_font_uses_tabular_figures():
     assert 'tnum' in feat or f.styleStrategy() != QFont.StyleStrategy.PreferDefault
 
 
-def test_label_font_uppercase_letterspacing():
+def test_label_font_sentence_case():
+    from PyQt6.QtGui import QFont
     f = theme.label_font()
     assert f.pointSize() == theme.FONT_LABEL
-    assert f.letterSpacing() > 1.0
+    assert f.capitalization() == QFont.Capitalization.MixedCase
+    assert f.letterSpacing() < 1.0
+
+
+def test_type_roles_present():
+    assert theme.FONT_HERO == 34
+    assert theme.FONT_VALUE == 20
+    assert theme.FONT_BODY == 12
+    assert theme.FONT_LABEL == 10
+    assert theme.FONT_FINE == 9
+    # legacy aliases still resolve
+    assert theme.FONT_DISPLAY == theme.FONT_HERO
+    assert theme.FONT_NUMERIC_LG == theme.FONT_VALUE
+    assert theme.FONT_BODY_ROOMY == theme.FONT_BODY
 
 
 def test_build_app_qss_returns_string_with_tokens():
