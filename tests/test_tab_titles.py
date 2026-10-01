@@ -32,7 +32,7 @@ def test_no_all_caps_static_labels():
     for p in root.rglob('*.py'):
         if 'vendor' in p.parts:
             continue
-        for m in _SHOUTY.finditer(p.read_text()):
+        for m in _SHOUTY.finditer(p.read_text(encoding='utf-8')):
             if m.group(1) not in _ALLOWED:
                 offenders.append(f'{p.name}: {m.group(1)}')
     assert offenders == []
