@@ -125,25 +125,24 @@ QTabWidget::pane {{
 
 QTabBar {{
     background: {BG};
-    border-bottom: 1px solid {BORDER_SUBTLE};
+    border: none;
+    qproperty-drawBase: 0;
 }}
 
 QTabBar::tab {{
     background: transparent;
     color: {TEXT_MUTED};
-    padding: 12px 14px;
+    padding: 7px 14px;
+    margin: 8px 2px 8px 2px;
     border: none;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    font-size: {FONT_LABEL}pt;
+    border-radius: {RADIUS['md']}px;
+    font-size: {FONT_BODY}pt;
     font-weight: 500;
-    letter-spacing: 0.6px;
-    text-transform: uppercase;
 }}
 
 QTabBar::tab:selected {{
+    background: {SURFACE_HOVER};
     color: {TEXT_PRIMARY};
-    border-bottom-color: {ACCENT};
 }}
 
 QTabBar::tab:hover:!selected {{

@@ -80,6 +80,11 @@ def _json_default(obj):
     raise TypeError(f'Object of type {type(obj).__name__} is not JSON serializable')
 
 
+# Tab order and titles. 'Coach' is inserted by the Coach tab.
+TAB_TITLES = ('Dashboard', 'Telemetry', 'Coach', 'Lap analysis', 'Race',
+              'Tyres', 'Compare', 'Session', 'Replay')
+
+
 class TelemetrySampler(threading.Thread):
     """Background thread: reads shared memory at ~120 Hz, buffers raw dicts."""
 
@@ -286,25 +291,25 @@ class TelemetryApp(QMainWindow):
         # `self.strategy_tab` aliases the Race tab so existing back-end calls
         # (e.g. self.strategy_tab._fs_laps_spin.value()) keep working.
         self.dashboard_tab = DashboardTab(self)
-        self.tabs.addTab(self.dashboard_tab, 'DASHBOARD')
+        self.tabs.addTab(self.dashboard_tab, 'Dashboard')
         self.telemetry_tab = TelemetryTab(self)
-        self.tabs.addTab(self.telemetry_tab, 'TELEMETRY GRAPHS')
+        self.tabs.addTab(self.telemetry_tab, 'Telemetry')
         self.lap_analysis_tab = LapAnalysisTab(self)
-        self.tabs.addTab(self.lap_analysis_tab, 'LAP ANALYSIS')
+        self.tabs.addTab(self.lap_analysis_tab, 'Lap analysis')
         self.race_tab = RaceTab(self)
         self.strategy_tab = self.race_tab  # alias for legacy back-end handlers
         self.race_tab._fs_laps_spin.valueChanged.connect(self._update_fuel_save)
         self.race_tab._uco_pit_loss_spin.valueChanged.connect(self._update_undercut)
         self.race_tab._uco_pace_delta_spin.valueChanged.connect(self._update_undercut)
-        self.tabs.addTab(self.race_tab, 'RACE')
+        self.tabs.addTab(self.race_tab, 'Race')
         self.tyres_tab = TyresTab(self)
-        self.tabs.addTab(self.tyres_tab, 'TYRES')
+        self.tabs.addTab(self.tyres_tab, 'Tyres')
         self.comparison_tab = LapComparisonTab(self)
-        self.tabs.addTab(self.comparison_tab, 'LAP COMPARISON')
+        self.tabs.addTab(self.comparison_tab, 'Compare')
         self.session_tab = SessionTab(self)
-        self.tabs.addTab(self.session_tab, 'SESSION')
+        self.tabs.addTab(self.session_tab, 'Session')
         self.replay_tab = ReplayTab(self)
-        self.tabs.addTab(self.replay_tab, 'REPLAY')
+        self.tabs.addTab(self.replay_tab, 'Replay')
 
         # Math channel panel (side panel on graphs tab, initialized after UI)
         self._math_panel = MathChannelPanel(self._math_engine)
