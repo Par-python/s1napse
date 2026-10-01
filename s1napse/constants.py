@@ -8,19 +8,20 @@ from PyQt6.QtGui import QFont
 
 
 # --- Channel colors (used inside graphs) ------------------------------
-C_SPEED    = '#00d4ff'
-C_THROTTLE = '#00e87a'
-C_BRAKE    = '#ff3232'
-C_RPM      = '#ffc200'
-C_GEAR     = '#e0e0e0'
-C_STEER    = '#cc77ff'
-C_ABS      = '#ff7f00'
-C_TC       = '#ffe000'
-C_DELTA    = '#4499ff'
-C_PURPLE   = '#a855f7'
-C_PURPLE_BG = '#1e0f35'
-C_GREEN_BG  = '#0a2218'
-C_REF      = '#e74c3c'
+# Tuned for the light theme: saturated enough to read as thin lines on white.
+C_SPEED    = '#0071E3'
+C_THROTTLE = '#34C759'
+C_BRAKE    = '#FF3B30'
+C_RPM      = '#FF9F0A'
+C_GEAR     = '#6E6E73'
+C_STEER    = '#30B0C7'
+C_ABS      = '#E8590C'
+C_TC       = '#D4A600'
+C_DELTA    = '#1D1D1F'
+C_PURPLE   = '#AF52DE'   # best lap / fastest sector (motorsport "purple")
+C_PURPLE_BG = '#F5EDFB'
+C_GREEN_BG  = '#E9F9EE'
+C_REF      = '#D70015'
 
 # Number of distance-buckets used to store per-position telemetry
 N_TRACK_SEG = 220

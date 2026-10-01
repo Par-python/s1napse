@@ -53,25 +53,25 @@ class FormulaHighlighter(QSyntaxHighlighter):
 
         # Formats
         self.fmt_function = QTextCharFormat()
-        self.fmt_function.setForeground(QColor('#6C9EFF'))
+        self.fmt_function.setForeground(QColor('#0071E3'))
         self.fmt_function.setFontWeight(QFont.Weight.Bold)
 
         self.fmt_channel = QTextCharFormat()
-        self.fmt_channel.setForeground(QColor('#4ECDC4'))
+        self.fmt_channel.setForeground(QColor('#00A8A0'))
 
         self.fmt_number = QTextCharFormat()
-        self.fmt_number.setForeground(QColor('#FFB347'))
+        self.fmt_number.setForeground(QColor('#C93400'))
 
         self.fmt_constant = QTextCharFormat()
-        self.fmt_constant.setForeground(QColor('#C49CDE'))
+        self.fmt_constant.setForeground(QColor('#8944AB'))
         self.fmt_constant.setFontItalic(True)
 
         self.fmt_unknown = QTextCharFormat()
-        self.fmt_unknown.setForeground(QColor('#FF6B6B'))
+        self.fmt_unknown.setForeground(QColor('#D70015'))
         self.fmt_unknown.setFontUnderline(True)
 
         self.fmt_keyword = QTextCharFormat()
-        self.fmt_keyword.setForeground(QColor('#C586C0'))
+        self.fmt_keyword.setForeground(QColor('#AF52DE'))
         self.fmt_keyword.setFontWeight(QFont.Weight.Bold)
 
     def set_known_channels(self, names: set[str]) -> None:
@@ -170,10 +170,10 @@ class _AutocompletePopup(QFrame):
 # ---------------------------------------------------------------------------
 
 _PALETTE = [
-    '#FF6B35', '#4ECDC4', '#FFE66D', '#FF6B6B', '#45B7D1',
-    '#96CEB4', '#FFEAA7', '#DFE6E9', '#A8E6CF', '#88D8B0',
-    '#D4776B', '#FDCB6E', '#C586C0', '#6C9EFF', '#C49CDE',
-    '#E0E0E0',
+    '#0071E3', '#34C759', '#FF9F0A', '#FF3B30', '#AF52DE',
+    '#00A8A0', '#FF2D55', '#5856D6', '#A2845E', '#D4A600',
+    '#30B0C7', '#E8590C', '#248A3D', '#8944AB', '#6E6E73',
+    '#1D1D1F',
 ]
 
 
@@ -182,7 +182,7 @@ class _ColorSwatch(QPushButton):
 
     color_changed = pyqtSignal(str)
 
-    def __init__(self, initial: str = '#FFFFFF', parent=None):
+    def __init__(self, initial: str = '#1D1D1F', parent=None):
         super().__init__(parent)
         self._color = initial
         self.setFixedSize(28, 28)
@@ -333,7 +333,7 @@ class FormulaEditorWidget(QWidget):
         lbl3.setFont(sans(10))
         lbl3.setFixedWidth(36)
         meta_row.addWidget(lbl3)
-        self._color_swatch = _ColorSwatch('#4ECDC4')
+        self._color_swatch = _ColorSwatch('#00A8A0')
         meta_row.addWidget(self._color_swatch)
         meta_row.addStretch()
         layout.addLayout(meta_row)
@@ -362,10 +362,10 @@ class FormulaEditorWidget(QWidget):
         self._save_btn.setFixedWidth(80)
         self._save_btn.setEnabled(False)
         self._save_btn.setStyleSheet(
-            f'QPushButton {{ background: #1a3a2a; color: #00e87a; '
-            f'border: 1px solid #00e87a; border-radius: 3px; padding: 5px 12px; }}'
+            f'QPushButton {{ background: #E9F9EE; color: #248A3D; '
+            f'border: 1px solid #34C759; border-radius: 8px; padding: 5px 12px; }}'
             f'QPushButton:disabled {{ background: {BG3}; color: {TXT2}; border-color: {BORDER2}; }}'
-            f'QPushButton:hover {{ background: #1f4a35; }}'
+            f'QPushButton:hover {{ background: #DDF5E4; }}'
         )
         btn_row.addWidget(self._save_btn)
         layout.addLayout(btn_row)
@@ -470,13 +470,13 @@ class FormulaEditorWidget(QWidget):
         if ok:
             dep_text = ', '.join(deps) if deps else 'none'
             self._validation_label.setText(
-                f'<span style="color:#00e87a">\u2714</span> '
+                f'<span style="color:#248A3D">\u2714</span> '
                 f'<span style="color:{TXT2}">Uses: {dep_text}</span>'
             )
             self._is_valid = True
         else:
             self._validation_label.setText(
-                f'<span style="color:#ff3232">\u2718 {msg}</span>'
+                f'<span style="color:#D70015">\u2718 {msg}</span>'
             )
             self._is_valid = False
 

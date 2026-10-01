@@ -36,21 +36,21 @@ def _lerp_color(keypoints: list, value: float) -> QColor:
 
 
 _TYRE_TEMP_KP = [
-    (0,   '#1e3a5f'),
-    (40,  '#1d4ed8'),
-    (70,  '#38bdf8'),
-    (85,  '#22c55e'),
-    (105, '#22c55e'),
-    (120, '#f59e0b'),
-    (140, '#ef4444'),
+    (0,   '#0040DD'),
+    (40,  '#0071E3'),
+    (70,  '#32ADE6'),
+    (85,  '#34C759'),
+    (105, '#34C759'),
+    (120, '#FF9F0A'),
+    (140, '#FF3B30'),
 ]
 
 _BRAKE_TEMP_KP = [
-    (0,   '#374151'),
-    (150, '#ca8a04'),
-    (400, '#f97316'),
-    (750, '#ef4444'),
-    (1000,'#7f1d1d'),
+    (0,   '#AEAEB2'),
+    (150, '#D4A600'),
+    (400, '#FF9F0A'),
+    (750, '#FF3B30'),
+    (1000,'#A50011'),
 ]
 
 
@@ -58,12 +58,12 @@ class TyreCard(QWidget):
     """Single-tyre temperature + pressure + brake temp display."""
 
     _STATUS = [
-        (40,  'FROZEN',   '#60a5fa'),
-        (70,  'COLD',     '#38bdf8'),
-        (85,  'BUILDING', '#a3e635'),
-        (105, 'OPTIMAL',  '#22c55e'),
-        (120, 'HOT',      '#f59e0b'),
-        (9999,'OVERHEAT', '#ef4444'),
+        (40,  'FROZEN',   '#0040DD'),
+        (70,  'COLD',     '#0071E3'),
+        (85,  'BUILDING', '#5E8E00'),
+        (105, 'OPTIMAL',  '#248A3D'),
+        (120, 'HOT',      '#C93400'),
+        (9999,'OVERHEAT', '#D70015'),
     ]
 
     def __init__(self, position: str, parent=None):
@@ -88,14 +88,14 @@ class TyreCard(QWidget):
         for thresh, label, color in self._STATUS:
             if self.temp <= thresh:
                 return label, color
-        return 'OVERHEAT', '#ef4444'
+        return 'OVERHEAT', '#D70015'
 
     @staticmethod
     def status_for(temp: float) -> tuple:
         for thresh, label, color in TyreCard._STATUS:
             if temp <= thresh:
                 return label, color
-        return 'OVERHEAT', '#ef4444'
+        return 'OVERHEAT', '#D70015'
 
     def paintEvent(self, _event):
         painter = QPainter(self)
@@ -118,11 +118,11 @@ class TyreCard(QWidget):
         painter.fillRect(0, 0, w, h, QColor(BG2))
 
         glow = QColor(temp_col) if has_data else QColor(BG3)
-        glow.setAlpha(18)
+        glow.setAlpha(8)
         painter.fillRect(0, 0, w, h, glow)
 
         body_fill = QColor(temp_col) if has_data else QColor(BG3)
-        body_fill.setAlpha(40)
+        body_fill.setAlpha(26)
         painter.setBrush(QBrush(body_fill))
         border_col = QColor(temp_col) if has_data else QColor(BORDER)
         painter.setPen(QPen(border_col, 2))
@@ -130,7 +130,7 @@ class TyreCard(QWidget):
 
         if has_data:
             painter.setFont(mono(30, bold=True))
-            painter.setPen(temp_col)
+            painter.setPen(QColor(WHITE))
             num_rect = QRectF(tyre_rect.x(), tyre_rect.y() + 10,
                               tyre_rect.width(), tyre_rect.height() * 0.60)
             painter.drawText(num_rect, Qt.AlignmentFlag.AlignCenter,

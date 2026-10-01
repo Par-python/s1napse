@@ -4,32 +4,32 @@ from s1napse import theme
 
 
 def test_surface_scale_present():
-    assert theme.BG == '#0A0B0D'
-    assert theme.SURFACE == '#0E0F12'
-    assert theme.SURFACE_RAISED == '#14161A'
-    assert theme.SURFACE_HOVER == '#1C1F25'
-    assert theme.BORDER_SUBTLE == '#1A1D23'
-    assert theme.BORDER_STRONG == '#262A31'
+    assert theme.BG == '#F5F5F7'
+    assert theme.SURFACE == '#FFFFFF'
+    assert theme.SURFACE_RAISED == '#FFFFFF'
+    assert theme.SURFACE_HOVER == '#EDEDF0'
+    assert theme.BORDER_SUBTLE == '#E3E3E8'
+    assert theme.BORDER_STRONG == '#D2D2D7'
 
 
 def test_text_scale_present():
-    assert theme.TEXT_PRIMARY == '#F2F3F5'
-    assert theme.TEXT_SECONDARY == '#C2C7D0'
-    assert theme.TEXT_MUTED == '#8B94A3'
-    assert theme.TEXT_FAINT == '#5A626F'
+    assert theme.TEXT_PRIMARY == '#1D1D1F'
+    assert theme.TEXT_SECONDARY == '#424245'
+    assert theme.TEXT_MUTED == '#6E6E73'
+    assert theme.TEXT_FAINT == '#AEAEB2'
 
 
 def test_accent_and_state_colors():
-    assert theme.ACCENT == '#8B5CF6'
-    assert theme.GOOD == '#22C55E'
-    assert theme.WARN == '#F59E0B'
-    assert theme.BAD == '#EF4444'
-    assert theme.INFO == '#22D3EE'
+    assert theme.ACCENT == '#1D1D1F'
+    assert theme.GOOD == '#34C759'
+    assert theme.WARN == '#FF9F0A'
+    assert theme.BAD == '#FF3B30'
+    assert theme.INFO == '#0071E3'
 
 
 def test_spacing_and_radius_scales():
     assert theme.SPACING == (4, 8, 12, 16, 20, 24)
-    assert theme.RADIUS == {'sm': 4, 'md': 6, 'lg': 8, 'xl': 10}
+    assert theme.RADIUS == {'sm': 6, 'md': 10, 'lg': 14, 'xl': 18}
 
 
 def test_ui_font_helper_returns_qfont():

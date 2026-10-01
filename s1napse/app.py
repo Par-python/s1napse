@@ -38,6 +38,7 @@ from .theme import (
     BG, SURFACE, SURFACE_RAISED, SURFACE_HOVER, BORDER_SUBTLE, BORDER_STRONG,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, TEXT_FAINT,
     ACCENT, GOOD, WARN, BAD, INFO,
+    GOOD_BG, GOOD_FG, BAD_BG,
     ui_font, mono_font, label_font,
 )
 from .utils import (
@@ -532,8 +533,8 @@ class TelemetryApp(QMainWindow):
                 font-weight: bold;
                 letter-spacing: 2px;
             }}
-            QPushButton:hover {{ background: #A78BFA; }}
-            QPushButton:pressed {{ background: #7C3AED; }}
+            QPushButton:hover {{ background: #000000; }}
+            QPushButton:pressed {{ background: #3A3A3C; }}
             QPushButton:disabled {{
                 background: {SURFACE_HOVER};
                 color: {TEXT_MUTED};
@@ -708,7 +709,7 @@ class TelemetryApp(QMainWindow):
         back_btn.setStyleSheet(f"""
             QPushButton {{ background: {SURFACE_HOVER}; color: {TEXT_SECONDARY}; border: 1px solid {BORDER_STRONG};
                            border-radius: 6px; letter-spacing: 1px; }}
-            QPushButton:hover {{ background: #2d2d2d; border-color: #4a4a4a; }}
+            QPushButton:hover {{ background: {BORDER_SUBTLE}; border-color: {TEXT_FAINT}; }}
         """)
         back_btn.clicked.connect(lambda: self._stack.setCurrentIndex(0))
         btn_row.addWidget(back_btn)
@@ -720,8 +721,8 @@ class TelemetryApp(QMainWindow):
         connect_btn.setStyleSheet(f"""
             QPushButton {{ background: {C_SPEED}; color: {BG}; border: none;
                            border-radius: 6px; font-weight: bold; letter-spacing: 2px; }}
-            QPushButton:hover {{ background: #33e0ff; }}
-            QPushButton:pressed {{ background: #00a8cc; }}
+            QPushButton:hover {{ background: #0077ED; }}
+            QPushButton:pressed {{ background: #006EDB; }}
         """)
         connect_btn.clicked.connect(self._on_obd_connect)
         btn_row.addWidget(connect_btn)
@@ -867,11 +868,11 @@ class TelemetryApp(QMainWindow):
         real_lap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         real_lap_btn.setFont(sans(9, bold=True))
         real_lap_btn.setStyleSheet(
-            f'QPushButton {{ background: #0a2218; color: {C_THROTTLE};'
+            f'QPushButton {{ background: {GOOD_BG}; color: {GOOD_FG};'
             f' border: 1px solid {C_THROTTLE}; border-radius: 4px;'
             f' letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ background: #0f3322; }}'
-            f'QPushButton:pressed {{ background: #061a10; }}'
+            f'QPushButton:hover {{ background: #DDF5E4; }}'
+            f'QPushButton:pressed {{ background: #CFEFD9; }}'
         )
         real_lap_btn.setToolTip('Complete current lap (shortcut: L)')
         real_lap_btn.clicked.connect(self._on_manual_lap)
@@ -909,7 +910,7 @@ class TelemetryApp(QMainWindow):
         back_btn.setStyleSheet(
             f'QPushButton {{ background: {SURFACE_HOVER}; color: {TEXT_MUTED};'
             f' border: 1px solid {BORDER_STRONG}; border-radius: 4px; letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ color: {TEXT_SECONDARY}; border-color: #4a4a4a; }}'
+            f'QPushButton:hover {{ color: {TEXT_SECONDARY}; border-color: {TEXT_FAINT}; }}'
         )
         back_btn.clicked.connect(self._on_real_back)
         tl.addWidget(back_btn)
@@ -930,7 +931,8 @@ class TelemetryApp(QMainWindow):
         # Speed card
         speed_card = QFrame()
         speed_card.setStyleSheet(
-            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
+            f'.QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 14px; }}'
+            f'QLabel {{ background: transparent; border: none; }}')
         sc_l = QVBoxLayout(speed_card)
         sc_l.setContentsMargins(24, 20, 24, 20)
         sc_l.setSpacing(4)
@@ -953,7 +955,8 @@ class TelemetryApp(QMainWindow):
         # RPM card
         rpm_card = QFrame()
         rpm_card.setStyleSheet(
-            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
+            f'.QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 14px; }}'
+            f'QLabel {{ background: transparent; border: none; }}')
         rc_l = QVBoxLayout(rpm_card)
         rc_l.setContentsMargins(24, 20, 24, 20)
         rc_l.setSpacing(4)
@@ -975,7 +978,8 @@ class TelemetryApp(QMainWindow):
         # Gear card
         gear_card = QFrame()
         gear_card.setStyleSheet(
-            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
+            f'.QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 14px; }}'
+            f'QLabel {{ background: transparent; border: none; }}')
         gc_l = QVBoxLayout(gear_card)
         gc_l.setContentsMargins(16, 20, 16, 20)
         gc_l.setSpacing(4)
@@ -1001,7 +1005,8 @@ class TelemetryApp(QMainWindow):
         # Throttle card
         thr_card = QFrame()
         thr_card.setStyleSheet(
-            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
+            f'.QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 14px; }}'
+            f'QLabel {{ background: transparent; border: none; }}')
         tc_l = QVBoxLayout(thr_card)
         tc_l.setContentsMargins(20, 14, 20, 14)
         tc_l.setSpacing(6)
@@ -1029,7 +1034,8 @@ class TelemetryApp(QMainWindow):
         # Fuel card
         fuel_card = QFrame()
         fuel_card.setStyleSheet(
-            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
+            f'.QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 14px; }}'
+            f'QLabel {{ background: transparent; border: none; }}')
         fc_l = QVBoxLayout(fuel_card)
         fc_l.setContentsMargins(20, 14, 20, 14)
         fc_l.setSpacing(6)
@@ -1057,7 +1063,8 @@ class TelemetryApp(QMainWindow):
         # Coolant temp card
         cool_card = QFrame()
         cool_card.setStyleSheet(
-            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
+            f'.QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 14px; }}'
+            f'QLabel {{ background: transparent; border: none; }}')
         cc_l = QVBoxLayout(cool_card)
         cc_l.setContentsMargins(20, 14, 20, 14)
         cc_l.setSpacing(6)
@@ -1075,7 +1082,8 @@ class TelemetryApp(QMainWindow):
         # Intake temp card
         intake_card = QFrame()
         intake_card.setStyleSheet(
-            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
+            f'.QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 14px; }}'
+            f'QLabel {{ background: transparent; border: none; }}')
         ic_l = QVBoxLayout(intake_card)
         ic_l.setContentsMargins(20, 14, 20, 14)
         ic_l.setSpacing(6)
@@ -1113,7 +1121,8 @@ class TelemetryApp(QMainWindow):
 
         s_frame = QFrame()
         s_frame.setStyleSheet(
-            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
+            f'.QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 14px; }}'
+            f'QLabel {{ background: transparent; border: none; }}')
         sfl = QVBoxLayout(s_frame)
         sfl.setContentsMargins(4, 4, 4, 4)
         sfl.addWidget(self._real_speed_canvas)
@@ -1136,7 +1145,8 @@ class TelemetryApp(QMainWindow):
 
         t_frame = QFrame()
         t_frame.setStyleSheet(
-            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
+            f'.QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 14px; }}'
+            f'QLabel {{ background: transparent; border: none; }}')
         tfl = QVBoxLayout(t_frame)
         tfl.setContentsMargins(4, 4, 4, 4)
         tfl.addWidget(self._real_thr_canvas)
@@ -1159,7 +1169,8 @@ class TelemetryApp(QMainWindow):
 
         r_frame = QFrame()
         r_frame.setStyleSheet(
-            f'QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 8px; }}')
+            f'.QFrame {{ background: {SURFACE_RAISED}; border: 1px solid {BORDER_SUBTLE}; border-radius: 14px; }}'
+            f'QLabel {{ background: transparent; border: none; }}')
         rfl = QVBoxLayout(r_frame)
         rfl.setContentsMargins(4, 4, 4, 4)
         rfl.addWidget(self._real_rpm_canvas)
@@ -1217,7 +1228,7 @@ class TelemetryApp(QMainWindow):
     def _update_real_telemetry(self):
         """Update the real racing dashboard from ELM327Reader data."""
         if not self.elm_reader or not self.elm_reader.is_connected():
-            self._real_dot.setStyleSheet('color: #444;')
+            self._real_dot.setStyleSheet(f'color: {TEXT_FAINT};')
             self._real_status.setText('DISCONNECTED')
             return
 
@@ -1371,7 +1382,7 @@ class TelemetryApp(QMainWindow):
         self.rec_btn.setStyleSheet(
             f'QPushButton {{ background: {SURFACE_HOVER}; color: {TEXT_MUTED}; border: 1px solid {BORDER_STRONG};'
             f' border-radius: 3px; font-size: 10px; padding: 0 6px; }}'
-            f'QPushButton:checked {{ background: #5a0000; color: {C_BRAKE};'
+            f'QPushButton:checked {{ background: {BAD_BG}; color: {C_BRAKE};'
             f' border-color: {C_BRAKE}; }}'
         )
         self.rec_btn.toggled.connect(self._on_rec_toggled)
@@ -1397,11 +1408,11 @@ class TelemetryApp(QMainWindow):
         self._manual_lap_btn.setFixedSize(55, 22)
         self._manual_lap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._manual_lap_btn.setStyleSheet(
-            f'QPushButton {{ background: #0a2218; color: {C_THROTTLE};'
+            f'QPushButton {{ background: {GOOD_BG}; color: {GOOD_FG};'
             f' border: 1px solid {C_THROTTLE}; border-radius: 3px;'
             f' font-size: 10px; font-weight: bold; letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ background: #0f3322; }}'
-            f'QPushButton:pressed {{ background: #061a10; }}'
+            f'QPushButton:hover {{ background: #DDF5E4; }}'
+            f'QPushButton:pressed {{ background: #CFEFD9; }}'
         )
         self._manual_lap_btn.setToolTip('Complete current lap (shortcut: L)')
         self._manual_lap_btn.clicked.connect(self._on_manual_lap)
@@ -3270,7 +3281,7 @@ class TelemetryApp(QMainWindow):
                 self._sampler.set_reader(detected)
                 self.current_reader = detected
             if self.current_reader is None:
-                self.connection_dot.setStyleSheet('color: #444;')
+                self.connection_dot.setStyleSheet(f'color: {TEXT_FAINT};')
                 self.connection_label.setText('DISCONNECTED')
                 self.connection_label.setStyleSheet(f'color: {TEXT_MUTED}; letter-spacing: 0.5px;')
                 self._reset_display()
@@ -3544,9 +3555,9 @@ class TelemetryApp(QMainWindow):
             ax.tick_params(colors=TEXT_MUTED, labelsize=7)
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
-            ax.spines['left'].set_color('#303030')
-            ax.spines['bottom'].set_color('#303030')
-            ax.grid(True, color='#1c1c1c', linewidth=0.8, linestyle='-', axis='y')
+            ax.spines['left'].set_color(BORDER_STRONG)
+            ax.spines['bottom'].set_color(BORDER_STRONG)
+            ax.grid(True, color=BORDER_SUBTLE, linewidth=0.8, linestyle='-', axis='y')
 
         style_export_ax(axs[0], 'Speed')
         axs[0].plot(x_values, data_dict['speed'], color=C_SPEED, linewidth=1.0)

@@ -72,7 +72,7 @@ class LapAnalysisTab(QWidget):
         self._track_lock_btn.setStyleSheet(
             f'QPushButton {{background:{BG3};color:{WHITE};border:1px solid {BORDER};'
             f'border-radius:4px;padding:4px 12px;}}'
-            f'QPushButton:checked {{background:#b45309;color:#fff;border-color:#d97706;}}'
+            f'QPushButton:checked {{background:#1D1D1F;color:#FFFFFF;border-color:#1D1D1F;}}'
         )
         self._track_lock_btn.toggled.connect(app._on_track_lock_toggled)
         ctrl_row.addWidget(self._track_lock_btn)

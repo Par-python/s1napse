@@ -5,26 +5,29 @@ Channel colors (C_SPEED, C_THROTTLE, etc.) live in constants.py — they
 belong to graphs, not chrome.
 """
 
+# Light, Apple-style palette: smoky-white ground, white cards, graphite ink.
+# Colour is reserved for data and state (good / warn / bad / info).
+
 # Surface scale --------------------------------------------------------
-BG             = '#0A0B0D'
-SURFACE        = '#0E0F12'
-SURFACE_RAISED = '#14161A'
-SURFACE_HOVER  = '#1C1F25'
-BORDER_SUBTLE  = '#1A1D23'
-BORDER_STRONG  = '#262A31'
+BG             = '#F5F5F7'
+SURFACE        = '#FFFFFF'
+SURFACE_RAISED = '#FFFFFF'
+SURFACE_HOVER  = '#EDEDF0'
+BORDER_SUBTLE  = '#E3E3E8'
+BORDER_STRONG  = '#D2D2D7'
 
 # Text scale -----------------------------------------------------------
-TEXT_PRIMARY   = '#F2F3F5'
-TEXT_SECONDARY = '#C2C7D0'
-TEXT_MUTED     = '#8B94A3'
-TEXT_FAINT     = '#5A626F'
+TEXT_PRIMARY   = '#1D1D1F'
+TEXT_SECONDARY = '#424245'
+TEXT_MUTED     = '#6E6E73'
+TEXT_FAINT     = '#AEAEB2'
 
 # Accent + state -------------------------------------------------------
-ACCENT = '#8B5CF6'
-GOOD   = '#22C55E'
-WARN   = '#F59E0B'
-BAD    = '#EF4444'
-INFO   = '#22D3EE'
+ACCENT = '#1D1D1F'      # graphite: selected tab, primary buttons, focus
+GOOD   = '#34C759'
+WARN   = '#FF9F0A'
+BAD    = '#FF3B30'
+INFO   = '#0071E3'      # links and informational highlights
 
 # Tints — translucent variants used for pill backgrounds, card accents, etc.
 # Use the same RGB as the parent token; alpha encodes intensity.
@@ -35,29 +38,30 @@ def _rgba(hex_color: str, alpha: float) -> str:
     b = int(hex_color[5:7], 16)
     return f'rgba({r},{g},{b},{alpha:.2f})'
 
-ACCENT_BG     = '#1D1631'   # dark violet pill background
-ACCENT_BORDER = _rgba(ACCENT, 0.32)
-ACCENT_FG     = '#B4A0FF'   # readable violet on dark
+ACCENT_BG     = '#EDEDF0'   # neutral pill background
+ACCENT_BORDER = _rgba(ACCENT, 0.14)
+ACCENT_FG     = '#1D1D1F'
 
-GOOD_BG       = '#102A1C'
-GOOD_BORDER   = _rgba(GOOD, 0.32)
-GOOD_FG       = '#5FE39A'
+GOOD_BG       = '#E9F9EE'
+GOOD_BORDER   = _rgba(GOOD, 0.35)
+GOOD_FG       = '#248A3D'   # readable green on white
 
-WARN_BG       = '#2A200D'
-WARN_BORDER   = _rgba(WARN, 0.32)
-WARN_FG       = '#FBBF24'
+WARN_BG       = '#FFF4E5'
+WARN_BORDER   = _rgba(WARN, 0.40)
+WARN_FG       = '#C93400'
 
-BAD_BG        = '#2A1313'
-BAD_BORDER    = _rgba(BAD, 0.32)
-BAD_FG        = '#FCA5A5'
+BAD_BG        = '#FFECEB'
+BAD_BORDER    = _rgba(BAD, 0.35)
+BAD_FG        = '#D70015'
 
 # Layout scales --------------------------------------------------------
 SPACING = (4, 8, 12, 16, 20, 24)
-RADIUS  = {'sm': 4, 'md': 6, 'lg': 8, 'xl': 10}
+RADIUS  = {'sm': 6, 'md': 10, 'lg': 14, 'xl': 18}
 
 # Typography (point sizes used by font helpers) ------------------------
 FONT_UI_FAMILY   = 'Inter'
-FONT_MONO_FAMILY = 'JetBrains Mono'
+# Numbers use the UI face with tabular figures (see mono_font), not a monospace.
+FONT_MONO_FAMILY = 'Inter'
 
 FONT_DISPLAY     = 22
 FONT_NUMERIC_LG  = 17
@@ -79,9 +83,9 @@ def ui_font(size: int = FONT_BODY_ROOMY, *, bold: bool = False) -> QFont:
 
 
 def mono_font(size: int = FONT_NUMERIC_MD, *, bold: bool = False) -> QFont:
-    """JetBrains Mono (or system mono fallback) with tabular figures."""
+    """Numeric face: the UI sans with tabular figures, semibold for readouts."""
     f = QFont(FONT_MONO_FAMILY, size)
-    f.setStyleHint(QFont.StyleHint.Monospace)
+    f.setStyleHint(QFont.StyleHint.SansSerif)
     f.setStyleStrategy(QFont.StyleStrategy.PreferMatch)
     f.setBold(bold)
     if hasattr(f, 'setFeatureSettings'):
@@ -146,8 +150,8 @@ QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {{
     border: 1px solid {BORDER_STRONG};
     border-radius: {RADIUS['md']}px;
     padding: 5px 9px;
-    selection-background-color: {ACCENT};
-    selection-color: {TEXT_PRIMARY};
+    selection-background-color: {INFO};
+    selection-color: #FFFFFF;
 }}
 
 QComboBox::drop-down {{

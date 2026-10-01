@@ -20,12 +20,31 @@ from .math_functions import ALL_FUNCTION_NAMES, CONSTANTS
 # Data structures
 # ---------------------------------------------------------------------------
 
+def _legible_on_light(hex_color: str, max_lum: float = 0.55) -> str:
+    """Darken a channel colour that would be too pale to read on the light theme.
+
+    Saved channels from the old dark theme often use pastel colours (or white);
+    those are scaled toward black until their relative luminance is readable.
+    """
+    try:
+        r, g, b = (int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    except (ValueError, TypeError, IndexError):
+        return '#1D1D1F'
+    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    if lum <= max_lum:
+        return hex_color
+    k = max_lum / lum
+    return '#{:02X}{:02X}{:02X}'.format(*(round(c * k * 255) for c in (r, g, b)))
+
+
+# ---------------------------------------------------------------------------
+
 @dataclass
 class MathChannel:
     name: str
     formula: str
     unit: str = ""
-    color: str = "#FFFFFF"
+    color: str = "#1D1D1F"
     visible: bool = True
     built_in: bool = False
     description: str = ""
@@ -122,7 +141,7 @@ class MathEngine:
         self._raw_channel_names = set(names)
 
     def add_channel(self, name: str, formula: str, unit: str = "",
-                    color: str = "#FFFFFF", built_in: bool = False,
+                    color: str = "#1D1D1F", built_in: bool = False,
                     description: str = "", visible: bool = True,
                     ) -> tuple[bool, str]:
         """Parse, validate, and register a new math channel."""
@@ -135,7 +154,7 @@ class MathEngine:
             return False, msg
 
         ch = MathChannel(
-            name=name, formula=formula, unit=unit, color=color,
+            name=name, formula=formula, unit=unit, color=_legible_on_light(color),
             visible=visible, built_in=built_in, description=description,
             compiled_ast=tree, dependencies=deps,
         )
@@ -284,7 +303,7 @@ class MathEngine:
                 name=entry['name'],
                 formula=entry['formula'],
                 unit=entry.get('unit', ''),
-                color=entry.get('color', '#FFFFFF'),
+                color=entry.get('color', '#1D1D1F'),
                 visible=entry.get('visible', True),
                 description=entry.get('description', ''),
             )

@@ -29,7 +29,8 @@ class LiveTabBar(QTabBar):
             cx = r.right() - 8
             cy = r.top() + 10
             # halo
-            p.setBrush(QBrush(QColor(34, 197, 94, 80)))
+            halo = QColor(theme.GOOD); halo.setAlpha(80)
+            p.setBrush(QBrush(halo))
             p.drawEllipse(cx - 4, cy - 4, 8, 8)
             p.setBrush(QBrush(QColor(theme.GOOD)))
             p.drawEllipse(cx - 2, cy - 2, 4, 4)

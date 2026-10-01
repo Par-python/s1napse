@@ -85,7 +85,7 @@ class LapComparisonTab(QWidget):
 
         self._app._cmp_time_b = QLabel('—')
         self._app._cmp_time_b.setFont(mono(9))
-        self._app._cmp_time_b.setStyleSheet(f'color: #ffb020;')
+        self._app._cmp_time_b.setStyleSheet(f'color: #C93400;')
         sel_row.addWidget(self._app._cmp_time_b)
 
         sel_row.addStretch()
@@ -140,7 +140,7 @@ class LapComparisonTab(QWidget):
         legend_row = QHBoxLayout()
         legend_row.setSpacing(16)
         for label, color, style in [('Lap A', C_SPEED, '─────'),
-                                     ('Lap B', '#ffb020', '- - -')]:
+                                     ('Lap B', '#FF9F0A', '- - -')]:
             dot = QLabel(f'{style}  {label}')
             dot.setFont(mono(8))
             dot.setStyleSheet(f'color: {color};')
@@ -153,19 +153,19 @@ class LapComparisonTab(QWidget):
         graphs_vbox = graphs_card.body()
         graphs_vbox.setSpacing(4)
 
-        COLOR_A = '#00d4ff'  # cyan — Lap A
-        COLOR_B = '#ffb020'  # amber — Lap B (high contrast vs cyan)
+        COLOR_A = '#0071E3'  # blue — Lap A
+        COLOR_B = '#FF9F0A'  # amber — Lap B (high contrast vs blue)
 
         self._app._cmp_speed = ComparisonGraph(
             'Speed km/h', COLOR_A, COLOR_B, ylim=(0, 320))
         self._app._cmp_thr_brk_a = ComparisonGraph(
             'Throttle %', COLOR_A, COLOR_B, ylim=(0, 100))
         self._app._cmp_brk = ComparisonGraph(
-            'Brake %', C_BRAKE, '#ff99aa', ylim=(0, 100))
+            'Brake %', C_BRAKE, '#F28B82', ylim=(0, 100))
         self._app._cmp_gear = ComparisonGraph(
             'Gear', COLOR_A, COLOR_B, ylim=(-1, 8))
         self._app._cmp_rpm = ComparisonGraph(
-            'RPM', C_RPM, '#ffdd88', ylim=(0, 10000))
+            'RPM', C_RPM, '#C98A00', ylim=(0, 10000))
         self._app._cmp_steer = ComparisonGraph(
             'Steer °', COLOR_A, COLOR_B, ylim=(-540, 540))
 

@@ -100,7 +100,7 @@ class ReplayTab(QWidget):
         load_btn.setStyleSheet(
             f'QPushButton {{ background: {BG3}; color: {C_SPEED}; border: 1px solid {C_SPEED};'
             f' border-radius: 4px; padding: 6px 18px; font-size: 10px; letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ background: #0a2030; }}'
+            f'QPushButton:hover {{ background: #E8F2FD; }}'
         )
         load_btn.clicked.connect(
             lambda: self._app._load_replay_lap(self._replay_combo.currentIndex()))
@@ -118,7 +118,7 @@ class ReplayTab(QWidget):
         self._replay_play_btn.setStyleSheet(
             f'QPushButton {{ background: {BG3}; color: {C_THROTTLE}; border: 1px solid {C_THROTTLE};'
             f' border-radius: 4px; padding: 6px; letter-spacing: 1px; }}'
-            f'QPushButton:hover {{ background: #0a2018; }}'
+            f'QPushButton:hover {{ background: #E9F9EE; }}'
         )
         self._replay_play_btn.clicked.connect(self._app._toggle_replay_playback)
         ctrl_row.addWidget(self._replay_play_btn)

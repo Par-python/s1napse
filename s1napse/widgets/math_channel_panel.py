@@ -136,7 +136,7 @@ class _ChannelRow(QFrame):
             del_btn.setStyleSheet(
                 f'QPushButton {{ background: transparent; color: {TXT2}; '
                 f'border: none; font-size: 9px; padding: 2px 6px; }}'
-                f'QPushButton:hover {{ color: #ff3232; }}'
+                f'QPushButton:hover {{ color: #FF3B30; }}'
             )
             del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             del_btn.clicked.connect(lambda: self.delete_requested.emit(name))
@@ -239,7 +239,7 @@ class MathChannelPanel(QWidget):
         add_btn.setStyleSheet(
             f'QPushButton {{ background: {BG3}; color: {C_SPEED}; '
             f'border: 1px solid {C_SPEED}44; border-radius: 4px; padding: 7px; }}'
-            f'QPushButton:hover {{ border-color: {C_SPEED}; background: #0d2a3a; }}'
+            f'QPushButton:hover {{ border-color: {C_SPEED}; background: #E8F2FD; }}'
         )
         add_btn.clicked.connect(self._on_add_new)
         layout.addWidget(add_btn)

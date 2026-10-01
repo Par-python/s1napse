@@ -83,7 +83,7 @@ class TelemetryTab(QWidget):
             f'QPushButton {{ background: {BG3}; color: {TXT2}; border: 1px solid {BORDER2};'
             f' border-radius: 4px; padding: 5px 12px; font-size: 10px; letter-spacing: 0.5px; }}'
             f'QPushButton:hover {{ color: {C_SPEED}; border-color: {C_SPEED}; }}'
-            f'QPushButton:checked {{ color: {C_SPEED}; border-color: {C_SPEED}; background: #0d2a3a; }}'
+            f'QPushButton:checked {{ color: {C_SPEED}; border-color: {C_SPEED}; background: #E8F2FD; }}'
         )
         self._math_toggle_btn = QPushButton('\U0001f9ee  MATH CHANNELS')
         self._math_toggle_btn.setFont(sans(8, bold=True))

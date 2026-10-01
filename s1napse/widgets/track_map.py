@@ -399,8 +399,8 @@ class TrackMapWidget(QWidget):
     def _paint_bg_fill(self, p: QPainter, w: int, h: int):
         """Subtle vertical gradient for the panel background."""
         grad = QLinearGradient(0, 0, 0, h)
-        grad.setColorAt(0.0, QColor('#0d0d0d'))
-        grad.setColorAt(1.0, QColor('#070707'))
+        grad.setColorAt(0.0, QColor('#FFFFFF'))
+        grad.setColorAt(1.0, QColor('#FBFBFD'))
         p.fillRect(0, 0, w, h, QBrush(grad))
 
     def _build_bg_pixmap(self, pts):
@@ -439,14 +439,13 @@ class TrackMapWidget(QWidget):
             # Soft drop shadow under the track surface.
             p.save()
             p.translate(0, max(2, int(self._w_out * 0.10)))
-            p.fillPath(surface, QBrush(QColor(0, 0, 0, 160)))
+            p.fillPath(surface, QBrush(QColor(0, 0, 0, 18)))
             p.restore()
 
-            p.fillPath(surface, QBrush(QColor('#191919')))
+            p.fillPath(surface, QBrush(QColor('#EDEDF0')))
 
-            # Stroke the actual track limits (brighter + thicker so they read
-            # clearly against the dark background).
-            limit_pen = QPen(QColor('#6a6a6a'), max(2.0, self._w_out * 0.22),
+            # Stroke the actual track limits (graphite hairline on the light road).
+            limit_pen = QPen(QColor('#AEAEB2'), max(2.0, self._w_out * 0.22),
                              Qt.PenStyle.SolidLine, cap, join)
             p.setPen(limit_pen)
             p.setBrush(Qt.BrushStyle.NoBrush)
@@ -460,13 +459,13 @@ class TrackMapWidget(QWidget):
                            QPointF(*self._right_pts[(i + 1) % rn]))
 
             # Faint centerline hint for depth.
-            p.setPen(QPen(QColor(255, 255, 255, 14), max(1, int(self._w_out * 0.04)),
+            p.setPen(QPen(QColor(0, 0, 0, 14), max(1, int(self._w_out * 0.04)),
                           Qt.PenStyle.SolidLine, cap, join))
             for i in range(n):
                 p.drawLine(QPointF(*pts[i]), QPointF(*pts[(i + 1) % n]))
         else:
             # --- Cosmetic kerb fallback (no TUMFTM data for this track).
-            shadow_pen = QPen(QColor(0, 0, 0, 160), self._w_out + 6,
+            shadow_pen = QPen(QColor(0, 0, 0, 18), self._w_out + 6,
                               Qt.PenStyle.SolidLine, cap, join)
             p.setPen(shadow_pen)
             p.translate(0, max(2, int(self._w_out * 0.12)))
@@ -474,19 +473,19 @@ class TrackMapWidget(QWidget):
                 p.drawLine(QPointF(*pts[i]), QPointF(*pts[(i + 1) % n]))
             p.resetTransform()
 
-            edge_pen = QPen(QColor('#2e2e2e'), self._w_out + 2,
+            edge_pen = QPen(QColor('#D2D2D7'), self._w_out + 2,
                             Qt.PenStyle.SolidLine, cap, join)
             p.setPen(edge_pen)
             for i in range(n):
                 p.drawLine(QPointF(*pts[i]), QPointF(*pts[(i + 1) % n]))
 
-            surface_pen = QPen(QColor('#191919'), self._w_out,
+            surface_pen = QPen(QColor('#EDEDF0'), self._w_out,
                                Qt.PenStyle.SolidLine, cap, join)
             p.setPen(surface_pen)
             for i in range(n):
                 p.drawLine(QPointF(*pts[i]), QPointF(*pts[(i + 1) % n]))
 
-            center_pen = QPen(QColor(255, 255, 255, 10), max(1, int(self._w_out * 0.05)),
+            center_pen = QPen(QColor(0, 0, 0, 12), max(1, int(self._w_out * 0.05)),
                               Qt.PenStyle.SolidLine, cap, join)
             p.setPen(center_pen)
             for i in range(n):
@@ -495,7 +494,7 @@ class TrackMapWidget(QWidget):
         # --- Start/finish line (checkered strokes).
         sx, sy = pts[0]
         sf_h = int(self._w_out * 0.6)
-        for i, col_hex in enumerate(['#ffffff', '#0a0a0a', '#ffffff']):
+        for i, col_hex in enumerate(['#1D1D1F', '#FFFFFF', '#1D1D1F']):
             p.setPen(QPen(QColor(col_hex), 2))
             off = (i - 1) * 4
             p.drawLine(QPointF(sx + off, sy - sf_h),
@@ -503,7 +502,7 @@ class TrackMapWidget(QWidget):
         sf_font = QFont('Segoe UI, Helvetica, Arial', self._font_sf_sz)
         sf_font.setBold(True)
         p.setFont(sf_font)
-        p.setPen(QColor('#d0d0d0'))
+        p.setPen(QColor('#6E6E73'))
         p.drawText(int(sx + 8), int(sy - 4), 'S/F')
 
         # --- Track name header (top-left accent bar + styled text).
@@ -516,8 +515,8 @@ class TrackMapWidget(QWidget):
             name_y = max(14, self._pad - 4)
             # Accent bar
             p.fillRect(self._pad, name_y - self._font_name_sz, 3, self._font_name_sz + 2,
-                       QColor(C_THROTTLE))
-            p.setPen(QColor('#c0c0c0'))
+                       QColor('#1D1D1F'))
+            p.setPen(QColor('#1D1D1F'))
             p.drawText(self._pad + 8, name_y, self._track_name.upper())
 
         # --- Turn labels: tight circle with number, turn name below/above in muted grey.
@@ -536,21 +535,21 @@ class TrackMapWidget(QWidget):
 
             # Label background — slightly larger halo so it pops against heatmap.
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(QColor(10, 10, 10, 220)))
+            p.setBrush(QBrush(QColor(255, 255, 255, 230)))
             p.drawEllipse(cp2, CR + 2, CR + 2)
 
-            p.setPen(QPen(QColor('#888888'), 1.2))
-            p.setBrush(QBrush(QColor('#141414')))
+            p.setPen(QPen(QColor('#D2D2D7'), 1.2))
+            p.setBrush(QBrush(QColor('#FFFFFF')))
             p.drawEllipse(cp2, CR, CR)
 
             p.setFont(num_font)
-            p.setPen(QColor(C_THROTTLE))
+            p.setPen(QColor('#1D1D1F'))
             r = QRectF(cp2.x() - CR, cp2.y() - CR, CR * 2, CR * 2)
             p.drawText(r, Qt.AlignmentFlag.AlignCenter, lbl)
 
             if tname:
                 p.setFont(name_font2)
-                p.setPen(QColor('#707070'))
+                p.setPen(QColor('#86868B'))
                 ny = int(cp2.y() + (CR + self._font_turn_name_sz +
                          4 if oy >= 0 else -CR - 4))
                 tw = int(CR * 8)
@@ -599,12 +598,12 @@ class TrackMapWidget(QWidget):
                 col = QColor(int(180 + 75 * t),
                              int(40 * (1 - t)), int(40 * (1 - t)))
             elif thr > 80:
-                col = QColor(0, 232, 120)
+                col = QColor(52, 199, 89)
             elif thr > 30:
                 t = (thr - 30) / 50.0
-                col = QColor(int(220 * (1 - t)), int(180 + 52 * t), 40)
+                col = QColor(int(255 - 203 * t), int(159 + 40 * t), int(10 + 79 * t))   # amber -> green
             else:
-                col = QColor(70, 70, 70)
+                col = QColor(174, 174, 178)
 
             hm_w = max(1.0, self._w_in * 0.12)
             p.setPen(QPen(col, hm_w, Qt.PenStyle.SolidLine, cap, join))
@@ -672,12 +671,12 @@ class TrackMapWidget(QWidget):
         return pm
 
     def _trail_color(self, throttle: float, brake: float) -> tuple[int, int, int]:
-        """Throttle-green / brake-red / coast-white trail color."""
+        """Throttle-green / brake-red / coast-graphite trail color."""
         if brake > 15:
-            return (235, 30, 30)
+            return (255, 59, 48)
         if throttle > 30:
-            return (0, 220, 90)
-        return (245, 245, 245)
+            return (52, 199, 89)
+        return (110, 110, 115)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -688,7 +687,7 @@ class TrackMapWidget(QWidget):
         if n < 2:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             self._paint_bg_fill(painter, self.width(), self.height())
-            painter.setPen(QColor('#444444'))
+            painter.setPen(QColor('#86868B'))
             from ..constants import sans as _sans
             painter.setFont(_sans(10))
             filled = len(self._world_buckets)

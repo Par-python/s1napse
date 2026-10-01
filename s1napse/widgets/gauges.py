@@ -10,6 +10,7 @@ from ..constants import (
     C_THROTTLE, C_BRAKE, C_TC,
     mono, sans,
 )
+from .. import theme as _theme
 from ..theme import (
     SURFACE_RAISED as BG2, SURFACE_HOVER as BG3, BORDER_STRONG as BORDER2,
     TEXT_SECONDARY as TXT, TEXT_MUTED as TXT2, TEXT_PRIMARY as WHITE,
@@ -52,9 +53,9 @@ class RevBar(QWidget):
                 return
             painter.fillRect(x0, 0, min(fill_w, x1) - x0, h, QColor(fill_color))
 
-        zone_rect(0,   z1,  '#1e7a1e')
-        zone_rect(z1,  z2,  '#8a6200')
-        zone_rect(z2,  1.0, '#9a1f1f')
+        zone_rect(0,   z1,  _theme.GOOD)
+        zone_rect(z1,  z2,  _theme.WARN)
+        zone_rect(z2,  1.0, _theme.BAD)
 
         tick_x = int(w * z2)
         painter.setPen(QPen(QColor(WHITE), 1))
